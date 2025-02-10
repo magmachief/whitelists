@@ -1,32 +1,40 @@
---// Services
+-----------------------------------------------------
+-- SERVICES
+-----------------------------------------------------
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local PathfindingService = game:GetService("PathfindingService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
---// Variables & Config
+-----------------------------------------------------
+-- CONFIGURATION & VARIABLES
+-----------------------------------------------------
 local bombPassDistance = 10
 local AutoPassEnabled = false
 local AntiSlipperyEnabled = false
 local RemoveHitboxEnabled = false
 local autoPassConnection = nil
 local pathfindingSpeed = 16
-local bombTimerDuration = 20  -- default bomb timer duration (in seconds)
-local lowTimerThreshold = 2   -- threshold (in seconds) to trigger auto pass or warning
+local bombTimerDuration = 20      -- Default bomb timer (seconds)
+local lowTimerThreshold = 2       -- When time left is less than this, warn the player
 
--- UI Themes (for OrionLib, etc.)
+-- UI Themes (for OrionLib)
 local uiThemes = {
-    ["Dark"] = { Background = Color3.new(0, 0, 0), Text = Color3.new(1, 1, 1) },
-    ["Light"] = { Background = Color3.new(1, 1, 1), Text = Color3.new(0, 0, 0) },
-    ["Red"] = { Background = Color3.new(1, 0, 0), Text = Color3.new(1, 1, 1) },
+    Dark = { Background = Color3.new(0, 0, 0), Text = Color3.new(1, 1, 1) },
+    Light = { Background = Color3.new(1, 1, 1), Text = Color3.new(0, 0, 0) },
+    Red = { Background = Color3.new(1, 0, 0), Text = Color3.new(1, 1, 1) },
 }
+
+-- Bomb tracking variables
+local bombObject = nil      -- Reference to the bomb object in your character
+local bombStartTime = nil   -- When you received the bomb
+local bombTimerUI = nil     -- Reference to the bomb timer UI
 
 -----------------------------------------------------
 -- UTILITY FUNCTIONS
 -----------------------------------------------------
 
--- Function to get the closest player (unchanged)
+-- Returns the closest player to LocalPlayer
 local function getClosestPlayer()
     local closestPlayer = nil
     local shortestDistance = math.huge
@@ -42,7 +50,8 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Function to rotate the character towards the target smoothly with prediction
+-- Rotates LocalPlayer's character toward a target position.
+-- If targetVelocity is provided, it predicts the target's future position.
 local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     local character = LocalPlayer.Character
     if not character then return end
@@ -67,52 +76,85 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     return tween
 end
 
--- Bomb Timer UI: Creates a countdown UI above the bomb holder
+-- Creates a Bomb Timer UI attached to the character's Head or HumanoidRootPart.
 local function createBombTimerUI(character, duration)
     local head = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
     if not head then return end
+    if bombTimerUI then bombTimerUI:Destroy() end
 
-    local bg = Instance.new("BillboardGui")
-    bg.Name = "BombTimerUI"
-    bg.Adornee = head
-    bg.Size = UDim2.new(0, 100, 0, 50)
-    bg.StudsOffset = Vector3.new(0, 3, 0)
-    bg.AlwaysOnTop = true
-    bg.Parent = head
+    bombTimerUI = Instance.new("BillboardGui")
+    bombTimerUI.Name = "BombTimerUI"
+    bombTimerUI.Adornee = head
+    bombTimerUI.Size = UDim2.new(0, 100, 0, 50)
+    bombTimerUI.StudsOffset = Vector3.new(0, 3, 0)
+    bombTimerUI.AlwaysOnTop = true
+    bombTimerUI.Parent = head
 
-    local label = Instance.new("TextLabel", bg)
+    local label = Instance.new("TextLabel", bombTimerUI)
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
     label.TextScaled = true
     label.TextColor3 = Color3.new(1, 0, 0)
     label.Font = Enum.Font.SourceSansBold
+    label.Text = tostring(duration)
 
+    bombStartTime = tick()
     local timeLeft = duration
+
     while timeLeft > 0 do
+        if not bombObject or bombObject.Parent ~= LocalPlayer.Character then
+            bombTimerUI:Destroy()
+            bombTimerUI = nil
+            return
+        end
+        timeLeft = math.max(0, duration - (tick() - bombStartTime))
         label.Text = tostring(math.ceil(timeLeft))
         if timeLeft <= lowTimerThreshold then
-            print("[BOMB TIMER] Time is low: " .. timeLeft .. " seconds!")
-            -- Optional: Trigger auto pass if desired
-            -- autoPassBomb()  -- Uncomment to enable auto pass when time is low.
+            print("[BOMB TIMER] Time is almost up: " .. timeLeft .. " seconds!")
+            -- Optionally, you can auto-trigger bomb pass here
+            -- autoPassBomb()
         end
         task.wait(1)
-        timeLeft = timeLeft - 1
     end
-    bg:Destroy()
+
+    bombTimerUI:Destroy()
+    bombTimerUI = nil
+    print("[BOMB TIMER] Timer expired!")
 end
 
--- Monitor the bomb timer UI: When you hold the bomb, attach the timer UI (if not already present)
-RunService.Heartbeat:Connect(function()
-    local character = LocalPlayer.Character
-    if character and character:FindFirstChild("Bomb") then
-        local head = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
-        if head and not head:FindFirstChild("BombTimerUI") then
-            createBombTimerUI(character, bombTimerDuration)
-        end
-    end
-end)
+-----------------------------------------------------
+-- BOMB DETECTION & TIMER MANAGEMENT
+-----------------------------------------------------
 
--- Advanced Auto Pass Bomb Logic (integrated with advanced rotation)
+local function detectBomb()
+    while true do
+        local character = LocalPlayer.Character
+        if character then
+            local bomb = character:FindFirstChild("Bomb")  -- Adjust if your bomb has a different name
+            if bomb and bomb ~= bombObject then
+                bombObject = bomb
+                bombStartTime = tick()
+                print("[TRACKER] Bomb received!")
+                createBombTimerUI(character, bombTimerDuration)
+                bomb:GetPropertyChangedSignal("Parent"):Connect(function()
+                    if bomb.Parent ~= character then
+                        print("[TRACKER] Bomb passed!")
+                        bombObject = nil
+                        if bombTimerUI then
+                            bombTimerUI:Destroy()
+                            bombTimerUI = nil
+                        end
+                    end
+                end)
+            end
+        end
+        task.wait(0.1)
+    end
+end
+
+-----------------------------------------------------
+-- AUTO PASS BOMB LOGIC
+-----------------------------------------------------
 local function autoPassBomb()
     if not AutoPassEnabled then return end
     pcall(function()
@@ -124,7 +166,7 @@ local function autoPassBomb()
                 local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
                 local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
                 if distance <= bombPassDistance then
-                    local targetVelocity = closestPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
+                    local targetVelocity = closestPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0,0,0)
                     rotateCharacterTowardsTarget(targetPosition, targetVelocity)
                     task.wait(0.6)
                     BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
@@ -134,7 +176,9 @@ local function autoPassBomb()
     end)
 end
 
--- Manual Anti-Slippery & Remove Hitbox functions remain unchanged (if desired)
+-----------------------------------------------------
+-- MANUAL ANTI-SLIPPERY (if desired)
+-----------------------------------------------------
 local function applyAntiSlippery(enabled)
     if enabled then
         task.spawn(function()
@@ -158,6 +202,9 @@ local function applyAntiSlippery(enabled)
     end
 end
 
+-----------------------------------------------------
+-- MANUAL REMOVE HITBOX (if desired)
+-----------------------------------------------------
 local function applyRemoveHitbox(enable)
     local character = LocalPlayer.Character
     if not character then return end
@@ -174,17 +221,17 @@ local function applyRemoveHitbox(enable)
     end
 end
 
---========================--
---  APPLY FEATURES ON RESPAWN --
---========================--
+-----------------------------------------------------
+-- APPLY FEATURES ON RESPAWN
+-----------------------------------------------------
 LocalPlayer.CharacterAdded:Connect(function()
     if AntiSlipperyEnabled then applyAntiSlippery(true) end
     if RemoveHitboxEnabled then applyRemoveHitbox(true) end
 end)
 
---========================--
---  ORIONLIB INTERFACE    --
---========================--
+-----------------------------------------------------
+-- ORIONLIB UI INTERFACE
+-----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced",
@@ -259,7 +306,7 @@ AutomatedTab:AddDropdown({
     Callback = function(themeName)
         local theme = uiThemes[themeName]
         if theme then
-            -- (Optional) Apply theme to your OrionLib UI elements here.
+            -- (Optional) Apply the theme dynamically to OrionLib UI elements.
         else
             warn("Theme not found:", themeName)
         end
@@ -268,3 +315,8 @@ AutomatedTab:AddDropdown({
 
 OrionLib:Init()
 print("Yon Menu Script Loaded with Enhanced AI-based Bomb Timer, Anti-Slippery, and Advanced Features")
+
+-----------------------------------------------------
+-- START BOMB DETECTION
+-----------------------------------------------------
+task.spawn(detectBomb)
