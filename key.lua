@@ -21,14 +21,14 @@ local lowTimerThreshold = 2         -- When remaining time is <= 2 seconds, warn
 -- Global bomb tracking variables
 local bombObject = nil            -- Reference to the current bomb object
 local bombStartTime = nil         -- When the current bomb timer started
-local globalBombTime = defaultBombTimer  -- Global remaining time (this will be adjusted by our AI)
+local globalBombTime = defaultBombTimer  -- Global remaining time (adjusted by our AI)
 local lastBombPassTime = nil      -- When the bomb was last passed
 local isHoldingBomb = false       -- True if LocalPlayer currently holds the bomb
 
 -- Table to store bomb pass data for AI prediction (each entry: {heldTime, remaining})
 local bombPassData = {}
 
--- A table to hold bomb timer UIs by character
+-- A table to hold bomb timer UIs by character (keyed by character)
 local bombTimerUI = {}
 
 -----------------------------------------------------
@@ -177,7 +177,7 @@ local function detectBombs()
             if player.Character then
                 local bomb = player.Character:FindFirstChild("Bomb")
                 if bomb then
-                    -- If this bomb is new or has been passed, update the timer UI.
+                    -- Create or update the timer UI for this bomb.
                     createOrUpdateBombTimerUI(bomb, player.Character)
                     
                     -- Listen for when the bomb is passed.
@@ -198,7 +198,6 @@ local function detectBombs()
                                 createOrUpdateBombTimerUI(bomb, ownerChar)
                             end
                         else
-                            -- Bomb no longer held by any player; clean up.
                             bombTimerUI[player.Character] = nil
                         end
                     end)
