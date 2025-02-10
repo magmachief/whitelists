@@ -2,8 +2,8 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local PathfindingService = game:GetService("PathfindingService")
-local LocalPlayer = Players.LocalPlayer
 local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
 
 --// Variables
 local bombPassDistance = 10
@@ -12,7 +12,6 @@ local AntiSlipperyEnabled = false
 local RemoveHitboxEnabled = false
 local autoPassConnection = nil
 local pathfindingSpeed = 16 -- Default speed
-local lastTargetPosition = nil -- Cached position for pathfinding
 
 -- UI Themes
 local uiThemes = {
@@ -41,23 +40,81 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Function to rotate the character towards the target smoothly
-local function rotateCharacterTowardsTarget(targetPosition)
+-- Advanced rotation function with continuous tracking, velocity prediction, adaptive speed, and visual feedback.
+local function advancedRotateCharacterTowardsTarget(targetPlayer, duration)
     local character = LocalPlayer.Character
     if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local targetCharacter = targetPlayer.Character
+    if not targetCharacter then return end
+    local targetHRP = targetCharacter:FindFirstChild("HumanoidRootPart")
+    if not targetHRP then return end
 
-    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart then return end
+    -- Create visual reticle on target
+    local reticle = Instance.new("BillboardGui")
+    reticle.Size = UDim2.new(0, 50, 0, 50)
+    reticle.Adornee = targetHRP
+    reticle.AlwaysOnTop = true
+    reticle.Parent = targetHRP
 
-    local direction = (targetPosition - humanoidRootPart.Position).unit
-    local newCFrame = CFrame.fromMatrix(humanoidRootPart.Position, direction, Vector3.new(0, 1, 0))
+    local reticleLabel = Instance.new("TextLabel")
+    reticleLabel.Size = UDim2.new(1, 0, 1, 0)
+    reticleLabel.BackgroundTransparency = 1
+    reticleLabel.Text = "X"
+    reticleLabel.TextScaled = true
+    reticleLabel.TextColor3 = Color3.new(1, 0, 0)
+    reticleLabel.Parent = reticle
 
-    -- Smooth rotation using TweenService
-    local tween = TweenService:Create(humanoidRootPart, TweenInfo.new(0.3, Enum.EasingStyle.Linear), {CFrame = newCFrame})
-    tween:Play()
+    -- Table to store historical positions for averaging velocity
+    local positions = {}
+    local startTime = tick()
+    local lastUpdate = startTime
+
+    while tick() - startTime < duration do
+        local now = tick()
+        local dt = now - lastUpdate
+        lastUpdate = now
+
+        local currentPos = targetHRP.Position
+        table.insert(positions, {pos = currentPos, time = now})
+        if #positions > 5 then
+            table.remove(positions, 1)
+        end
+
+        -- Compute average velocity over the stored positions
+        local avgVel = Vector3.new(0,0,0)
+        if #positions >= 2 then
+            local first = positions[1]
+            local last = positions[#positions]
+            local deltaT = last.time - first.time
+            if deltaT > 0 then
+                avgVel = (last.pos - first.pos) / deltaT
+            end
+        end
+
+        -- Predict target position 0.3 seconds ahead
+        local predictedPos = currentPos + avgVel * 0.3
+
+        -- Determine desired CFrame to look at the predicted position
+        local desiredCFrame = CFrame.new(hrp.Position, predictedPos)
+        local currentLook = hrp.CFrame.LookVector
+        local desiredLook = desiredCFrame.LookVector
+        local dot = math.clamp(currentLook:Dot(desiredLook), -1, 1)
+        local angleDiff = math.acos(dot)
+        
+        -- Adaptive rotation: faster if angleDiff is small, slower if large.
+        local adaptiveFactor = math.clamp(angleDiff / math.pi, 0.1, 0.3)
+        
+        -- Use Lerp for smooth continuous rotation; update each iteration
+        hrp.CFrame = hrp.CFrame:Lerp(desiredCFrame, 0.5 * adaptiveFactor)
+        task.wait(0.05)
+    end
+
+    reticle:Destroy()
 end
 
--- Auto Pass Bomb Logic with Bomb Pass Distance
+-- Auto Pass Bomb Logic with Bomb Pass Distance and Advanced Rotation
 local function autoPassBomb()
     if not AutoPassEnabled then return end
     pcall(function()
@@ -65,14 +122,13 @@ local function autoPassBomb()
         if Bomb then
             local BombEvent = Bomb:FindFirstChild("RemoteEvent")
             local closestPlayer = getClosestPlayer()
-            if closestPlayer and closestPlayer.Character then
+            if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
                 local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
-
-                -- Only pass the bomb if the target is within the bomb pass distance
                 if distance <= bombPassDistance then
-                    rotateCharacterTowardsTarget(targetPosition)
-                    -- Fire the remote event to pass the bomb
+                    -- Continuously rotate and track the target for 0.5 seconds
+                    advancedRotateCharacterTowardsTarget(closestPlayer, 0.5)
+                    task.wait(0.6)
                     BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
                 end
             end
@@ -83,7 +139,7 @@ end
 -- Anti-Slippery: (Working Version)
 local function applyAntiSlippery(enabled)
     if enabled then
-        spawn(function()
+        task.spawn(function()
             while AntiSlipperyEnabled do
                 local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
                 for _, part in pairs(character:GetDescendants()) do
@@ -91,7 +147,7 @@ local function applyAntiSlippery(enabled)
                         part.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5)
                     end
                 end
-                wait(0.1)
+                task.wait(0.1)
             end
         end)
     else
@@ -104,22 +160,16 @@ local function applyAntiSlippery(enabled)
     end
 end
 
-
 -- Remove Hitbox: Destroy collision parts
 local function applyRemoveHitbox(enable)
     local character = LocalPlayer.Character
     if not character then return end
-
-    if enable then
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") and part.Name == "Hitbox" then
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name == "Hitbox" then
+            if enable then
                 part.Transparency = 1
                 part.CanCollide = false
-            end
-        end
-    else
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") and part.Name == "Hitbox" then
+            else
                 part.Transparency = 0
                 part.CanCollide = true
             end
@@ -146,14 +196,12 @@ local Window = OrionLib:MakeWindow({
     ConfigFolder = "YonMenu_Advanced"
 })
 
--- Automated Tab
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
 
--- Add toggles, sliders, and dropdowns for the features
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
@@ -215,7 +263,7 @@ AutomatedTab:AddDropdown({
     Callback = function(themeName)
         local theme = uiThemes[themeName]
         if theme then
-            -- Apply theme to UI elements here if needed
+            -- Apply the theme dynamically if desired
         else
             warn("Theme not found:", themeName)
         end
@@ -223,4 +271,4 @@ AutomatedTab:AddDropdown({
 })
 
 OrionLib:Init()
-print("Yon Menu Script Loaded with Adjustments")
+print("Yon Menu Script Loaded with Enhanced Yonkai Menu and Gojo Icon")
