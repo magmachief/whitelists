@@ -8,7 +8,7 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 -----------------------------------------------------
--- Create the UI elements for key input
+-- Create the UI elements for key input and key link
 -----------------------------------------------------
 
 -- Create ScreenGui
@@ -19,15 +19,15 @@ screenGui.Parent = playerGui
 -- Create main frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 300, 0, 200)
-mainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
+mainFrame.Size = UDim2.new(0, 300, 0, 260)
+mainFrame.Position = UDim2.new(0.5, -150, 0.5, -130)
 mainFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 mainFrame.Parent = screenGui
 
--- Create an instruction label
+-- Create an instruction label for key entry
 local instructionLabel = Instance.new("TextLabel")
 instructionLabel.Name = "InstructionLabel"
-instructionLabel.Size = UDim2.new(1, -20, 0, 50)
+instructionLabel.Size = UDim2.new(0, 280, 0, 40)
 instructionLabel.Position = UDim2.new(0, 10, 0, 10)
 instructionLabel.BackgroundTransparency = 1
 instructionLabel.Text = "Enter your key:"
@@ -39,8 +39,8 @@ instructionLabel.Parent = mainFrame
 -- Create a TextBox for key input
 local keyBox = Instance.new("TextBox")
 keyBox.Name = "KeyBox"
-keyBox.Size = UDim2.new(1, -20, 0, 50)
-keyBox.Position = UDim2.new(0, 10, 0, 70)
+keyBox.Size = UDim2.new(0, 280, 0, 50)
+keyBox.Position = UDim2.new(0, 10, 0, 60)
 keyBox.PlaceholderText = "Enter key here..."
 keyBox.Text = ""
 keyBox.TextScaled = true
@@ -50,19 +50,30 @@ keyBox.Parent = mainFrame
 -- Create a button to redeem the key
 local redeemButton = Instance.new("TextButton")
 redeemButton.Name = "RedeemButton"
-redeemButton.Size = UDim2.new(1, -20, 0, 40)
-redeemButton.Position = UDim2.new(0, 10, 0, 130)
+redeemButton.Size = UDim2.new(0, 280, 0, 40)
+redeemButton.Position = UDim2.new(0, 10, 0, 120)
 redeemButton.Text = "Redeem Key"
 redeemButton.TextScaled = true
 redeemButton.Font = Enum.Font.SourceSans
 redeemButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
 redeemButton.Parent = mainFrame
 
--- Create an error label
+-- Create a button to get the key (copies the key link to clipboard)
+local getKeyButton = Instance.new("TextButton")
+getKeyButton.Name = "GetKeyButton"
+getKeyButton.Size = UDim2.new(0, 280, 0, 40)
+getKeyButton.Position = UDim2.new(0, 10, 0, 170)
+getKeyButton.Text = "Get Key"
+getKeyButton.TextScaled = true
+getKeyButton.Font = Enum.Font.SourceSans
+getKeyButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+getKeyButton.Parent = mainFrame
+
+-- Create an error/feedback label
 local errorLabel = Instance.new("TextLabel")
 errorLabel.Name = "ErrorLabel"
-errorLabel.Size = UDim2.new(1, -20, 0, 30)
-errorLabel.Position = UDim2.new(0, 10, 1, -40)
+errorLabel.Size = UDim2.new(0, 280, 0, 30)
+errorLabel.Position = UDim2.new(0, 10, 0, 220)
 errorLabel.BackgroundTransparency = 1
 errorLabel.Text = ""
 errorLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
@@ -104,9 +115,10 @@ local function verifyKey(userKey)
 end
 
 -----------------------------------------------------
--- Connect button event to verify key and hide UI
+-- Connect button events
 -----------------------------------------------------
 
+-- Redeem Button: Verify key and, if valid, remove UI and load bomb script
 redeemButton.MouseButton1Click:Connect(function()
     local userKey = keyBox.Text
     local isValid = verifyKey(userKey)
@@ -127,5 +139,16 @@ redeemButton.MouseButton1Click:Connect(function()
         loadstring(game:HttpGet(BOMB_SCRIPT_URL))()
     else
         errorLabel.Text = "Invalid or HWID mismatch!"
+    end
+end)
+
+-- Get Key Button: Copy the key URL to clipboard
+getKeyButton.MouseButton1Click:Connect(function()
+    local keyLink = API_ENDPOINT .. "/"  -- Appending "/" to match your provided link
+    if setclipboard then
+        setclipboard(keyLink)
+        errorLabel.Text = "Key link copied to clipboard!"
+    else
+        errorLabel.Text = "Copy to clipboard is not supported in this environment."
     end
 end)
