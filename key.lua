@@ -118,7 +118,7 @@ end
 -- Connect button events
 -----------------------------------------------------
 
--- Redeem Button: Verify key and, if valid, remove UI and load bomb script
+-- Redeem Button: Verify key and, if valid, remove the entire UI
 redeemButton.MouseButton1Click:Connect(function()
     local userKey = keyBox.Text
     local isValid = verifyKey(userKey)
@@ -127,11 +127,11 @@ redeemButton.MouseButton1Click:Connect(function()
         errorLabel.Text = ""
         -- Tween the mainFrame out (fade out)
         local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-        local tween = TweenService:Create(mainFrame, tweenInfo, {BackgroundTransparency = 1})
+        local tween = TweenService:Create(mainFrame, tweenInfo, { BackgroundTransparency = 1 })
         tween:Play()
         tween.Completed:Wait()
         
-        -- Remove the UI
+        -- Remove the entire UI (both Redeem and Get Key options)
         mainFrame:Destroy()
         screenGui:Destroy()
 
@@ -142,12 +142,15 @@ redeemButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- Get Key Button: Copy the key URL to clipboard
+-- Get Key Button: Copy the key URL to clipboard and provide feedback
 getKeyButton.MouseButton1Click:Connect(function()
-    local keyLink = API_ENDPOINT .. "/"  -- Appending "/" to match your provided link
+    local keyLink = API_ENDPOINT .. "/"  -- Append "/" to match your provided link
     if setclipboard then
         setclipboard(keyLink)
-        errorLabel.Text = "Key link copied to clipboard!"
+        local originalText = getKeyButton.Text
+        getKeyButton.Text = "Copied!"
+        wait(2)
+        getKeyButton.Text = originalText
     else
         errorLabel.Text = "Copy to clipboard is not supported in this environment."
     end
