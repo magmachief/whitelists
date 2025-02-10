@@ -1,11 +1,12 @@
 --[[
     Combined Script with:
-      • Bomb Passing (with distance check) – loaded later via your bomb script
-      • Anti-Slippery & Remove Hitbox features – in your bomb script (loaded later)
-      • A simple Key System (demo keys, runtime variables, killswitch check)
+      • Bomb Passing (with distance check) – bomb script is loaded only after a valid key is redeemed.
+      • Anti-Slippery & Remove Hitbox features – (assumed to be applied elsewhere or in your bomb script)
+      • A simple Key System (demo keys, runtime variables, killswitch check, persistent storage, HWID check, and optional remote verification)
       • A custom key redemption UI (non-Orion) that appears for the user
+      • A "Get Key" button which opens the key purchase link (https://work.ink)
       • Once key redemption is successful, the key UI vanishes and the bomb script is loaded via loadstring
-
+      
     Adjust demo keys, URLs, and other parameters as needed.
 ]]--
 
@@ -14,6 +15,7 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
+local StarterGui = game:GetService("StarterGui")
 local LocalPlayer = Players.LocalPlayer
 
 -----------------------------------------------------
@@ -120,6 +122,26 @@ discordLabel.TextColor3 = Color3.new(1, 1, 1)
 discordLabel.Font = Enum.Font.GothamBold
 discordLabel.TextSize = 16
 
+-- Add a "Get Key" button so the user can visit your key website.
+local getKeyButton = Instance.new("TextButton", mainFrame)
+getKeyButton.Size = UDim2.new(0.8, 0, 0, 30)
+getKeyButton.Position = UDim2.new(0.1, 0, 0.7, 0)
+getKeyButton.Text = "Get Key at work.ink"
+getKeyButton.Font = Enum.Font.GothamBold
+getKeyButton.TextSize = 18
+getKeyButton.TextColor3 = Color3.new(1, 1, 1)
+getKeyButton.BackgroundColor3 = Color3.new(0.15, 0.15, 0.15)
+getKeyButton.BorderSizePixel = 0
+
+getKeyButton.MouseButton1Click:Connect(function()
+    pcall(function()
+        -- Attempt to open the URL via StarterGui. You can also set the clipboard if desired.
+        StarterGui:SetCore("OpenBrowser", {Url = "https://work.ink"})
+    end)
+    -- If the above fails, fallback to setting clipboard:
+    pcall(function() setclipboard("https://work.ink") end)
+end)
+
 -----------------------------------------------------
 --// KEY REDEMPTION LOGIC
 -----------------------------------------------------
@@ -136,7 +158,7 @@ redeemButton.MouseButton1Click:Connect(function()
         screenGui:Destroy()
         print("Key redeemed successfully!")
         print("Key Data:", dataOrError)
-        -- Load the bomb script after key redemption is successful
+        -- Load the bomb script only after key redemption is successful
         loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Passthebomb/refs/heads/main/pass%20the%20bom%20.lua"))()
     else
         errorLabel.Text = dataOrError
