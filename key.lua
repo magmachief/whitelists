@@ -9,16 +9,18 @@ local LocalPlayer = Players.LocalPlayer
 -----------------------------------------------------
 -- CONFIGURATION & VARIABLES
 -----------------------------------------------------
-local bombPassDistance = 10
-local AutoPassEnabled = false
-local AntiSlipperyEnabled = false
-local RemoveHitboxEnabled = false
-local autoPassConnection = nil
-local pathfindingSpeed = 16
 local defaultBombTimer = 20       -- Default bomb timer duration (in seconds)
-local lowTimerThreshold = 2         -- Threshold to warn when time is low
+local bombPassDistance = 10         -- Maximum distance to pass the bomb
+local AutoPassEnabled = false       -- Toggle for auto-pass bomb (if desired)
+local AntiSlipperyEnabled = false   -- Toggle for manual anti-slippery (if desired)
+local RemoveHitboxEnabled = false   -- Toggle for manual hitbox removal (if desired)
+local autoPassConnection = nil      -- Will hold the connection for auto-pass logic
+local pathfindingSpeed = 16         -- (For potential future use)
 
--- UI Themes (for OrionLib, etc.)
+-- Timer thresholds
+local lowTimerThreshold = 2         -- Warn when remaining time is ≤ 2 seconds
+
+-- UI Themes for OrionLib (for toggles, etc.)
 local uiThemes = {
     Dark = { Background = Color3.new(0, 0, 0), Text = Color3.new(1, 1, 1) },
     Light = { Background = Color3.new(1, 1, 1), Text = Color3.new(0, 0, 0) },
@@ -26,15 +28,20 @@ local uiThemes = {
 }
 
 -- Bomb tracking variables
-local bombObject = nil      -- Reference to the bomb object in your character
-local bombStartTime = nil   -- Time when you received the bomb
-local bombTimerUI = nil     -- Reference to the Bomb Timer UI
+local bombObject = nil          -- Reference to the bomb object in the character
+local bombStartTime = nil       -- The time when the current bomb timer started
+local globalBombTime = defaultBombTimer  -- Global remaining time (inherited on pass)
+local lastBombPassTime = nil    -- Time when the bomb was last passed
+local isHoldingBomb = false     -- True if LocalPlayer is currently holding the bomb
+
+-- Table to keep track of active timer UIs by character
+local bombTimerUI = {}
 
 -----------------------------------------------------
 -- UTILITY FUNCTIONS
 -----------------------------------------------------
 
--- Returns the closest player to LocalPlayer
+-- Returns the closest player (this function is available for auto-pass targeting)
 local function getClosestPlayer()
     local closestPlayer = nil
     local shortestDistance = math.huge
@@ -50,8 +57,8 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Rotates LocalPlayer's character toward a target position.
--- If targetVelocity is provided, it predicts the target's future position.
+-- Rotates LocalPlayer's character smoothly toward a target position.
+-- If targetVelocity is provided, predicts the target’s position 0.5 seconds ahead.
 local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     local character = LocalPlayer.Character
     if not character then return end
@@ -76,108 +83,134 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     return tween
 end
 
--- Creates (or updates) the Bomb Timer UI attached to the character's Head or HRP.
-local function createBombTimerUI(character)
+-- Creates (or updates) a Bomb Timer UI attached to the character's Head (or HRP).
+-- The timer uses a NumberValue named "RemainingTime" on the bomb object to store its global countdown.
+local function createBombTimerUI(character, bomb)
+    if not character or not bomb then return end
+
     local head = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
     if not head then return end
 
-    -- Ensure the bomb object has a RemainingTime NumberValue
-    if bombObject then
-        local remVal = bombObject:FindFirstChild("RemainingTime")
-        if not remVal then
-            remVal = Instance.new("NumberValue")
-            remVal.Name = "RemainingTime"
-            remVal.Value = defaultBombTimer
-            remVal.Parent = bombObject
-        end
+    -- Ensure the bomb object has a "RemainingTime" NumberValue.
+    local remVal = bomb:FindFirstChild("RemainingTime")
+    if not remVal then
+        remVal = Instance.new("NumberValue")
+        remVal.Name = "RemainingTime"
+        remVal.Value = defaultBombTimer
+        remVal.Parent = bomb
     end
 
-    -- Use the existing remaining time as the starting time.
-    local startTime = bombObject:FindFirstChild("RemainingTime").Value
+    -- Use the bomb's remaining time as the starting value.
+    local startingTime = remVal.Value
 
-    -- If a previous UI exists, remove it.
-    if bombTimerUI then
-        bombTimerUI:Destroy()
+    -- Remove any existing UI for this character.
+    if bombTimerUI[character] then
+        bombTimerUI[character]:Destroy()
     end
 
-    bombTimerUI = Instance.new("BillboardGui")
-    bombTimerUI.Name = "BombTimerUI"
-    bombTimerUI.Adornee = head
-    bombTimerUI.Size = UDim2.new(0, 100, 0, 50)
-    bombTimerUI.StudsOffset = Vector3.new(0, 3, 0)
-    bombTimerUI.AlwaysOnTop = true
-    bombTimerUI.Parent = head
+    local timerUI = Instance.new("BillboardGui")
+    timerUI.Name = "BombTimerUI"
+    timerUI.Adornee = head
+    timerUI.Size = UDim2.new(0, 100, 0, 50)
+    timerUI.StudsOffset = Vector3.new(0, 3, 0)
+    timerUI.AlwaysOnTop = true
+    timerUI.Parent = head
 
-    local label = Instance.new("TextLabel", bombTimerUI)
+    local label = Instance.new("TextLabel", timerUI)
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
     label.TextScaled = true
     label.TextColor3 = Color3.new(1, 0, 0)
     label.Font = Enum.Font.SourceSansBold
+    label.Text = tostring(startingTime)
 
+    bombTimerUI[character] = timerUI
     bombStartTime = tick()
-    local remainingTime = startTime
 
-    while remainingTime > 0 do
-        -- If the bomb is no longer in your character, remove the UI and exit.
-        if not bombObject or bombObject.Parent ~= LocalPlayer.Character then
-            if bombTimerUI then
-                bombTimerUI:Destroy()
-                bombTimerUI = nil
+    task.spawn(function()
+        local remTime = startingTime
+        while remTime > 0 do
+            if not bomb or bomb.Parent ~= character then
+                timerUI:Destroy()
+                bombTimerUI[character] = nil
+                return
             end
-            return
+
+            remTime = math.max(0, startingTime - (tick() - bombStartTime))
+            label.Text = tostring(math.ceil(remTime))
+            remVal.Value = remTime  -- Update the bomb's global remaining time
+
+            if remTime <= lowTimerThreshold then
+                print("[BOMB TIMER] Time is almost up: " .. remTime .. " seconds!")
+                -- Optionally, you could trigger auto-pass here
+            end
+
+            task.wait(1)
         end
 
-        -- Calculate the new remaining time based on elapsed time.
-        remainingTime = math.max(0, startTime - (tick() - bombStartTime))
-        label.Text = tostring(math.ceil(remainingTime))
-        -- Update the bomb's RemainingTime value so new owners get the current time.
-        bombObject:FindFirstChild("RemainingTime").Value = remainingTime
-
-        if remainingTime <= lowTimerThreshold then
-            print("[BOMB TIMER] Time is low: " .. remainingTime .. " seconds!")
-            -- (Optional) Auto-trigger bomb pass here if desired.
-        end
-        task.wait(1)
-    end
-
-    bombTimerUI:Destroy()
-    bombTimerUI = nil
-    print("[BOMB TIMER] Timer expired!")
+        timerUI:Destroy()
+        bombTimerUI[character] = nil
+        print("[BOMB TIMER] Timer expired!")
+    end)
 end
 
 -----------------------------------------------------
 -- BOMB DETECTION & TIMER MANAGEMENT
 -----------------------------------------------------
+-- Continuously check all players to see who holds the bomb.
 local function detectBomb()
     while true do
-        local character = LocalPlayer.Character
-        if character then
-            local bomb = character:FindFirstChild("Bomb")  -- Change this if your bomb's named differently.
-            if bomb and bomb ~= bombObject then
-                bombObject = bomb
-                -- Check for an existing RemainingTime value; if not, create one.
-                if not bombObject:FindFirstChild("RemainingTime") then
-                    local remVal = Instance.new("NumberValue")
-                    remVal.Name = "RemainingTime"
-                    remVal.Value = defaultBombTimer
-                    remVal.Parent = bombObject
-                end
-
-                print("[TRACKER] Bomb received! Starting timer at: " .. bombObject:FindFirstChild("RemainingTime").Value .. " seconds.")
-                createBombTimerUI(character)
-
-                -- Listen for bomb passing (when the bomb's Parent changes).
-                bomb:GetPropertyChangedSignal("Parent"):Connect(function()
-                    if bomb.Parent ~= character then
-                        print("[TRACKER] Bomb passed!")
-                        bombObject = nil
-                        if bombTimerUI then
-                            bombTimerUI:Destroy()
-                            bombTimerUI = nil
+        for _, player in pairs(Players:GetPlayers()) do
+            if player.Character then
+                local bomb = player.Character:FindFirstChild("Bomb")  -- Adjust name if necessary
+                if bomb and bomb ~= bombObject then
+                    bombObject = bomb
+                    isHoldingBomb = (player == LocalPlayer)
+                    print("[TRACKER] Bomb received by " .. player.Name .. "!")
+                    
+                    -- Inherit remaining time if the bomb was passed before.
+                    if lastBombPassTime then
+                        local elapsed = tick() - lastBombPassTime
+                        local currentRem = bomb:FindFirstChild("RemainingTime")
+                        if currentRem then
+                            currentRem.Value = math.max(0, currentRem.Value - elapsed)
+                        else
+                            currentRem = Instance.new("NumberValue")
+                            currentRem.Name = "RemainingTime"
+                            currentRem.Value = math.max(0, defaultBombTimer - elapsed)
+                            currentRem.Parent = bomb
                         end
+                        globalBombTime = currentRem.Value
+                    else
+                        -- No previous pass: start at default.
+                        local currentRem = bomb:FindFirstChild("RemainingTime")
+                        if not currentRem then
+                            currentRem = Instance.new("NumberValue")
+                            currentRem.Name = "RemainingTime"
+                            currentRem.Value = defaultBombTimer
+                            currentRem.Parent = bomb
+                        end
+                        globalBombTime = currentRem.Value
                     end
-                end)
+
+                    bombStartTime = tick()
+                    createBombTimerUI(player.Character, bomb)
+                    lastBombPassTime = tick()
+
+                    -- Listen for bomb passing (when the bomb's Parent changes).
+                    bomb:GetPropertyChangedSignal("Parent"):Connect(function()
+                        if bomb.Parent ~= player.Character then
+                            print("[TRACKER] Bomb passed from " .. player.Name)
+                            bombObject = nil
+                            isHoldingBomb = false
+                            lastBombPassTime = tick()
+                            if bombTimerUI[player.Character] then
+                                bombTimerUI[player.Character]:Destroy()
+                                bombTimerUI[player.Character] = nil
+                            end
+                        end
+                    end)
+                end
             end
         end
         task.wait(0.1)
@@ -185,14 +218,14 @@ local function detectBomb()
 end
 
 -----------------------------------------------------
--- AUTO PASS BOMB LOGIC (Advanced Rotation)
+-- AUTO PASS BOMB LOGIC (OPTIONAL)
 -----------------------------------------------------
 local function autoPassBomb()
-    if not AutoPassEnabled then return end
+    if not AutoPassEnabled or not isHoldingBomb then return end
     pcall(function()
-        local Bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
-        if Bomb then
-            local BombEvent = Bomb:FindFirstChild("RemoteEvent")
+        local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
+        if bomb then
+            local BombEvent = bomb:FindFirstChild("RemoteEvent")
             local closestPlayer = getClosestPlayer()
             if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
@@ -209,7 +242,7 @@ local function autoPassBomb()
 end
 
 -----------------------------------------------------
--- MANUAL ANTI-SLIPPERY (if desired)
+-- OPTIONAL: MANUAL ANTI-SLIPPERY
 -----------------------------------------------------
 local function applyAntiSlippery(enabled)
     if enabled then
@@ -218,7 +251,7 @@ local function applyAntiSlippery(enabled)
                 local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
                 for _, part in pairs(character:GetDescendants()) do
                     if part:IsA("BasePart") then
-                        part.CustomPhysicalProperties = PhysicalProperties.new(0.7,0.3,0.5)
+                        part.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5)
                     end
                 end
                 task.wait(0.1)
@@ -228,14 +261,14 @@ local function applyAntiSlippery(enabled)
         local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
         for _, part in pairs(character:GetDescendants()) do
             if part:IsA("BasePart") then
-                part.CustomPhysicalProperties = PhysicalProperties.new(0.5,0.3,0.5)
+                part.CustomPhysicalProperties = PhysicalProperties.new(0.5, 0.3, 0.5)
             end
         end
     end
 end
 
 -----------------------------------------------------
--- MANUAL REMOVE HITBOX (if desired)
+-- OPTIONAL: MANUAL REMOVE HITBOX
 -----------------------------------------------------
 local function applyRemoveHitbox(enable)
     local character = LocalPlayer.Character
@@ -325,7 +358,7 @@ AutomatedTab:AddSlider({
 AutomatedTab:AddDropdown({
     Name = "Pathfinding Speed",
     Default = "16",
-    Options = {"12","16","20"},
+    Options = {"12", "16", "20"},
     Callback = function(value)
         pathfindingSpeed = tonumber(value)
     end
@@ -334,11 +367,11 @@ AutomatedTab:AddDropdown({
 AutomatedTab:AddDropdown({
     Name = "UI Theme",
     Default = "Dark",
-    Options = {"Dark","Light","Red"},
+    Options = {"Dark", "Light", "Red"},
     Callback = function(themeName)
         local theme = uiThemes[themeName]
         if theme then
-            -- Optionally, apply the theme to the OrionLib UI elements.
+            -- Optionally, apply the theme to OrionLib UI elements here.
         else
             warn("Theme not found:", themeName)
         end
