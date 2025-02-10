@@ -96,7 +96,7 @@ errorLabel.Parent = mainFrame
 -- Setup Bomb Script URL and valid credentials
 -----------------------------------------------------
 
-local BOMB_SCRIPT_URL = "https://raw.githubusercontent.com/magmachief/Passthebomb/refs/heads/main/pass%20the%20bom%20lua"
+local BOMB_SCRIPT_URL = "https://raw.githubusercontent.com/magmachief/Passthebomb/refs/heads/main/finalpassbomb.lua"
 
 -- Set your valid credentials (change these values as needed)
 local VALID_USERNAME = "Jiwoo"
