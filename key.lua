@@ -25,15 +25,19 @@ local globalBombTime = defaultBombTimer  -- Global remaining time (adjusted by o
 local lastBombPassTime = nil      -- When the bomb was last passed
 local isHoldingBomb = false       -- True if LocalPlayer currently holds the bomb
 
--- Table to store bomb pass data for AI prediction (each entry: {heldTime, remaining})
+-- Table to store bomb pass data (for recording/AI prediction)
 local bombPassData = {}
 local maxBombPassDataEntries = 10  -- Maximum number of bomb pass records for AI prediction
 
 -- A table to hold bomb timer UIs by character (keyed by character)
 local bombTimerUI = {}
 
+-- AI prediction variables (Exponential Moving Average)
+local emaBombTimer = defaultBombTimer  -- Our adaptive bomb timer value
+local alpha = 0.3                      -- Smoothing factor (0 < alpha < 1)
+
 -----------------------------------------------------
--- VISUAL TARGET MARKER FOR AUTO-PASS
+-- VISUAL TARGET MARKER (RED "X") FOR AUTO-PASS
 -----------------------------------------------------
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
@@ -43,12 +47,12 @@ local function createOrUpdateTargetMarker(player)
     local head = player.Character:FindFirstChild("Head") or player.Character:FindFirstChild("HumanoidRootPart")
     if not head then return end
 
-    -- If the marker already exists on the same player, do nothing.
+    -- If the marker already exists on this player, do nothing.
     if currentTargetMarker and currentTargetPlayer == player then
         return
     end
 
-    -- Remove previous marker if the target has changed.
+    -- Remove any previous marker if the target has changed.
     if currentTargetMarker then
         currentTargetMarker:Destroy()
         currentTargetMarker = nil
@@ -87,24 +91,27 @@ end
 -- UTILITY FUNCTIONS
 -----------------------------------------------------
 
--- Returns the closest player (for auto-pass targeting)
-local function getClosestPlayer()
-    local closestPlayer = nil
-    local shortestDistance = math.huge
+-- Returns the optimal target player based on travel time compared to the predicted bomb timer.
+local function getOptimalPlayer()
+    local bestPlayer = nil
+    local bestTravelTime = math.huge
+    local predictedTime = emaBombTimer  -- current prediction
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         return nil
     end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local distance = (player.Character.HumanoidRootPart.Position - myPos).magnitude
-            if distance < shortestDistance then
-                shortestDistance = distance
-                closestPlayer = player
+            local targetPos = player.Character.HumanoidRootPart.Position
+            local distance = (targetPos - myPos).magnitude
+            local travelTime = distance / pathfindingSpeed
+            if travelTime < bestTravelTime and travelTime <= predictedTime then
+                bestTravelTime = travelTime
+                bestPlayer = player
             end
         end
     end
-    return closestPlayer
+    return bestPlayer
 end
 
 -- Rotates LocalPlayer's character toward a target position.
@@ -133,20 +140,9 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     return tween
 end
 
--- Enhanced AI prediction: Compute the predicted bomb timer using a weighted average of past bomb passes.
+-- Returns the current predicted bomb timer (using our EMA).
 local function predictBombTimer()
-    if #bombPassData == 0 then
-        return defaultBombTimer
-    end
-    local weightedSum = 0
-    local totalWeight = 0
-    -- Later (more recent) entries get higher weight.
-    for i, data in ipairs(bombPassData) do
-        local weight = i  -- Simple weight: increasing with index (older records count less)
-        weightedSum = weightedSum + data.remaining * weight
-        totalWeight = totalWeight + weight
-    end
-    return weightedSum / totalWeight
+    return emaBombTimer
 end
 
 -----------------------------------------------------
@@ -163,11 +159,11 @@ local function createOrUpdateBombTimerUI(bomb, character)
     if not remVal then
         remVal = Instance.new("NumberValue")
         remVal.Name = "RemainingTime"
-        remVal.Value = globalBombTime  -- Use the global predicted timer
+        remVal.Value = globalBombTime  -- Use the global predicted timer initially
         remVal.Parent = bomb
     end
 
-    -- Update globalBombTime using AI prediction (if available)
+    -- Update globalBombTime using our AI prediction (if available)
     globalBombTime = predictBombTimer() or remVal.Value
 
     -- Record timer data for this bomb (or update existing data)
@@ -179,7 +175,6 @@ local function createOrUpdateBombTimerUI(bomb, character)
     timerData.startTime = tick()
     timerData.initialTime = remVal.Value
 
-    -- Create a new BillboardGui for the timer.
     if timerData.UI then
         timerData.UI:Destroy()
     end
@@ -202,7 +197,6 @@ local function createOrUpdateBombTimerUI(bomb, character)
 
     timerData.UI = bg
 
-    -- Update loop for the timer UI.
     task.spawn(function()
         while true do
             if not bomb or bomb.Parent ~= character then
@@ -210,13 +204,11 @@ local function createOrUpdateBombTimerUI(bomb, character)
                 bombTimerUI[character] = nil
                 return
             end
-            -- Use the latest AI prediction each cycle.
             local predictedDuration = predictBombTimer()
             local elapsed = tick() - timerData.startTime
             local remTime = math.max(0, predictedDuration - elapsed)
-            
             label.Text = tostring(math.ceil(remTime))
-            remVal.Value = remTime  -- Update the bomb's global remaining time
+            remVal.Value = remTime
             
             if remTime <= lowTimerThreshold then
                 print("[BOMB TIMER] Time is almost up on " .. character.Name)
@@ -242,7 +234,6 @@ local function detectBombs()
             if player.Character then
                 local bomb = player.Character:FindFirstChild("Bomb")
                 if bomb then
-                    -- Create or update the timer UI for this bomb.
                     createOrUpdateBombTimerUI(bomb, player.Character)
                     
                     -- Listen for when the bomb is passed.
@@ -255,12 +246,12 @@ local function detectBombs()
                                 if remVal then
                                     local heldTime = tick() - (bombTimerUI[player.Character] and bombTimerUI[player.Character].startTime or tick())
                                     local remaining = remVal.Value
-                                    -- Record data from this bomb pass.
                                     table.insert(bombPassData, {heldTime = heldTime, remaining = remaining})
-                                    -- Keep only the most recent entries.
                                     if #bombPassData > maxBombPassDataEntries then
                                         table.remove(bombPassData, 1)
                                     end
+                                    -- Update our EMA prediction with the new remaining time.
+                                    emaBombTimer = alpha * remaining + (1 - alpha) * emaBombTimer
                                     print("[DATA] Bomb pass data recorded. Held time: " .. heldTime .. "s, Remaining: " .. remaining .. "s")
                                 end
                                 print("[TRACKER] Bomb passed to " .. newPlayer.Name)
@@ -289,17 +280,21 @@ local function autoPassBomb()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if bomb then
             local BombEvent = bomb:FindFirstChild("RemoteEvent")
-            local closestPlayer = getClosestPlayer()
-            if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                createOrUpdateTargetMarker(closestPlayer)
-                local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
-                local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
-                if distance <= bombPassDistance then
-                    local targetVelocity = closestPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0,0,0)
+            local optimalPlayer = getOptimalPlayer()
+            if optimalPlayer and optimalPlayer.Character and optimalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                -- Attach a red "X" marker on the target's head for visual feedback.
+                createOrUpdateTargetMarker(optimalPlayer)
+                local targetPosition = optimalPlayer.Character.HumanoidRootPart.Position
+                local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+                local distance = (targetPosition - myPos).magnitude
+                local travelTime = distance / pathfindingSpeed
+                local predictedTime = predictBombTimer()
+                if travelTime <= predictedTime then
+                    local targetVelocity = optimalPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
                     rotateCharacterTowardsTarget(targetPosition, targetVelocity)
                     task.wait(0.6)
-                    BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
-                    removeTargetMarker()  -- Optionally remove marker after passing
+                    BombEvent:FireServer(optimalPlayer.Character, optimalPlayer.Character:FindFirstChild("CollisionPart"))
+                    removeTargetMarker()
                 end
             else
                 removeTargetMarker()
@@ -449,7 +444,7 @@ AutomatedTab:AddDropdown({
 })
 
 OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI-based Bomb Timer, Visual Target Marker, Anti-Slippery, and Advanced Features")
+print("Yon Menu Script Loaded with AI-based Bomb Timer, Optimal Targeting, and a Red 'X' Visual Marker for Auto-Pass")
 
 -----------------------------------------------------
 -- START BOMB DETECTION
