@@ -4,7 +4,9 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
 
 -----------------------------------------------------
 -- CONFIGURATION & VARIABLES
@@ -16,7 +18,7 @@ local RemoveHitboxEnabled = false   -- Toggle hitbox removal
 local pathfindingSpeed = 16         -- Used to calculate travel time
 
 -----------------------------------------------------
--- UI THEMES
+-- UI THEMES (for auto–pass UI toggles)
 -----------------------------------------------------
 local uiThemes = {
     Dark = {
@@ -71,9 +73,9 @@ local function createOrUpdateTargetMarker(player)
 
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
-    marker.Adornee = body  -- Attach to the target's body
+    marker.Adornee = body
     marker.Size = UDim2.new(0, 50, 0, 50)
-    marker.StudsOffset = Vector3.new(0, 0, 0)  -- Centered on the part
+    marker.StudsOffset = Vector3.new(0, 0, 0)
     marker.AlwaysOnTop = true
     marker.Parent = body
 
@@ -98,7 +100,7 @@ local function removeTargetMarker()
 end
 
 -----------------------------------------------------
--- UTILITY FUNCTIONS
+-- UTILITY FUNCTIONS (Auto-pass related)
 -----------------------------------------------------
 local function getOptimalPlayer()
     local bestPlayer = nil
@@ -158,7 +160,7 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     local targetCFrame = CFrame.new(hrp.Position, predictedPos)
     local tween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {CFrame = targetCFrame})
     tween:Play()
-    return tween  -- Optionally wait 0.1 seconds after starting the tween.
+    return tween
 end
 
 -----------------------------------------------------
@@ -227,7 +229,7 @@ local function autoPassBomb()
                 if distance <= bombPassDistance then
                     local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
                     rotateCharacterTowardsTarget(targetPosition, targetVelocity)
-                    task.wait(0.1)  -- 0.1-second delay
+                    task.wait(0.1)
                     BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
                     print("Bomb passed to:", targetPlayer.Name)
                     removeTargetMarker()
@@ -259,7 +261,6 @@ local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magm
 -----------------------------------------------------
 -- ADD WINDOW & EXTENDED TABS TO YOUR LOCAL SCRIPT
 -----------------------------------------------------
--- Create the main window.
 local Window = OrionLib:MakeWindow({
     Name = "Advanced Orion UI",
     HidePremium = false,
@@ -270,7 +271,7 @@ local Window = OrionLib:MakeWindow({
     IntroText = "Park Ji-woo"
 })
 
--- Optionally, run the advanced load sequence.
+-- Run the advanced load sequence on the main window.
 AdvancedLoadSequence(Window, {
     IntroEnabled = true,
     IntroIcon = "rbxassetid://8834748103",
@@ -289,23 +290,17 @@ local ConsoleTab = Window:MakeConsoleTab({
     PremiumOnly = false
 })
 
--- Create the Automated tab (if not already created).
+-- Create the Automated tab.
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
 
--- IMPORTANT: Inside the MakeTab function of OrionLib the code uses "ItemParent"
--- as the parent for added elements. Ensure that this variable is defined.
--- In our case, immediately after Container is created we define:
-local function FixItemParent(tab)
-    if tab and tab.Container then
-        tab.ItemParent = tab.Container
-    end
+-- (Ensure the tab’s container is used as the parent for added elements.)
+if AutomatedTab.Container then
+    AutomatedTab.ItemParent = AutomatedTab.Container
 end
--- (Depending on your OrionLib version, you may need to patch the tab creation. If not, ensure your library version expects a valid ItemParent.)
--- For our example, we assume the functions below will work because they reference the container as the parent.
 
 -----------------------------------------------------
 -- DECLARE MISSING GLOBALS
