@@ -248,10 +248,10 @@ local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magm
 -- ADD WINDOW & EXTENDED TABS TO YOUR LOCAL SCRIPT
 -----------------------------------------------------
 local Window = OrionLib:MakeWindow({
-    Name = "Advanced Orion UI",
+    Name = "Yon Menu - Advanced",
     HidePremium = false,
     SaveConfig = true,
-    ConfigFolder = "AdvancedOrion",
+    ConfigFolder = "YonMenu_Advanced",
     IntroEnabled = true,
     IntroIcon = "rbxassetid://8834748103",
     IntroText = "Park Ji-woo"
