@@ -4,7 +4,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 -----------------------------------------------------
@@ -15,10 +14,6 @@ local AutoPassEnabled = false       -- Toggle auto-pass behavior
 local AntiSlipperyEnabled = false   -- Toggle anti-slippery feature
 local RemoveHitboxEnabled = false   -- Toggle hitbox removal
 local pathfindingSpeed = 16         -- Used to calculate travel time
-
--- Auto Pass Cooldown Variables
-local autoPassCooldown = 1.0        -- Cooldown time (in seconds) between passes (adjustable via the UI)
-local lastAutoPassTime = 0          -- Records the last time a bomb was passed
 
 -----------------------------------------------------
 -- UI THEMES
@@ -56,7 +51,7 @@ end
 -----------------------------------------------------
 -- VISUAL TARGET MARKER (RED "X") FOR AUTO-PASS
 -----------------------------------------------------
--- We use a BillboardGui marker attached to the target's HumanoidRootPart.
+-- This version uses a BillboardGui "X" marker attached to the target's HumanoidRootPart.
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
 
@@ -65,12 +60,10 @@ local function createOrUpdateTargetMarker(player)
     local body = player.Character:FindFirstChild("HumanoidRootPart")
     if not body then return end
 
-    -- If the marker already exists on this player, do nothing.
     if currentTargetMarker and currentTargetPlayer == player then
         return
     end
 
-    -- Remove any previous marker if the target has changed.
     if currentTargetMarker then
         currentTargetMarker:Destroy()
         currentTargetMarker = nil
@@ -81,7 +74,7 @@ local function createOrUpdateTargetMarker(player)
     marker.Name = "BombPassTargetMarker"
     marker.Adornee = body  -- Attach to the target's body
     marker.Size = UDim2.new(0, 50, 0, 50)
-    marker.StudsOffset = Vector3.new(0, 0, 0)  -- Centered on the part
+    marker.StudsOffset = Vector3.new(0, 0, 0)  -- Centered
     marker.AlwaysOnTop = true
     marker.Parent = body
 
@@ -171,39 +164,7 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     local targetCFrame = CFrame.new(hrp.Position, predictedPos)
     local tween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {CFrame = targetCFrame})
     tween:Play()
-    return tween, tween.Completed
-end
-
------------------------------------------------------
--- (OPTIONAL) ADDITIONAL FEEDBACK FUNCTIONS
------------------------------------------------------
--- Play a pass sound effect.
-local function playPassSound()
-    local sound = Instance.new("Sound")
-    sound.SoundId = "rbxassetid://6026984227"  -- Example asset ID; replace if desired.
-    sound.Volume = 1
-    sound.Parent = LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or LocalPlayer.Character
-    sound:Play()
-    sound.Ended:Connect(function()
-        sound:Destroy()
-    end)
-end
-
--- Flash the screen (a brief white overlay).
-local function flashScreen()
-    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-    local flashGui = Instance.new("ScreenGui", playerGui)
-    flashGui.Name = "PassFlash"
-    local frame = Instance.new("Frame", flashGui)
-    frame.Size = UDim2.new(1, 0, 1, 0)
-    frame.BackgroundColor3 = Color3.new(1, 1, 1)
-    frame.BackgroundTransparency = 0
-    frame.BorderSizePixel = 0
-    local tween = TweenService:Create(frame, TweenInfo.new(0.5), {BackgroundTransparency = 1})
-    tween:Play()
-    tween.Completed:Connect(function()
-        flashGui:Destroy()
-    end)
+    return tween  -- We'll simply wait a fixed 0.3 seconds after playing
 end
 
 -----------------------------------------------------
@@ -251,7 +212,7 @@ local function applyRemoveHitbox(enable)
 end
 
 -----------------------------------------------------
--- AUTO PASS BOMB LOGIC (OPTIMAL PASS ONLY) WITH COOLDOWN, FEEDBACK, AND FALLBACK
+-- AUTO PASS BOMB LOGIC (OPTIMAL PASS ONLY) WITH FEEDBACK & FALLBACK
 -----------------------------------------------------
 local function autoPassBomb()
     if not AutoPassEnabled then
@@ -259,16 +220,11 @@ local function autoPassBomb()
         return
     end
 
-    local currentTime = tick()
-    if currentTime - lastAutoPassTime < autoPassCooldown then
-        return
-    end
-
     pcall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if bomb then
             local BombEvent = bomb:FindFirstChild("RemoteEvent")
-            -- Use optimal auto-pass; if none found, fallback to closest player.
+            -- Use optimal auto-pass; if none is found, fallback to the closest player.
             local targetPlayer = getOptimalPlayer() or getClosestPlayer()
             if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 createOrUpdateTargetMarker(targetPlayer)
@@ -277,16 +233,11 @@ local function autoPassBomb()
                 local distance = (targetPosition - myPos).magnitude
                 if distance <= bombPassDistance then
                     local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
-                    local tween, onComplete = rotateCharacterTowardsTarget(targetPosition, targetVelocity)
-                    onComplete:Connect(function(status)
-                        if status == Enum.PlaybackState.Completed then
-                            BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
-                            playPassSound()
-                            flashScreen()
-                            lastAutoPassTime = tick()
-                            removeTargetMarker()
-                        end
-                    end)
+                    rotateCharacterTowardsTarget(targetPosition, targetVelocity)
+                    task.wait(0.3)  -- Wait the tween duration
+                    BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+                    print("Bomb passed to:", targetPlayer.Name)
+                    removeTargetMarker()
                 else
                     removeTargetMarker()
                 end
@@ -298,35 +249,6 @@ local function autoPassBomb()
         end
     end)
 end
-
------------------------------------------------------
--- MANUAL OVERRIDE BUTTON (FOR MOBILE)
------------------------------------------------------
--- Create an on-screen button (positioned near the jump button) for manual override.
-local function createOverrideButton()
-    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-    local overrideGui = Instance.new("ScreenGui")
-    overrideGui.Name = "OverridePassGui"
-    overrideGui.ResetOnSpawn = false
-    overrideGui.Parent = playerGui
-
-    local overrideButton = Instance.new("TextButton")
-    overrideButton.Name = "OverridePassButton"
-    overrideButton.Size = UDim2.new(0, 80, 0, 80)
-    overrideButton.AnchorPoint = Vector2.new(1, 1)
-    overrideButton.Position = UDim2.new(1, -20, 1, -20)
-    overrideButton.BackgroundTransparency = 0.5
-    overrideButton.BackgroundColor3 = Color3.new(0, 0, 0)
-    overrideButton.Text = "Pass"
-    overrideButton.TextScaled = true
-    overrideButton.Parent = overrideGui
-
-    overrideButton.Activated:Connect(function()
-        autoPassBomb()
-    end)
-end
-
-createOverrideButton()
 
 -----------------------------------------------------
 -- APPLY FEATURES ON RESPAWN
@@ -398,17 +320,6 @@ AutomatedTab:AddSlider({
     end
 })
 
-AutomatedTab:AddSlider({
-    Name = "Auto Pass Cooldown",
-    Min = 0.5,
-    Max = 5,
-    Default = autoPassCooldown,
-    Increment = 0.1,
-    Callback = function(value)
-        autoPassCooldown = value
-    end
-})
-
 AutomatedTab:AddDropdown({
     Name = "Pathfinding Speed",
     Default = "16",
@@ -442,4 +353,4 @@ AutomatedTab:AddDropdown({
 })
 
 OrionLib:Init()
-print("Yon Menu Script Loaded with Optimal Auto Pass Bomb, Anti Slippery, Remove Hitbox, Override Button, and UI Theme Support")
+print("Yon Menu Script Loaded with Optimal Auto Pass Bomb, Anti Slippery, Remove Hitbox, and UI Theme Support")
