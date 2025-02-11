@@ -263,13 +263,28 @@ end)
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
-    Name = "Yon Menu - Advanced",
+    Name = "Advanced Orion UI",
     HidePremium = false,
     SaveConfig = true,
-    ConfigFolder = "YonMenu_Advanced"
+    ConfigFolder = "AdvancedOrion",
+    IntroEnabled = true,
+    IntroIcon = "rbxassetid://8834748103",
+    IntroText = "Advanced Orion UI"
 })
-local AutomatedTab = Window:MakeTab({
-    Name = "Automated",
+-- Optionally, run the advanced load sequence:
+AdvancedLoadSequence(MainWindow, {
+    IntroEnabled = true,
+    IntroIcon = "rbxassetid://8834748103",
+    IntroText = "Advanced Orion UI"
+})
+-- Add the new configurable tabs:
+local ThemeConfigTab = Window:MakeThemeConfigTab({
+    Name = "Theme Config",
+    Icon = "rbxassetid://8834748103",
+    PremiumOnly = false
+})
+local ConsoleTab = Window:MakeConsoleTab({
+    Name = "Console",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
