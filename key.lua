@@ -10,13 +10,16 @@ local LocalPlayer = Players.LocalPlayer
 -- CONFIGURATION & VARIABLES
 -----------------------------------------------------
 local defaultBombTimer = 20       -- Default bomb timer (in seconds)
-local bombPassDistance = 10         -- Maximum pass distance (for auto-pass, if used)
-local AutoPassEnabled = false       -- (Optional) Toggle auto-pass behavior
-local AntiSlipperyEnabled = false   -- (Optional) Toggle anti-slippery feature
-local RemoveHitboxEnabled = false   -- (Optional) Toggle hitbox removal
+local bombPassDistance = 10         -- Maximum pass distance (for both auto-pass modes)
+local AutoPassEnabled = false       -- Toggle auto-pass behavior
+local AntiSlipperyEnabled = false   -- Toggle anti-slippery feature
+local RemoveHitboxEnabled = false   -- Toggle hitbox removal
 local pathfindingSpeed = 16         -- For potential future use
 
 local lowTimerThreshold = 2         -- When remaining time is <= 2 seconds, warn
+
+-- New toggle: Choose between Optimal Auto Pass (true) or Normal Auto Pass (false)
+local UseOptimalAutoPass = true
 
 -- Global bomb tracking variables
 local bombObject = nil            -- Reference to the current bomb object
@@ -25,9 +28,9 @@ local globalBombTime = defaultBombTimer  -- Global remaining time (adjusted by o
 local lastBombPassTime = nil      -- When the bomb was last passed
 local isHoldingBomb = false       -- True if LocalPlayer currently holds the bomb
 
--- Table to store bomb pass data (for recording/AI prediction)
+-- Table to store bomb pass data (for AI prediction)
 local bombPassData = {}
-local maxBombPassDataEntries = 10  -- Maximum number of bomb pass records for AI prediction
+local maxBombPassDataEntries = 10  -- Maximum bomb pass records for AI prediction
 
 -- A table to hold bomb timer UIs by character (keyed by character)
 local bombTimerUI = {}
@@ -37,15 +40,53 @@ local emaBombTimer = defaultBombTimer  -- Our adaptive bomb timer value
 local alpha = 0.3                      -- Smoothing factor (0 < alpha < 1)
 
 -----------------------------------------------------
+-- UI THEMES
+-----------------------------------------------------
+local uiThemes = {
+    Dark = {
+        MainColor = Color3.fromRGB(30, 30, 30),
+        AccentColor = Color3.fromRGB(255, 0, 0),
+        TextColor = Color3.fromRGB(255, 255, 255)
+    },
+    Light = {
+        MainColor = Color3.fromRGB(255, 255, 255),
+        AccentColor = Color3.fromRGB(255, 0, 0),
+        TextColor = Color3.fromRGB(0, 0, 0)
+    },
+    Red = {
+        MainColor = Color3.fromRGB(150, 0, 0),
+        AccentColor = Color3.fromRGB(255, 255, 255),
+        TextColor = Color3.fromRGB(255, 255, 255)
+    }
+}
+
+-- Function to update OrionLib's theme.
+-- (This is a sample implementation. Replace it with your OrionLib's built-in method if available.)
+local function changeUITheme(theme)
+    -- For example, if OrionLib supported dynamic theme changing:
+    if OrionLib.ChangeTheme then
+        OrionLib:ChangeTheme(theme)
+    else
+        -- Otherwise, you might update some global configuration.
+        OrionLib.Config = OrionLib.Config or {}
+        OrionLib.Config.MainColor = theme.MainColor
+        OrionLib.Config.AccentColor = theme.AccentColor
+        OrionLib.Config.TextColor = theme.TextColor
+        print("Theme changed to:", theme)
+    end
+end
+
+-----------------------------------------------------
 -- VISUAL TARGET MARKER (RED "X") FOR AUTO-PASS
 -----------------------------------------------------
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
 
+-- Now attaches the marker to the target's body (HumanoidRootPart) instead of the head.
 local function createOrUpdateTargetMarker(player)
     if not player or not player.Character then return end
-    local head = player.Character:FindFirstChild("Head") or player.Character:FindFirstChild("HumanoidRootPart")
-    if not head then return end
+    local body = player.Character:FindFirstChild("HumanoidRootPart")
+    if not body then return end
 
     -- If the marker already exists on this player, do nothing.
     if currentTargetMarker and currentTargetPlayer == player then
@@ -61,11 +102,11 @@ local function createOrUpdateTargetMarker(player)
 
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
-    marker.Adornee = head
+    marker.Adornee = body  -- Attach to the target's body
     marker.Size = UDim2.new(0, 50, 0, 50)
     marker.StudsOffset = Vector3.new(0, 3, 0)
     marker.AlwaysOnTop = true
-    marker.Parent = head
+    marker.Parent = body
 
     local label = Instance.new("TextLabel", marker)
     label.Size = UDim2.new(1, 0, 1, 0)
@@ -91,7 +132,28 @@ end
 -- UTILITY FUNCTIONS
 -----------------------------------------------------
 
--- Returns the optimal target player based on travel time compared to the predicted bomb timer.
+-- Normal auto-pass: Returns the closest player (within bombPassDistance).
+local function getClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
+    local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local targetPos = player.Character.HumanoidRootPart.Position
+            local distance = (targetPos - myPos).magnitude
+            if distance < shortestDistance and distance <= bombPassDistance then
+                shortestDistance = distance
+                closestPlayer = player
+            end
+        end
+    end
+    return closestPlayer
+end
+
+-- Optimal auto-pass: Returns the best player based on travel time versus the predicted bomb timer and within bombPassDistance.
 local function getOptimalPlayer()
     local bestPlayer = nil
     local bestTravelTime = math.huge
@@ -105,7 +167,7 @@ local function getOptimalPlayer()
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).magnitude
             local travelTime = distance / pathfindingSpeed
-            if travelTime < bestTravelTime and travelTime <= predictedTime then
+            if travelTime < bestTravelTime and travelTime <= predictedTime and distance <= bombPassDistance then
                 bestTravelTime = travelTime
                 bestPlayer = player
             end
@@ -149,6 +211,7 @@ end
 -- BOMB TIMER UI FUNCTIONS
 -----------------------------------------------------
 -- Creates or updates the Bomb Timer UI for a given bomb object and character.
+-- This function now only creates the UI if one doesn't already exist.
 local function createOrUpdateBombTimerUI(bomb, character)
     if not character or not bomb then return end
     local head = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
@@ -163,21 +226,17 @@ local function createOrUpdateBombTimerUI(bomb, character)
         remVal.Parent = bomb
     end
 
-    -- Update globalBombTime using our AI prediction (if available)
     globalBombTime = predictBombTimer() or remVal.Value
 
-    -- Record timer data for this bomb (or update existing data)
-    local timerData = bombTimerUI[character]
-    if not timerData then
-        timerData = {}
-        bombTimerUI[character] = timerData
+    -- Only create the timer UI if one does not already exist for this character.
+    if bombTimerUI[character] and bombTimerUI[character].UI then
+        return
     end
+
+    local timerData = {}
     timerData.startTime = tick()
     timerData.initialTime = remVal.Value
-
-    if timerData.UI then
-        timerData.UI:Destroy()
-    end
+    bombTimerUI[character] = timerData
 
     local bg = Instance.new("BillboardGui")
     bg.Name = "BombTimerUI"
@@ -280,21 +339,36 @@ local function autoPassBomb()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if bomb then
             local BombEvent = bomb:FindFirstChild("RemoteEvent")
-            local optimalPlayer = getOptimalPlayer()
-            if optimalPlayer and optimalPlayer.Character and optimalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                -- Attach a red "X" marker on the target's head for visual feedback.
-                createOrUpdateTargetMarker(optimalPlayer)
-                local targetPosition = optimalPlayer.Character.HumanoidRootPart.Position
+            local targetPlayer = nil
+            if UseOptimalAutoPass then
+                targetPlayer = getOptimalPlayer()
+            else
+                targetPlayer = getClosestPlayer()
+            end
+            if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                createOrUpdateTargetMarker(targetPlayer)
+                local targetPosition = targetPlayer.Character.HumanoidRootPart.Position
                 local myPos = LocalPlayer.Character.HumanoidRootPart.Position
                 local distance = (targetPosition - myPos).magnitude
-                local travelTime = distance / pathfindingSpeed
-                local predictedTime = predictBombTimer()
-                if travelTime <= predictedTime then
-                    local targetVelocity = optimalPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
-                    rotateCharacterTowardsTarget(targetPosition, targetVelocity)
-                    task.wait(0.6)
-                    BombEvent:FireServer(optimalPlayer.Character, optimalPlayer.Character:FindFirstChild("CollisionPart"))
-                    removeTargetMarker()
+                if UseOptimalAutoPass then
+                    local travelTime = distance / pathfindingSpeed
+                    local predictedTime = predictBombTimer()
+                    -- Both travelTime vs. predictedTime AND distance within bombPassDistance must be met
+                    if travelTime <= predictedTime and distance <= bombPassDistance then
+                        local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
+                        rotateCharacterTowardsTarget(targetPosition, targetVelocity)
+                        task.wait(0.6)
+                        BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+                        removeTargetMarker()
+                    end
+                else
+                    if distance <= bombPassDistance then
+                        local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
+                        rotateCharacterTowardsTarget(targetPosition, targetVelocity)
+                        task.wait(0.6)
+                        BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+                        removeTargetMarker()
+                    end
                 end
             else
                 removeTargetMarker()
@@ -409,6 +483,14 @@ AutomatedTab:AddToggle({
     end
 })
 
+AutomatedTab:AddToggle({
+    Name = "Use Optimal Auto Pass",
+    Default = UseOptimalAutoPass,
+    Callback = function(value)
+        UseOptimalAutoPass = value
+    end
+})
+
 AutomatedTab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
@@ -434,9 +516,9 @@ AutomatedTab:AddDropdown({
     Default = "Dark",
     Options = {"Dark", "Light", "Red"},
     Callback = function(themeName)
-        local theme = uiThemes and uiThemes[themeName]
+        local theme = uiThemes[themeName]
         if theme then
-            -- (Optional) Dynamically apply the theme to OrionLib UI elements.
+            changeUITheme(theme)
         else
             warn("Theme not found:", themeName)
         end
@@ -444,7 +526,7 @@ AutomatedTab:AddDropdown({
 })
 
 OrionLib:Init()
-print("Yon Menu Script Loaded with AI-based Bomb Timer, Optimal Targeting, and a Red 'X' Visual Marker for Auto-Pass")
+print("Yon Menu Script Loaded with AI-based Bomb Timer, Optimal/Normal Auto Pass Toggle, and a Red 'X' Visual Marker (attached to the body) for Auto-Pass")
 
 -----------------------------------------------------
 -- START BOMB DETECTION
