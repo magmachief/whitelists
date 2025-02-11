@@ -27,6 +27,7 @@ local isHoldingBomb = false       -- True if LocalPlayer currently holds the bom
 
 -- Table to store bomb pass data for AI prediction (each entry: {heldTime, remaining})
 local bombPassData = {}
+local maxBombPassDataEntries = 10  -- Maximum number of bomb pass records for AI prediction
 
 -- A table to hold bomb timer UIs by character (keyed by character)
 local bombTimerUI = {}
@@ -77,16 +78,20 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     return tween
 end
 
--- Simple AI prediction: Compute the average remaining time from past bomb passes.
+-- Enhanced AI prediction: Compute the predicted bomb timer using a weighted average of past bomb passes.
 local function predictBombTimer()
     if #bombPassData == 0 then
         return defaultBombTimer
     end
-    local total = 0
-    for _, data in ipairs(bombPassData) do
-        total = total + data.remaining
+    local weightedSum = 0
+    local totalWeight = 0
+    -- Iterate over bomb pass data; later (more recent) entries get higher weight.
+    for i, data in ipairs(bombPassData) do
+        local weight = i  -- Simple weight increasing with index (older records count less)
+        weightedSum = weightedSum + data.remaining * weight
+        totalWeight = totalWeight + weight
     end
-    return total / #bombPassData
+    return weightedSum / totalWeight
 end
 
 -----------------------------------------------------
@@ -144,26 +149,31 @@ local function createOrUpdateBombTimerUI(bomb, character)
 
     -- Update loop for the timer UI.
     task.spawn(function()
-        local remTime = timerData.initialTime
-        while remTime > 0 do
+        while true do
             if not bomb or bomb.Parent ~= character then
                 bg:Destroy()
                 bombTimerUI[character] = nil
                 return
             end
-            remTime = math.max(0, timerData.initialTime - (tick() - timerData.startTime))
+            -- Use the latest AI prediction each cycle.
+            local predictedDuration = predictBombTimer()
+            local elapsed = tick() - timerData.startTime
+            local remTime = math.max(0, predictedDuration - elapsed)
+            
             label.Text = tostring(math.ceil(remTime))
             remVal.Value = remTime  -- Update the bomb's global remaining time
-
+            
             if remTime <= lowTimerThreshold then
                 print("[BOMB TIMER] Time is almost up on " .. character.Name)
             end
-
+            if remTime <= 0 then
+                bg:Destroy()
+                bombTimerUI[character] = nil
+                print("[BOMB TIMER] Timer expired!")
+                break
+            end
             task.wait(1)
         end
-        bg:Destroy()
-        bombTimerUI[character] = nil
-        print("[BOMB TIMER] Timer expired!")
     end)
 end
 
@@ -192,6 +202,10 @@ local function detectBombs()
                                     local remaining = remVal.Value
                                     -- Record data from this bomb pass.
                                     table.insert(bombPassData, {heldTime = heldTime, remaining = remaining})
+                                    -- Keep only the most recent entries.
+                                    if #bombPassData > maxBombPassDataEntries then
+                                        table.remove(bombPassData, 1)
+                                    end
                                     print("[DATA] Bomb pass data recorded. Held time: " .. heldTime .. "s, Remaining: " .. remaining .. "s")
                                 end
                                 print("[TRACKER] Bomb passed to " .. newPlayer.Name)
@@ -360,7 +374,7 @@ AutomatedTab:AddDropdown({
     Default = "Dark",
     Options = {"Dark", "Light", "Red"},
     Callback = function(themeName)
-        local theme = uiThemes[themeName]
+        local theme = uiThemes and uiThemes[themeName]
         if theme then
             -- (Optional) Dynamically apply the theme to OrionLib UI elements.
         else
