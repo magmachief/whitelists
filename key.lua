@@ -51,7 +51,6 @@ end
 -----------------------------------------------------
 -- VISUAL TARGET MARKER (RED "X") FOR AUTO-PASS
 -----------------------------------------------------
--- This version uses a BillboardGui "X" marker attached to the target's HumanoidRootPart.
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
 
@@ -101,8 +100,6 @@ end
 -----------------------------------------------------
 -- UTILITY FUNCTIONS
 -----------------------------------------------------
--- Optimal auto-pass: Returns the player with the lowest travel time (distance/pathfindingSpeed)
--- provided they are within bombPassDistance.
 local function getOptimalPlayer()
     local bestPlayer = nil
     local bestTravelTime = math.huge
@@ -126,7 +123,6 @@ local function getOptimalPlayer()
     return bestPlayer
 end
 
--- Fallback: Returns the closest player within bombPassDistance.
 local function getClosestPlayer()
     local closestPlayer = nil
     local shortestDistance = bombPassDistance
@@ -147,8 +143,6 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Rotates LocalPlayer's character toward a target position.
--- Uses target velocity (if available) for prediction.
 local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     local character = LocalPlayer.Character
     if not character then return end
@@ -164,7 +158,7 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     local targetCFrame = CFrame.new(hrp.Position, predictedPos)
     local tween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {CFrame = targetCFrame})
     tween:Play()
-    return tween  -- We then wait 0.1 seconds after starting the tween.
+    return tween  -- Wait 0.1 seconds after starting the tween if needed.
 end
 
 -----------------------------------------------------
@@ -224,7 +218,6 @@ local function autoPassBomb()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if bomb then
             local BombEvent = bomb:FindFirstChild("RemoteEvent")
-            -- Use optimal auto-pass; if none is found, fallback to the closest player.
             local targetPlayer = getOptimalPlayer() or getClosestPlayer()
             if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 createOrUpdateTargetMarker(targetPlayer)
@@ -259,10 +252,14 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 -----------------------------------------------------
--- ORIONLIB UI INTERFACE (OPTIONAL)
+-- LOAD ORION LIBRARY
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
--- Create the main window
+
+-----------------------------------------------------
+-- ADD WINDOW & EXTENDED TABS TO YOUR LOCAL SCRIPT
+-----------------------------------------------------
+-- Create the main window.
 local Window = OrionLib:MakeWindow({
     Name = "Advanced Orion UI",
     HidePremium = false,
@@ -274,14 +271,13 @@ local Window = OrionLib:MakeWindow({
 })
 
 -- Optionally, run the advanced load sequence.
--- Make sure you have a valid reference to your main window.
--- AdvancedLoadSequence(MainWindow, {
---     IntroEnabled = true,
---     IntroIcon = "rbxassetid://8834748103",
---     IntroText = "Advanced Orion UI"
--- })
+AdvancedLoadSequence(Window, {
+    IntroEnabled = true,
+    IntroIcon = "rbxassetid://8834748103",
+    IntroText = "Park Ji-woo"
+})
 
--- Add the extra configurable tabs:
+-- Add the extra configurable tabs.
 local ThemeConfigTab = Window:MakeThemeConfigTab({
     Name = "Theme Config",
     Icon = "rbxassetid://8834748103",
@@ -293,20 +289,24 @@ local ConsoleTab = Window:MakeConsoleTab({
     PremiumOnly = false
 })
 
--- Create the Automated tab (if not already created)
+-- Create the Automated tab (if not already created).
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
 
--- Add your toggles and other elements to the Automated tab:
+-- Declare missing globals.
+local autoPassConnection = nil
+local markerStyle = "X"  -- Default marker style
 
+-- Add your toggles and other elements to the Automated tab:
 AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb",
     Default = AutoPassEnabled,
     Callback = function(value)
         AutoPassEnabled = value
+        print("Auto Pass Bomb toggled:", value)
         if AutoPassEnabled then
             autoPassConnection = RunService.Stepped:Connect(autoPassBomb)
         else
@@ -324,6 +324,7 @@ AutomatedTab:AddToggle({
     Default = AntiSlipperyEnabled,
     Callback = function(value)
         AntiSlipperyEnabled = value
+        print("Anti Slippery toggled:", value)
         applyAntiSlippery(value)
     end
 })
@@ -333,6 +334,7 @@ AutomatedTab:AddToggle({
     Default = RemoveHitboxEnabled,
     Callback = function(value)
         RemoveHitboxEnabled = value
+        print("Remove Hitbox toggled:", value)
         applyRemoveHitbox(value)
     end
 })
@@ -345,6 +347,7 @@ AutomatedTab:AddSlider({
     Increment = 1,
     Callback = function(value)
         bombPassDistance = value
+        print("Bomb Pass Distance set to:", value)
     end
 })
 
@@ -354,6 +357,7 @@ AutomatedTab:AddDropdown({
     Options = {"12", "16", "20"},
     Callback = function(value)
         pathfindingSpeed = tonumber(value)
+        print("Pathfinding Speed set to:", pathfindingSpeed)
     end
 })
 
@@ -363,6 +367,7 @@ AutomatedTab:AddDropdown({
     Options = {"X", "Arrow"},
     Callback = function(value)
         markerStyle = value
+        print("Marker Style set to:", markerStyle)
     end
 })
 
@@ -374,6 +379,7 @@ AutomatedTab:AddDropdown({
         local theme = uiThemes[themeName]
         if theme then
             changeUITheme(theme)
+            print("UI Theme changed to:", themeName)
         else
             warn("Theme not found:", themeName)
         end
@@ -382,4 +388,3 @@ AutomatedTab:AddDropdown({
 
 OrionLib:Init()
 print("Yon Menu Script Loaded with Optimal Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, Theme Config, and Console")
-
