@@ -33,6 +33,57 @@ local maxBombPassDataEntries = 10  -- Maximum number of bomb pass records for AI
 local bombTimerUI = {}
 
 -----------------------------------------------------
+-- VISUAL TARGET MARKER FOR AUTO-PASS
+-----------------------------------------------------
+local currentTargetMarker = nil
+local currentTargetPlayer = nil
+
+local function createOrUpdateTargetMarker(player)
+    if not player or not player.Character then return end
+    local head = player.Character:FindFirstChild("Head") or player.Character:FindFirstChild("HumanoidRootPart")
+    if not head then return end
+
+    -- If the marker already exists on the same player, do nothing.
+    if currentTargetMarker and currentTargetPlayer == player then
+        return
+    end
+
+    -- Remove previous marker if the target has changed.
+    if currentTargetMarker then
+        currentTargetMarker:Destroy()
+        currentTargetMarker = nil
+        currentTargetPlayer = nil
+    end
+
+    local marker = Instance.new("BillboardGui")
+    marker.Name = "BombPassTargetMarker"
+    marker.Adornee = head
+    marker.Size = UDim2.new(0, 50, 0, 50)
+    marker.StudsOffset = Vector3.new(0, 3, 0)
+    marker.AlwaysOnTop = true
+    marker.Parent = head
+
+    local label = Instance.new("TextLabel", marker)
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = "X"
+    label.TextScaled = true
+    label.TextColor3 = Color3.new(1, 0, 0)
+    label.Font = Enum.Font.SourceSansBold
+
+    currentTargetMarker = marker
+    currentTargetPlayer = player
+end
+
+local function removeTargetMarker()
+    if currentTargetMarker then
+        currentTargetMarker:Destroy()
+        currentTargetMarker = nil
+        currentTargetPlayer = nil
+    end
+end
+
+-----------------------------------------------------
 -- UTILITY FUNCTIONS
 -----------------------------------------------------
 
@@ -40,9 +91,13 @@ local bombTimerUI = {}
 local function getClosestPlayer()
     local closestPlayer = nil
     local shortestDistance = math.huge
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
+    local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local distance = (player.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
+            local distance = (player.Character.HumanoidRootPart.Position - myPos).magnitude
             if distance < shortestDistance then
                 shortestDistance = distance
                 closestPlayer = player
@@ -85,9 +140,9 @@ local function predictBombTimer()
     end
     local weightedSum = 0
     local totalWeight = 0
-    -- Iterate over bomb pass data; later (more recent) entries get higher weight.
+    -- Later (more recent) entries get higher weight.
     for i, data in ipairs(bombPassData) do
-        local weight = i  -- Simple weight increasing with index (older records count less)
+        local weight = i  -- Simple weight: increasing with index (older records count less)
         weightedSum = weightedSum + data.remaining * weight
         totalWeight = totalWeight + weight
     end
@@ -226,13 +281,17 @@ end
 -- (OPTIONAL) AUTO PASS BOMB LOGIC
 -----------------------------------------------------
 local function autoPassBomb()
-    if not AutoPassEnabled then return end
+    if not AutoPassEnabled then
+        removeTargetMarker()
+        return
+    end
     pcall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if bomb then
             local BombEvent = bomb:FindFirstChild("RemoteEvent")
             local closestPlayer = getClosestPlayer()
             if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                createOrUpdateTargetMarker(closestPlayer)
                 local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
                 local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
                 if distance <= bombPassDistance then
@@ -240,8 +299,13 @@ local function autoPassBomb()
                     rotateCharacterTowardsTarget(targetPosition, targetVelocity)
                     task.wait(0.6)
                     BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
+                    removeTargetMarker()  -- Optionally remove marker after passing
                 end
+            else
+                removeTargetMarker()
             end
+        else
+            removeTargetMarker()
         end
     end)
 end
@@ -345,6 +409,7 @@ AutomatedTab:AddToggle({
                 autoPassConnection:Disconnect()
                 autoPassConnection = nil
             end
+            removeTargetMarker()
         end
     end
 })
@@ -384,7 +449,7 @@ AutomatedTab:AddDropdown({
 })
 
 OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI-based Bomb Timer, Anti-Slippery, and Advanced Features")
+print("Yon Menu Script Loaded with Enhanced AI-based Bomb Timer, Visual Target Marker, Anti-Slippery, and Advanced Features")
 
 -----------------------------------------------------
 -- START BOMB DETECTION
