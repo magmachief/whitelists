@@ -51,7 +51,7 @@ end
 -----------------------------------------------------
 -- VISUAL TARGET MARKER (RED "X") FOR AUTO-PASS
 -----------------------------------------------------
--- We now use a BillboardGui “X” that attaches to the target’s body.
+-- This version uses a BillboardGui "X" marker.
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
 
@@ -76,7 +76,7 @@ local function createOrUpdateTargetMarker(player)
     marker.Name = "BombPassTargetMarker"
     marker.Adornee = body  -- Attach to the target's body
     marker.Size = UDim2.new(0, 50, 0, 50)
-    marker.StudsOffset = Vector3.new(0, 3, 0)
+    marker.StudsOffset = Vector3.new(0, 0, 0)  -- Centered on the part
     marker.AlwaysOnTop = true
     marker.Parent = body
 
@@ -154,7 +154,6 @@ end
 local function applyAntiSlippery(enabled)
     local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     if enabled then
-        -- When enabled, repeatedly apply the anti-slippery properties.
         task.spawn(function()
             while AntiSlipperyEnabled do
                 for _, part in pairs(char:GetDescendants()) do
@@ -166,7 +165,6 @@ local function applyAntiSlippery(enabled)
             end
         end)
     else
-        -- When disabled, reset the properties to default.
         for _, part in pairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.CustomPhysicalProperties = PhysicalProperties.new(0.5, 0.3, 0.5)
@@ -215,12 +213,12 @@ local function autoPassBomb()
                 if distance <= bombPassDistance then
                     local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
                     local tween, onComplete = rotateCharacterTowardsTarget(targetPosition, targetVelocity)
-                    onComplete:Connect(function()
-                        BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
-                        removeTargetMarker()
+                    onComplete:Connect(function(status)
+                        if status == Enum.PlaybackState.Completed then
+                            BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+                            removeTargetMarker()
+                        end
                     end)
-                else
-                    removeTargetMarker()
                 end
             else
                 removeTargetMarker()
