@@ -74,7 +74,7 @@ local function createOrUpdateTargetMarker(player)
     marker.Name = "BombPassTargetMarker"
     marker.Adornee = body  -- Attach to the target's body
     marker.Size = UDim2.new(0, 50, 0, 50)
-    marker.StudsOffset = Vector3.new(0, 0, 0)  -- Centered
+    marker.StudsOffset = Vector3.new(0, 0, 0)  -- Centered on the part
     marker.AlwaysOnTop = true
     marker.Parent = body
 
@@ -164,7 +164,7 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     local targetCFrame = CFrame.new(hrp.Position, predictedPos)
     local tween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {CFrame = targetCFrame})
     tween:Play()
-    return tween  -- We'll simply wait a fixed 0.3 seconds after playing
+    return tween  -- We then wait 0.1 seconds after starting the tween.
 end
 
 -----------------------------------------------------
@@ -234,8 +234,7 @@ local function autoPassBomb()
                 if distance <= bombPassDistance then
                     local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
                     rotateCharacterTowardsTarget(targetPosition, targetVelocity)
-                    --[[task.wait(0.3)]]--
-                    -- Wait the tween duration
+                    task.wait(0.1)  -- 0.1-second delay added here
                     BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
                     print("Bomb passed to:", targetPlayer.Name)
                     removeTargetMarker()
