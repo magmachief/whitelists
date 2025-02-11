@@ -51,7 +51,7 @@ end
 -----------------------------------------------------
 -- VISUAL TARGET MARKER (PARTICLE EFFECT) FOR AUTO-PASS
 -----------------------------------------------------
--- We'll use a ParticleEmitter as our marker, which tends to be more visible.
+-- Using a ParticleEmitter as the marker with your specified asset.
 local currentTargetParticle = nil
 local currentTargetPlayer = nil
 
@@ -74,14 +74,17 @@ local function createOrUpdateTargetMarker(player)
 
     local emitter = Instance.new("ParticleEmitter")
     emitter.Name = "BombPassParticleMarker"
-    -- Set a sample texture (replace the asset id with one you prefer)
-    emitter.Texture = "rbxassetid://2486251080"
-    emitter.Rate = 50
-    emitter.Lifetime = NumberRange.new(0.5, 1)
+    emitter.Texture = "rbxassetid://135245114190277"  -- Using your specified asset id.
+    emitter.Rate = 100
+    emitter.Lifetime = NumberRange.new(1, 1.5)
     emitter.Speed = NumberRange.new(0)
-    emitter.Size = NumberSequence.new(2)  -- Adjust size as needed
+    emitter.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 3),
+        NumberSequenceKeypoint.new(1, 0)
+    })
     emitter.Color = ColorSequence.new(Color3.new(1, 0, 0))
     emitter.LightEmission = 1
+    emitter.Enabled = true
     emitter.Parent = body
 
     currentTargetParticle = emitter
@@ -148,10 +151,11 @@ end
 -- (OPTIONAL) MANUAL ANTI-SLIPPERY
 -----------------------------------------------------
 local function applyAntiSlippery(enabled)
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     if enabled then
+        -- When enabled, repeatedly apply the anti-slippery properties.
         task.spawn(function()
             while AntiSlipperyEnabled do
-                local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
                 for _, part in pairs(char:GetDescendants()) do
                     if part:IsA("BasePart") then
                         part.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5)
@@ -161,7 +165,7 @@ local function applyAntiSlippery(enabled)
             end
         end)
     else
-        local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        -- When disabled, reset the properties to default.
         for _, part in pairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.CustomPhysicalProperties = PhysicalProperties.new(0.5, 0.3, 0.5)
@@ -226,13 +230,10 @@ end
 -----------------------------------------------------
 -- APPLY FEATURES ON RESPAWN
 -----------------------------------------------------
-LocalPlayer.CharacterAdded:Connect(function()
-    if AntiSlipperyEnabled then
-        applyAntiSlippery(true)
-    end
-    if RemoveHitboxEnabled then
-        applyRemoveHitbox(true)
-    end
+LocalPlayer.CharacterAdded:Connect(function(char)
+    -- Always apply the current state of AntiSlippery and RemoveHitbox on character spawn.
+    applyAntiSlippery(AntiSlipperyEnabled)
+    applyRemoveHitbox(RemoveHitboxEnabled)
 end)
 
 -----------------------------------------------------
