@@ -262,6 +262,7 @@ end)
 -- ORIONLIB UI INTERFACE (OPTIONAL)
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
+-- Create the main window
 local Window = OrionLib:MakeWindow({
     Name = "Advanced Orion UI",
     HidePremium = false,
@@ -269,15 +270,18 @@ local Window = OrionLib:MakeWindow({
     ConfigFolder = "AdvancedOrion",
     IntroEnabled = true,
     IntroIcon = "rbxassetid://8834748103",
-    IntroText = "Advanced Orion UI"
+    IntroText = "Park Ji-woo"
 })
--- Optionally, run the advanced load sequence:
-AdvancedLoadSequence(MainWindow, {
-    IntroEnabled = true,
-    IntroIcon = "rbxassetid://8834748103",
-    IntroText = "Advanced Orion UI"
-})
--- Add the new configurable tabs:
+
+-- Optionally, run the advanced load sequence.
+-- Make sure you have a valid reference to your main window.
+-- AdvancedLoadSequence(MainWindow, {
+--     IntroEnabled = true,
+--     IntroIcon = "rbxassetid://8834748103",
+--     IntroText = "Advanced Orion UI"
+-- })
+
+-- Add the extra configurable tabs:
 local ThemeConfigTab = Window:MakeThemeConfigTab({
     Name = "Theme Config",
     Icon = "rbxassetid://8834748103",
@@ -288,6 +292,15 @@ local ConsoleTab = Window:MakeConsoleTab({
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
+
+-- Create the Automated tab (if not already created)
+local AutomatedTab = Window:MakeTab({
+    Name = "Automated",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- Add your toggles and other elements to the Automated tab:
 
 AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb",
@@ -368,4 +381,5 @@ AutomatedTab:AddDropdown({
 })
 
 OrionLib:Init()
-print("Yon Menu Script Loaded with Optimal Auto Pass Bomb, Anti Slippery, Remove Hitbox, and UI Theme Support")
+print("Yon Menu Script Loaded with Optimal Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, Theme Config, and Console")
+
