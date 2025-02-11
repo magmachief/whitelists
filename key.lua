@@ -263,15 +263,6 @@ AdvancedLoadSequence(Window, {
     IntroIcon = "rbxassetid://8834748103",
     IntroText = "Park Ji-woo"
 })
-
--- Add the extra configurable tabs.
-local ThemeConfigTab = Window:MakeThemeConfigTab({
-    Name = "Theme Config",
-    Icon = "rbxassetid://8834748103",
-    PremiumOnly = false
-})
--- [Console tab removed]
-
 -- Create the Automated tab.
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
