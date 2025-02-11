@@ -49,9 +49,10 @@ local function changeUITheme(theme)
 end
 
 -----------------------------------------------------
--- VISUAL TARGET MARKER (RED "X") FOR AUTO-PASS
+-- VISUAL TARGET MARKER (PARTICLE EFFECT) FOR AUTO-PASS
 -----------------------------------------------------
-local currentTargetMarker = nil
+-- We'll use a ParticleEmitter as our marker, which tends to be more visible.
+local currentTargetParticle = nil
 local currentTargetPlayer = nil
 
 local function createOrUpdateTargetMarker(player)
@@ -60,41 +61,37 @@ local function createOrUpdateTargetMarker(player)
     if not body then return end
 
     -- If the marker already exists on this player, do nothing.
-    if currentTargetMarker and currentTargetPlayer == player then
+    if currentTargetParticle and currentTargetPlayer == player then
         return
     end
 
     -- Remove any previous marker if the target has changed.
-    if currentTargetMarker then
-        currentTargetMarker:Destroy()
-        currentTargetMarker = nil
+    if currentTargetParticle then
+        currentTargetParticle:Destroy()
+        currentTargetParticle = nil
         currentTargetPlayer = nil
     end
 
-    local marker = Instance.new("BillboardGui")
-    marker.Name = "BombPassTargetMarker"
-    marker.Adornee = body  -- Attach to the target's body
-    marker.Size = UDim2.new(0, 50, 0, 50)
-    marker.StudsOffset = Vector3.new(0, 3, 0)
-    marker.AlwaysOnTop = true
-    marker.Parent = body
+    local emitter = Instance.new("ParticleEmitter")
+    emitter.Name = "BombPassParticleMarker"
+    -- Set a sample texture (replace the asset id with one you prefer)
+    emitter.Texture = "rbxassetid://2486251080"
+    emitter.Rate = 50
+    emitter.Lifetime = NumberRange.new(0.5, 1)
+    emitter.Speed = NumberRange.new(0)
+    emitter.Size = NumberSequence.new(2)  -- Adjust size as needed
+    emitter.Color = ColorSequence.new(Color3.new(1, 0, 0))
+    emitter.LightEmission = 1
+    emitter.Parent = body
 
-    local label = Instance.new("TextLabel", marker)
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = "X"
-    label.TextScaled = true
-    label.TextColor3 = Color3.new(1, 0, 0)
-    label.Font = Enum.Font.SourceSansBold
-
-    currentTargetMarker = marker
+    currentTargetParticle = emitter
     currentTargetPlayer = player
 end
 
 local function removeTargetMarker()
-    if currentTargetMarker then
-        currentTargetMarker:Destroy()
-        currentTargetMarker = nil
+    if currentTargetParticle then
+        currentTargetParticle:Destroy()
+        currentTargetParticle = nil
         currentTargetPlayer = nil
     end
 end
