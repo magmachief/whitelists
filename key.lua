@@ -5,7 +5,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
-local LocalPlayer = Players.LocalPlayer
+local LocalPlayer = game:GetService("Players").LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
 -----------------------------------------------------
@@ -18,7 +18,7 @@ local RemoveHitboxEnabled = false   -- Toggle hitbox removal
 local pathfindingSpeed = 16         -- Used to calculate travel time
 
 -----------------------------------------------------
--- UI THEMES (for auto–pass UI toggles)
+-- UI THEMES (for the auto–pass toggles)
 -----------------------------------------------------
 local uiThemes = {
     Dark = {
@@ -37,19 +37,6 @@ local uiThemes = {
         TextColor = Color3.fromRGB(255, 255, 255)
     }
 }
-
-local function changeUITheme(theme)
-    if OrionLib.ChangeTheme then
-        OrionLib:ChangeTheme(theme)
-    else
-        OrionLib.Config = OrionLib.Config or {}
-        OrionLib.Config.MainColor = theme.MainColor
-        OrionLib.Config.AccentColor = theme.AccentColor
-        OrionLib.Config.TextColor = theme.TextColor
-        print("Theme changed to:", theme)
-    end
-end
-
 -----------------------------------------------------
 -- VISUAL TARGET MARKER (RED "X") FOR AUTO-PASS
 -----------------------------------------------------
@@ -73,9 +60,9 @@ local function createOrUpdateTargetMarker(player)
 
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
-    marker.Adornee = body
+    marker.Adornee = body  -- Attach to the target's body
     marker.Size = UDim2.new(0, 50, 0, 50)
-    marker.StudsOffset = Vector3.new(0, 0, 0)
+    marker.StudsOffset = Vector3.new(0, 0, 0)  -- Centered on the part
     marker.AlwaysOnTop = true
     marker.Parent = body
 
@@ -100,7 +87,7 @@ local function removeTargetMarker()
 end
 
 -----------------------------------------------------
--- UTILITY FUNCTIONS (Auto-pass related)
+-- UTILITY FUNCTIONS (Auto–pass related)
 -----------------------------------------------------
 local function getOptimalPlayer()
     local bestPlayer = nil
@@ -257,6 +244,17 @@ end)
 -- LOAD ORION LIBRARY
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
+local function changeUITheme(theme)
+    if OrionLib.ChangeTheme then
+        OrionLib:ChangeTheme(theme)
+    else
+        OrionLib.Config = OrionLib.Config or {}
+        OrionLib.Config.MainColor = theme.MainColor
+        OrionLib.Config.AccentColor = theme.AccentColor
+        OrionLib.Config.TextColor = theme.TextColor
+        print("Theme changed to:", theme)
+    end
+end
 
 -----------------------------------------------------
 -- ADD WINDOW & EXTENDED TABS TO YOUR LOCAL SCRIPT
@@ -284,14 +282,14 @@ local ThemeConfigTab = Window:MakeThemeConfigTab({
     Icon = "rbxassetid://8834748103",
     PremiumOnly = false
 })
+-- [Console tab removed]
+
 -- Create the Automated tab.
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
-
--- (Ensure the tab’s container is used as the parent for added elements.)
 if AutomatedTab.Container then
     AutomatedTab.ItemParent = AutomatedTab.Container
 end
@@ -391,4 +389,4 @@ AutomatedTab:AddDropdown({
 })
 
 OrionLib:Init()
-print("Yon Menu Script Loaded with Optimal Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, Theme Config, and Console")
+print("Yon Menu Script Loaded with Optimal Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and Theme Config")
