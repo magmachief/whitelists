@@ -244,18 +244,6 @@ end)
 -- LOAD ORION LIBRARY
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
-local function changeUITheme(theme)
-    if OrionLib.ChangeTheme then
-        OrionLib:ChangeTheme(theme)
-    else
-        OrionLib.Config = OrionLib.Config or {}
-        OrionLib.Config.MainColor = theme.MainColor
-        OrionLib.Config.AccentColor = theme.AccentColor
-        OrionLib.Config.TextColor = theme.TextColor
-        print("Theme changed to:", theme)
-    end
-end
-
 -----------------------------------------------------
 -- ADD WINDOW & EXTENDED TABS TO YOUR LOCAL SCRIPT
 -----------------------------------------------------
@@ -290,9 +278,6 @@ local AutomatedTab = Window:MakeTab({
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
-if AutomatedTab.Container then
-    AutomatedTab.ItemParent = AutomatedTab.Container
-end
 
 -----------------------------------------------------
 -- DECLARE MISSING GLOBALS
