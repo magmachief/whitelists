@@ -234,7 +234,8 @@ local function autoPassBomb()
                 if distance <= bombPassDistance then
                     local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
                     rotateCharacterTowardsTarget(targetPosition, targetVelocity)
-                    task.wait(0.3)  -- Wait the tween duration
+                    --[[task.wait(0.3)]]--
+                    -- Wait the tween duration
                     BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
                     print("Bomb passed to:", targetPlayer.Name)
                     removeTargetMarker()
