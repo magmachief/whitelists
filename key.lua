@@ -11,6 +11,8 @@ local AntiSlipperyEnabled = false   -- Toggle anti-slippery feature
 local RemoveHitboxEnabled = false   -- Toggle hitbox removal
 local AI_AssistanceEnabled = false  -- AI Assistance toggle variable
 local pathfindingSpeed = 16         -- Used to calculate travel time
+local lastAIMessageTime = 0
+local aiMessageCooldown = 5 -- seconds between AI messages
 
 -- UI THEMES
 local uiThemes = {
@@ -222,30 +224,33 @@ local function autoPassBomb()
 
     pcall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
-        if bomb then
-            local BombEvent = bomb:FindFirstChild("RemoteEvent")
-            local targetPlayer = getOptimalPlayer() or getClosestPlayer()
-            if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                createOrUpdateTargetMarker(targetPlayer)
-                local targetPosition = targetPlayer.Character.HumanoidRootPart.Position
-                local myPos = LocalPlayer.Character.HumanoidRootPart.Position
-                local distance = (targetPosition - myPos).magnitude
-                if distance <= bombPassDistance then
-                    local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
-                    rotateCharacterTowardsTarget(targetPosition, targetVelocity)
-                    task.wait(0.1)
+        if not bomb then
+            -- Stop analyzing if the player doesn't have the bomb
+            removeTargetMarker()
+            return
+        end
 
-                    if AI_AssistanceEnabled then
-                        local advice = getAIAdviceForBombPass()
-                        showAINotification(advice)
-                    end
+        local BombEvent = bomb:FindFirstChild("RemoteEvent")
+        local targetPlayer = getOptimalPlayer() or getClosestPlayer()
+        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            createOrUpdateTargetMarker(targetPlayer)
+            local targetPosition = targetPlayer.Character.HumanoidRootPart.Position
+            local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+            local distance = (targetPosition - myPos).magnitude
+            if distance <= bombPassDistance then
+                local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
+                rotateCharacterTowardsTarget(targetPosition, targetVelocity)
+                task.wait(0.1)
 
-                    BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
-                    print("Bomb passed to:", targetPlayer.Name)
-                    removeTargetMarker()
-                else
-                    removeTargetMarker()
+                if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
+                    local advice = getAIAdviceForBombPass()
+                    showAINotification(advice)
+                    lastAIMessageTime = tick()
                 end
+
+                BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+                print("Bomb passed to:", targetPlayer.Name)
+                removeTargetMarker()
             else
                 removeTargetMarker()
             end
