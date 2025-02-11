@@ -243,7 +243,8 @@ end)
 -----------------------------------------------------
 -- LOAD ORION LIBRARY
 -----------------------------------------------------
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/refs/heads/main/Orion%20Lib%20Transparent%20%20.lua"))()
+
 -----------------------------------------------------
 -- ADD WINDOW & EXTENDED TABS TO YOUR LOCAL SCRIPT
 -----------------------------------------------------
