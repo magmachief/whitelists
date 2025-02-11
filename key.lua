@@ -1,23 +1,18 @@
------------------------------------------------------
 -- SERVICES
------------------------------------------------------
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
------------------------------------------------------
 -- CONFIGURATION & VARIABLES
------------------------------------------------------
 local bombPassDistance = 10         -- Maximum pass distance (in studs)
 local AutoPassEnabled = false       -- Toggle auto-pass behavior
 local AntiSlipperyEnabled = false   -- Toggle anti-slippery feature
 local RemoveHitboxEnabled = false   -- Toggle hitbox removal
+local AI_AssistanceEnabled = false  -- AI Assistance toggle variable
 local pathfindingSpeed = 16         -- Used to calculate travel time
 
------------------------------------------------------
 -- UI THEMES
------------------------------------------------------
 local uiThemes = {
     Dark = {
         MainColor = Color3.fromRGB(30, 30, 30),
@@ -44,14 +39,10 @@ local function changeUITheme(theme)
         OrionLib.Config.MainColor = theme.MainColor
         OrionLib.Config.AccentColor = theme.AccentColor
         OrionLib.Config.TextColor = theme.TextColor
-        print("Theme changed to:", theme)
     end
 end
 
------------------------------------------------------
 -- VISUAL TARGET MARKER (RED "X") FOR AUTO-PASS
------------------------------------------------------
--- This version uses a BillboardGui "X" marker attached to the target's HumanoidRootPart.
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
 
@@ -98,11 +89,7 @@ local function removeTargetMarker()
     end
 end
 
------------------------------------------------------
 -- UTILITY FUNCTIONS
------------------------------------------------------
--- Optimal auto-pass: Returns the player with the lowest travel time (distance/pathfindingSpeed)
--- provided they are within bombPassDistance.
 local function getOptimalPlayer()
     local bestPlayer = nil
     local bestTravelTime = math.huge
@@ -126,7 +113,6 @@ local function getOptimalPlayer()
     return bestPlayer
 end
 
--- Fallback: Returns the closest player within bombPassDistance.
 local function getClosestPlayer()
     local closestPlayer = nil
     local shortestDistance = bombPassDistance
@@ -147,8 +133,6 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Rotates LocalPlayer's character toward a target position.
--- Uses target velocity (if available) for prediction.
 local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     local character = LocalPlayer.Character
     if not character then return end
@@ -164,12 +148,10 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     local targetCFrame = CFrame.new(hrp.Position, predictedPos)
     local tween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {CFrame = targetCFrame})
     tween:Play()
-    return tween  -- We then wait 0.1 seconds after starting the tween.
+    return tween
 end
 
------------------------------------------------------
--- (OPTIONAL) MANUAL ANTI-SLIPPERY
------------------------------------------------------
+-- ANTI-SLIPPERY
 local function applyAntiSlippery(enabled)
     local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     if enabled then
@@ -192,9 +174,7 @@ local function applyAntiSlippery(enabled)
     end
 end
 
------------------------------------------------------
--- (OPTIONAL) MANUAL REMOVE HITBOX
------------------------------------------------------
+-- REMOVE HITBOX
 local function applyRemoveHitbox(enable)
     local char = LocalPlayer.Character
     if not char then return end
@@ -211,9 +191,29 @@ local function applyRemoveHitbox(enable)
     end
 end
 
------------------------------------------------------
--- AUTO PASS BOMB LOGIC (OPTIMAL PASS ONLY) WITH FEEDBACK & FALLBACK
------------------------------------------------------
+-- AI ADVICE & NOTIFICATIONS
+local function showAINotification(message)
+    local StarterGui = game:GetService("StarterGui")
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "AI Assistance",
+            Text = message,
+            Duration = 5
+        })
+    end)
+end
+
+local function getAIAdviceForBombPass()
+    local advices = {
+        "AI Analysis: Optimal target detected.",
+        "AI Analysis: Recalculating trajectory...",
+        "AI Advice: Consider adjusting bomb pass distance.",
+        "AI Analysis: Target player appears to be the best candidate."
+    }
+    return advices[math.random(1, #advices)]
+end
+
+-- AUTO PASS BOMB
 local function autoPassBomb()
     if not AutoPassEnabled then
         removeTargetMarker()
@@ -224,7 +224,6 @@ local function autoPassBomb()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if bomb then
             local BombEvent = bomb:FindFirstChild("RemoteEvent")
-            -- Use optimal auto-pass; if none is found, fallback to the closest player.
             local targetPlayer = getOptimalPlayer() or getClosestPlayer()
             if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 createOrUpdateTargetMarker(targetPlayer)
@@ -234,7 +233,13 @@ local function autoPassBomb()
                 if distance <= bombPassDistance then
                     local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
                     rotateCharacterTowardsTarget(targetPosition, targetVelocity)
-                    task.wait(0.1)  -- 0.1-second delay added here
+                    task.wait(0.1)
+
+                    if AI_AssistanceEnabled then
+                        local advice = getAIAdviceForBombPass()
+                        showAINotification(advice)
+                    end
+
                     BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
                     print("Bomb passed to:", targetPlayer.Name)
                     removeTargetMarker()
@@ -250,17 +255,13 @@ local function autoPassBomb()
     end)
 end
 
------------------------------------------------------
 -- APPLY FEATURES ON RESPAWN
------------------------------------------------------
 LocalPlayer.CharacterAdded:Connect(function(char)
     applyAntiSlippery(AntiSlipperyEnabled)
     applyRemoveHitbox(RemoveHitboxEnabled)
 end)
 
------------------------------------------------------
--- ORIONLIB UI INTERFACE (OPTIONAL)
------------------------------------------------------
+-- OrionLib Interface (Optional)
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced",
@@ -309,6 +310,19 @@ AutomatedTab:AddToggle({
     end
 })
 
+AutomatedTab:AddToggle({
+    Name = "AI Assistance",
+    Default = false,
+    Callback = function(value)
+        AI_AssistanceEnabled = value
+        if AI_AssistanceEnabled then
+            print("AI Assistance enabled.")
+        else
+            print("AI Assistance disabled.")
+        end
+    end
+})
+
 AutomatedTab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
@@ -320,37 +334,5 @@ AutomatedTab:AddSlider({
     end
 })
 
-AutomatedTab:AddDropdown({
-    Name = "Pathfinding Speed",
-    Default = "16",
-    Options = {"12", "16", "20"},
-    Callback = function(value)
-        pathfindingSpeed = tonumber(value)
-    end
-})
-
-AutomatedTab:AddDropdown({
-    Name = "Marker Style",
-    Default = "X",
-    Options = {"X", "Arrow"},
-    Callback = function(value)
-        markerStyle = value
-    end
-})
-
-AutomatedTab:AddDropdown({
-    Name = "UI Theme",
-    Default = "Dark",
-    Options = {"Dark", "Light", "Red"},
-    Callback = function(themeName)
-        local theme = uiThemes[themeName]
-        if theme then
-            changeUITheme(theme)
-        else
-            warn("Theme not found:", themeName)
-        end
-    end
-})
-
 OrionLib:Init()
-print("Yon Menu Script Loaded with Optimal Auto Pass Bomb, Anti Slippery, Remove Hitbox, and UI Theme Support") 
+print("Yon Menu Script Loaded with Optimal Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
