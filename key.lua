@@ -284,12 +284,6 @@ local ThemeConfigTab = Window:MakeThemeConfigTab({
     Icon = "rbxassetid://8834748103",
     PremiumOnly = false
 })
-local ConsoleTab = Window:MakeConsoleTab({
-    Name = "Console",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
 -- Create the Automated tab.
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
