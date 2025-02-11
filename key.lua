@@ -49,10 +49,10 @@ local function changeUITheme(theme)
 end
 
 -----------------------------------------------------
--- VISUAL TARGET MARKER (PARTICLE EFFECT) FOR AUTO-PASS
+-- VISUAL TARGET MARKER (RED "X") FOR AUTO-PASS
 -----------------------------------------------------
--- Using a ParticleEmitter as the marker with your specified asset.
-local currentTargetParticle = nil
+-- We now use a BillboardGui “X” that attaches to the target’s body.
+local currentTargetMarker = nil
 local currentTargetPlayer = nil
 
 local function createOrUpdateTargetMarker(player)
@@ -61,40 +61,41 @@ local function createOrUpdateTargetMarker(player)
     if not body then return end
 
     -- If the marker already exists on this player, do nothing.
-    if currentTargetParticle and currentTargetPlayer == player then
+    if currentTargetMarker and currentTargetPlayer == player then
         return
     end
 
     -- Remove any previous marker if the target has changed.
-    if currentTargetParticle then
-        currentTargetParticle:Destroy()
-        currentTargetParticle = nil
+    if currentTargetMarker then
+        currentTargetMarker:Destroy()
+        currentTargetMarker = nil
         currentTargetPlayer = nil
     end
 
-    local emitter = Instance.new("ParticleEmitter")
-    emitter.Name = "BombPassParticleMarker"
-    emitter.Texture = "rbxassetid://135245114190277"  -- Using your specified asset id.
-    emitter.Rate = 100
-    emitter.Lifetime = NumberRange.new(1, 1.5)
-    emitter.Speed = NumberRange.new(0)
-    emitter.Size = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 3),
-        NumberSequenceKeypoint.new(1, 0)
-    })
-    emitter.Color = ColorSequence.new(Color3.new(1, 0, 0))
-    emitter.LightEmission = 1
-    emitter.Enabled = true
-    emitter.Parent = body
+    local marker = Instance.new("BillboardGui")
+    marker.Name = "BombPassTargetMarker"
+    marker.Adornee = body  -- Attach to the target's body
+    marker.Size = UDim2.new(0, 50, 0, 50)
+    marker.StudsOffset = Vector3.new(0, 3, 0)
+    marker.AlwaysOnTop = true
+    marker.Parent = body
 
-    currentTargetParticle = emitter
+    local label = Instance.new("TextLabel", marker)
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = "X"
+    label.TextScaled = true
+    label.TextColor3 = Color3.new(1, 0, 0)
+    label.Font = Enum.Font.SourceSansBold
+
+    currentTargetMarker = marker
     currentTargetPlayer = player
 end
 
 local function removeTargetMarker()
-    if currentTargetParticle then
-        currentTargetParticle:Destroy()
-        currentTargetParticle = nil
+    if currentTargetMarker then
+        currentTargetMarker:Destroy()
+        currentTargetMarker = nil
         currentTargetPlayer = nil
     end
 end
@@ -103,7 +104,7 @@ end
 -- UTILITY FUNCTIONS
 -----------------------------------------------------
 -- Optimal auto-pass: Returns the player with the lowest travel time (distance/pathfindingSpeed)
--- provided they are within the bombPassDistance.
+-- provided they are within bombPassDistance.
 local function getOptimalPlayer()
     local bestPlayer = nil
     local bestTravelTime = math.huge
@@ -142,9 +143,9 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     end
 
     local targetCFrame = CFrame.new(hrp.Position, predictedPos)
-    local tween = TweenService:Create(hrp, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {CFrame = targetCFrame})
+    local tween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {CFrame = targetCFrame})
     tween:Play()
-    return tween
+    return tween, tween.Completed
 end
 
 -----------------------------------------------------
@@ -213,9 +214,12 @@ local function autoPassBomb()
                 local distance = (targetPosition - myPos).magnitude
                 if distance <= bombPassDistance then
                     local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
-                    rotateCharacterTowardsTarget(targetPosition, targetVelocity)
-                    task.wait(0.6)
-                    BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+                    local tween, onComplete = rotateCharacterTowardsTarget(targetPosition, targetVelocity)
+                    onComplete:Connect(function()
+                        BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+                        removeTargetMarker()
+                    end)
+                else
                     removeTargetMarker()
                 end
             else
