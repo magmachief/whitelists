@@ -163,8 +163,8 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Enhanced rotation: rotate directly toward the target’s current position,
--- preserving the Y coordinate so your character remains level.
+-- Old behavior: rotate directly toward the target’s current position,
+-- but adjusted so that the character's Y remains the same (avoiding looking down).
 local function rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
@@ -251,15 +251,14 @@ local function autoPassBombEnhanced()
             end
 
             createOrUpdateTargetMarker(targetPlayer, distance)
-            -- Use a VFX effect that only surrounds the target
+            -- VFX effect: confined around the target.
             local function playPassVFX(target)
                 if not target or not target.Character then return end
                 local hrp = target.Character:FindFirstChild("HumanoidRootPart")
                 if not hrp then return end
                 local emitter = Instance.new("ParticleEmitter")
-                -- Use a Roblox VFX texture (replace this with one you prefer)
-                emitter.Texture = "rbxassetid://258128463"
-                emitter.Rate = 50                -- Lower rate
+                emitter.Texture = "rbxassetid://258128463"  -- Replace with your preferred VFX texture
+                emitter.Rate = 50                -- Lower rate for confined effect
                 emitter.Lifetime = NumberRange.new(0.3, 0.5)  -- Shorter lifetime
                 emitter.Speed = NumberRange.new(2, 5)         -- Lower speed
                 emitter.VelocitySpread = 30      -- Narrow spread
@@ -453,3 +452,39 @@ AITab:AddSlider({
 
 OrionLib:Init()
 print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
+
+-----------------------------------------------------
+-- MOBILE TOGGLE BUTTON FOR AUTO PASS BOMB
+-----------------------------------------------------
+-- Create a mobile-friendly toggle button near the jump button area.
+local mobileGui = Instance.new("ScreenGui")
+mobileGui.Name = "MobileToggleGui"
+if gethui then
+    mobileGui.Parent = gethui()
+else
+    mobileGui.Parent = game:GetService("CoreGui")
+end
+
+local autoPassToggle = Instance.new("TextButton")
+autoPassToggle.Name = "AutoPassToggle"
+autoPassToggle.Size = UDim2.new(0, 100, 0, 50)
+-- Position near the bottom-right (adjust as needed)
+autoPassToggle.Position = UDim2.new(1, -120, 1, -150)
+autoPassToggle.BackgroundColor3 = Color3.new(1, 0, 0)  -- Red means off
+autoPassToggle.Text = "Auto Pass: OFF"
+autoPassToggle.TextScaled = true
+autoPassToggle.Font = Enum.Font.SourceSansBold
+autoPassToggle.Parent = mobileGui
+
+autoPassToggle.MouseButton1Click:Connect(function()
+    AutoPassEnabled = not AutoPassEnabled
+    if AutoPassEnabled then
+        autoPassToggle.BackgroundColor3 = Color3.new(0, 1, 0)  -- Green for ON
+        autoPassToggle.Text = "Auto Pass: ON"
+    else
+        autoPassToggle.BackgroundColor3 = Color3.new(1, 0, 0)  -- Red for OFF
+        autoPassToggle.Text = "Auto Pass: OFF"
+    end
+    -- Also update the OrionLib toggle if needed:
+    -- (This could be done by setting a flag that the Orion toggle listens for.)
+end)
