@@ -221,7 +221,6 @@ local function autoPassBomb()
                     lastAIMessageTime = tick()
                 end
                 BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
-                print("Bomb passed to:", targetPlayer.Name)
                 removeTargetMarker()
             else
                 removeTargetMarker()
@@ -273,6 +272,11 @@ local function autoDodgeBombsEnhanced()
                 closestBomb = obj
             end
         end
+    end
+
+    -- Debug print to verify bomb detection (remove once testing is complete)
+    if closestBomb then
+        print("Detected bomb at distance:", closestDistance)
     end
 
     if closestBomb and closestDistance < bombDodgeThreshold then
@@ -401,7 +405,7 @@ local AutomatedTab = Window:MakeTab({
 })
 local AITab = Window:MakeTab({
     Name = "AI Based",
-    Icon = "rbxassetid://7072720870",  -- Change to your preferred asset id
+    Icon = "rbxassetid://7072720870",
     PremiumOnly = false
 })
 
