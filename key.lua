@@ -25,7 +25,7 @@ local AutoPassEnabled = false           -- Toggle auto-pass bomb behavior
 local AntiSlipperyEnabled = false       -- Toggle anti-slippery feature
 local RemoveHitboxEnabled = false       -- Toggle hitbox removal
 local AI_AssistanceEnabled = false      -- Toggle AI Assistance notifications
-local pathfindingSpeed = 16             -- Used for autopass bomb target selection calculations
+local pathfindingSpeed = 16             -- Used for auto-pass bomb target selection calculations
 local lastAIMessageTime = 0
 local aiMessageCooldown = 5             -- Seconds between AI notifications
 
@@ -122,7 +122,6 @@ local function getOptimalPlayer()
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- Skip players that already hold a bomb.
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
@@ -384,7 +383,7 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 -----------------------------------------------------
--- ORIONLIB INTERFACE (OPTIONAL)
+-- ORIONLIB INTERFACE
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
@@ -393,15 +392,23 @@ local Window = OrionLib:MakeWindow({
     SaveConfig = true,
     ConfigFolder = "YonMenu_Advanced"
 })
+
+-- Create two tabs: one for automated features and one for AI-based settings.
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
     Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+local AITab = Window:MakeTab({
+    Name = "AI Based",
+    Icon = "rbxassetid://7072720870",  -- Change to your preferred asset id
     PremiumOnly = false
 })
 
 local autoDodgeConnection
 local autoPassConnection
 
+-- Automated features go in the Automated tab.
 AutomatedTab:AddToggle({
     Name = "Auto Dodge Bombs (Enhanced)",
     Default = AutoDodgeEnabled,
@@ -453,7 +460,8 @@ AutomatedTab:AddToggle({
     end
 })
 
-AutomatedTab:AddToggle({
+-- AI-based settings go in the AI Based tab.
+AITab:AddToggle({
     Name = "AI Assistance",
     Default = false,
     Callback = function(value)
@@ -466,7 +474,7 @@ AutomatedTab:AddToggle({
     end
 })
 
-AutomatedTab:AddSlider({
+AITab:AddSlider({
     Name = "Bomb Dodge Threshold",
     Min = 5,
     Max = 30,
@@ -477,7 +485,7 @@ AutomatedTab:AddSlider({
     end
 })
 
-AutomatedTab:AddSlider({
+AITab:AddSlider({
     Name = "Bomb Dodge Distance",
     Min = 10,
     Max = 50,
@@ -488,7 +496,7 @@ AutomatedTab:AddSlider({
     end
 })
 
-AutomatedTab:AddSlider({
+AITab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
     Max = 30,
