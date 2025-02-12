@@ -29,6 +29,10 @@ local pathfindingSpeed = 16             -- Used for auto-pass bomb target select
 local lastAIMessageTime = 0
 local aiMessageCooldown = 5             -- Seconds between AI notifications
 
+-- NEW: Cooldown variables to avoid repeated pass attempts (which can freeze movement)
+local lastPassAttemptTime = 0
+local passAttemptCooldown = 0.5         -- In seconds; adjust as needed
+
 -----------------------------------------------------
 -- UI THEMES (for OrionLib)
 -----------------------------------------------------
@@ -185,28 +189,26 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local direction = (endPos - startPos).Unit
     local distance = (endPos - startPos).Magnitude
     
-    -- Raycast central ray
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
     if LocalPlayer.Character then
         rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
     end
+
+    -- Central ray
     local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
     if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
         return false
     end
 
-    -- Cast additional rays (spread left and right)
     local raysEachSide = math.floor((numRaycasts - 1) / 2)
     for i = 1, raysEachSide do
         local angleOffset = spreadRad * i / raysEachSide
-        -- Left ray
         local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), angleOffset) * CFrame.new(direction)).p
         local leftResult = Workspace:Raycast(startPos, leftDirection * distance, rayParams)
         if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
             return false
         end
-        -- Right ray
         local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
         local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
         if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
@@ -217,11 +219,11 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
 end
 
 -----------------------------------------------------
--- ENHANCED AUTO PASS BOMB FUNCTION (WITH ALL ENHANCEMENTS)
+-- ENHANCED AUTO PASS BOMB FUNCTION (WITH ENHANCEMENTS)
 -----------------------------------------------------
 local function autoPassBombEnhanced()
-    if not AutoPassEnabled then
-        removeTargetMarker()
+    -- Prevent repeated pass attempts that may freeze movement.
+    if tick() - lastPassAttemptTime < passAttemptCooldown then
         return
     end
 
@@ -229,6 +231,7 @@ local function autoPassBombEnhanced()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if not bomb then
             removeTargetMarker()
+            lastPassAttemptTime = tick()
             return
         end
 
@@ -237,6 +240,7 @@ local function autoPassBombEnhanced()
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if targetPlayer.Character:FindFirstChild("Bomb") then
                 removeTargetMarker()
+                lastPassAttemptTime = tick()
                 return
             end
 
@@ -245,37 +249,41 @@ local function autoPassBombEnhanced()
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).magnitude
 
-            if distance <= bombPassDistance then
-                -- Perform line-of-sight check using multiple raycasts
-                local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart") or targetPlayer.Character.HumanoidRootPart
-                if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
-                    print("Line of sight blocked. Bomb pass aborted.")
-                    removeTargetMarker()
-                    return
-                end
-
-                local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
-                rotateCharacterTowardsTarget(targetPos, targetVelocity)
-                -- Optional anticipation delay for smoother movement
-                task.wait(0.1)
-                if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
-                    pcall(function()
-                        StarterGui:SetCore("SendNotification", {
-                            Title = "AI Assistance",
-                            Text = "Passing bomb to " .. targetPlayer.Name .. " (Distance: " .. math.floor(distance) .. " studs).",
-                            Duration = 5
-                        })
-                    end)
-                    lastAIMessageTime = tick()
-                end
-                BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
-                print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
+            if distance > bombPassDistance then
+                print("Target out of range. Pass aborted.")
                 removeTargetMarker()
-            else
-                removeTargetMarker()
+                lastPassAttemptTime = tick()
+                return
             end
+
+            local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart") or targetPlayer.Character.HumanoidRootPart
+            if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
+                print("Line of sight blocked. Bomb pass aborted.")
+                removeTargetMarker()
+                lastPassAttemptTime = tick()
+                return
+            end
+
+            local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
+            rotateCharacterTowardsTarget(targetPos, targetVelocity)
+            task.wait(0.05)  -- Short wait for smoother rotation without blocking movement
+            if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
+                pcall(function()
+                    StarterGui:SetCore("SendNotification", {
+                        Title = "AI Assistance",
+                        Text = "Passing bomb to " .. targetPlayer.Name .. " (Distance: " .. math.floor(distance) .. " studs).",
+                        Duration = 5
+                    })
+                end)
+                lastAIMessageTime = tick()
+            end
+            BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+            print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
+            removeTargetMarker()
+            lastPassAttemptTime = tick()
         else
             removeTargetMarker()
+            lastPassAttemptTime = tick()
         end
     end)
 end
@@ -351,7 +359,7 @@ local AutomatedTab = Window:MakeTab({
 })
 local AITab = Window:MakeTab({
     Name = "AI Based",
-    Icon = "rbxassetid://7072720870",
+    Icon = "rbxassetid://7072720870",  -- Change to your preferred asset id
     PremiumOnly = false
 })
 
