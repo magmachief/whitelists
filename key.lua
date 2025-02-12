@@ -102,6 +102,7 @@ end
 -----------------------------------------------------
 -- UTILITY FUNCTIONS
 -----------------------------------------------------
+-- This function chooses the optimal (fastest travel time) player without a bomb.
 local function getOptimalPlayer()
     local bestPlayer = nil
     local bestTravelTime = math.huge
@@ -111,7 +112,7 @@ local function getOptimalPlayer()
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- Skip players who are holding a bomb
+            -- Skip players who already hold a bomb.
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
@@ -130,6 +131,7 @@ local function getOptimalPlayer()
     return bestPlayer
 end
 
+-- This function chooses the closest player without a bomb.
 local function getClosestPlayer()
     local closestPlayer = nil
     local shortestDistance = bombPassDistance
@@ -139,7 +141,7 @@ local function getClosestPlayer()
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- Skip players who are holding a bomb
+            -- Skip players who already hold a bomb.
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
@@ -261,7 +263,7 @@ local function autoPassBomb()
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
         local targetPlayer = getOptimalPlayer() or getClosestPlayer()
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            -- Extra safety: if the target player already has a bomb, abort.
+            -- Extra safety: if the target already has a bomb, do not pass to them.
             if targetPlayer.Character:FindFirstChild("Bomb") then
                 removeTargetMarker()
                 return
