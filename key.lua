@@ -13,7 +13,11 @@ local AI_AssistanceEnabled = false  -- AI Assistance toggle variable
 local pathfindingSpeed = 16         -- Used to calculate travel time
 local lastAIMessageTime = 0
 local aiMessageCooldown = 5 -- seconds between AI messages
-
+local detectmeteor(){
+     if (meteor.studs < humanoid.bodypart("head"){
+       humanoid.runto(stud.player-5)
+} 
+}
 -- UI THEMES
 local uiThemes = {
     Dark = {
