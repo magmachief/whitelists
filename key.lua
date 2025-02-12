@@ -365,10 +365,8 @@ local AITab = Window:MakeTab({
     PremiumOnly = false
 })
 
-local autoPassConnection
-
--- Automated features go in the Automated tab.
-AutomatedTab:AddToggle({
+-- Store the OrionLib toggle reference for Auto Pass Bomb.
+local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
     Callback = function(value)
@@ -385,6 +383,9 @@ AutomatedTab:AddToggle({
     end
 })
 
+local autoPassConnection
+
+-- (Other toggles)
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
@@ -403,7 +404,6 @@ AutomatedTab:AddToggle({
     end
 })
 
--- AI-based settings go in the AI Based tab.
 AITab:AddToggle({
     Name = "AI Assistance",
     Default = false,
@@ -456,7 +456,6 @@ print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Anti Slippe
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS BOMB
 -----------------------------------------------------
--- Create a mobile-friendly toggle button near the jump button area.
 local mobileGui = Instance.new("ScreenGui")
 mobileGui.Name = "MobileToggleGui"
 if gethui then
@@ -465,26 +464,34 @@ else
     mobileGui.Parent = game:GetService("CoreGui")
 end
 
-local autoPassToggle = Instance.new("TextButton")
-autoPassToggle.Name = "AutoPassToggle"
-autoPassToggle.Size = UDim2.new(0, 100, 0, 50)
--- Position near the bottom-right (adjust as needed)
-autoPassToggle.Position = UDim2.new(1, -120, 1, -150)
-autoPassToggle.BackgroundColor3 = Color3.new(1, 0, 0)  -- Red means off
-autoPassToggle.Text = "Auto Pass: OFF"
-autoPassToggle.TextScaled = true
-autoPassToggle.Font = Enum.Font.SourceSansBold
-autoPassToggle.Parent = mobileGui
+local autoPassMobileToggle = Instance.new("TextButton")
+autoPassMobileToggle.Name = "AutoPassMobileToggle"
+autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
+-- Position near the bottom-right; adjust as needed
+autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
+autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
+autoPassMobileToggle.Text = "OFF"
+autoPassMobileToggle.TextScaled = true
+autoPassMobileToggle.Font = Enum.Font.SourceSansBold
+autoPassMobileToggle.Parent = mobileGui
 
-autoPassToggle.MouseButton1Click:Connect(function()
+local uicorner = Instance.new("UICorner")
+uicorner.CornerRadius = UDim.new(1, 0)
+uicorner.Parent = autoPassMobileToggle
+
+autoPassMobileToggle.MouseButton1Click:Connect(function()
     AutoPassEnabled = not AutoPassEnabled
     if AutoPassEnabled then
-        autoPassToggle.BackgroundColor3 = Color3.new(0, 1, 0)  -- Green for ON
-        autoPassToggle.Text = "Auto Pass: ON"
+        autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)  -- Green for ON
+        autoPassMobileToggle.Text = "ON"
     else
-        autoPassToggle.BackgroundColor3 = Color3.new(1, 0, 0)  -- Red for OFF
-        autoPassToggle.Text = "Auto Pass: OFF"
+        autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
+        autoPassMobileToggle.Text = "OFF"
     end
-    -- Also update the OrionLib toggle if needed:
-    -- (This could be done by setting a flag that the Orion toggle listens for.)
+    -- Update the OrionLib toggle to match.
+    if orionAutoPassToggle and orionAutoPassToggle.Set then
+        orionAutoPassToggle:Set(AutoPassEnabled)
+    elseif orionAutoPassToggle then
+        orionAutoPassToggle.Value = AutoPassEnabled
+    end
 end)
