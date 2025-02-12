@@ -221,6 +221,7 @@ local function autoPassBomb()
                     lastAIMessageTime = tick()
                 end
                 BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+                print("Bomb passed to:", targetPlayer.Name)
                 removeTargetMarker()
             else
                 removeTargetMarker()
@@ -253,6 +254,7 @@ end
 -- ENHANCED AUTO DODGE BOMBS (SMART AI)
 -----------------------------------------------------
 local function autoDodgeBombsEnhanced()
+    print("autoDodgeBombsEnhanced() called")
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then
         return
@@ -274,7 +276,6 @@ local function autoDodgeBombsEnhanced()
         end
     end
 
-    -- Debug print to verify bomb detection (remove once testing is complete)
     if closestBomb then
         print("Detected bomb at distance:", closestDistance)
     end
@@ -294,6 +295,7 @@ local function autoDodgeBombsEnhanced()
                 attempt = attempt + 1
             end
             if not grounded then
+                print("No valid ground found for dodge destination.")
                 return
             end
         end
