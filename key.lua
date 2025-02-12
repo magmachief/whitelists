@@ -16,8 +16,7 @@ local LocalPlayer = Players.LocalPlayer
 local bombPassDistance = 10             -- Maximum pass distance for bomb passing
 local AutoPassEnabled = false           -- Toggle auto-pass bomb behavior
 
--- (Prediction time removed; we now use the target’s current position.)
--- Advanced line-of-sight settings remain:
+-- Advanced line-of-sight settings
 local raySpreadAngle = 10               -- Spread angle (in degrees) for multiple raycasts
 local numRaycasts = 3                   -- Number of rays to cast for line-of-sight (odd number recommended)
 
@@ -28,10 +27,6 @@ local AI_AssistanceEnabled = false      -- Toggle AI Assistance notifications
 local pathfindingSpeed = 16             -- Used for auto-pass bomb target selection calculations
 local lastAIMessageTime = 0
 local aiMessageCooldown = 5             -- Seconds between AI notifications
-
--- New cooldown to prevent rapid pass attempts
-local lastPassAttemptTime = 0
-local passAttemptCooldown = 0.5         -- Seconds to wait between pass attempts
 
 -----------------------------------------------------
 -- UI THEMES (for OrionLib)
@@ -166,7 +161,7 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- The old behavior: rotate directly toward the target’s current position.
+-- Old behavior: rotate directly toward the target’s current position.
 local function rotateCharacterTowardsTarget(targetPosition, _targetVelocity)
     local character = LocalPlayer.Character
     if not character then return end
@@ -219,16 +214,10 @@ end
 -- ENHANCED AUTO PASS BOMB FUNCTION (WITH ENHANCEMENTS)
 -----------------------------------------------------
 local function autoPassBombEnhanced()
-    -- Prevent repeated pass attempts that may freeze movement.
-    if tick() - lastPassAttemptTime < passAttemptCooldown then
-        return
-    end
-
     pcall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if not bomb then
             removeTargetMarker()
-            lastPassAttemptTime = tick()
             return
         end
 
@@ -237,7 +226,6 @@ local function autoPassBombEnhanced()
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if targetPlayer.Character:FindFirstChild("Bomb") then
                 removeTargetMarker()
-                lastPassAttemptTime = tick()
                 return
             end
 
@@ -249,7 +237,6 @@ local function autoPassBombEnhanced()
             if distance > bombPassDistance then
                 print("Target out of range. Pass aborted.")
                 removeTargetMarker()
-                lastPassAttemptTime = tick()
                 return
             end
 
@@ -257,13 +244,12 @@ local function autoPassBombEnhanced()
             if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
                 print("Line of sight blocked. Bomb pass aborted.")
                 removeTargetMarker()
-                lastPassAttemptTime = tick()
                 return
             end
 
             local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
             rotateCharacterTowardsTarget(targetPos, targetVelocity)
-            task.wait(0.05)  -- Short wait for smoother rotation without blocking movement
+            task.wait(0.05)  -- Short wait for smoother rotation
             if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
                 pcall(function()
                     StarterGui:SetCore("SendNotification", {
@@ -277,10 +263,8 @@ local function autoPassBombEnhanced()
             BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
             print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
             removeTargetMarker()
-            lastPassAttemptTime = tick()
         else
             removeTargetMarker()
-            lastPassAttemptTime = tick()
         end
     end)
 end
