@@ -16,8 +16,8 @@ local LocalPlayer = Players.LocalPlayer
 local bombPassDistance = 10             -- Maximum pass distance for bomb passing
 local AutoPassEnabled = false           -- Toggle auto-pass bomb behavior
 
--- Advanced prediction and line-of-sight settings
-local predictionTime = 0.5              -- Prediction time (in seconds) for target movement
+-- (Prediction time removed; we now use the target’s current position.)
+-- Advanced line-of-sight settings remain:
 local raySpreadAngle = 10               -- Spread angle (in degrees) for multiple raycasts
 local numRaycasts = 3                   -- Number of rays to cast for line-of-sight (odd number recommended)
 
@@ -29,9 +29,9 @@ local pathfindingSpeed = 16             -- Used for auto-pass bomb target select
 local lastAIMessageTime = 0
 local aiMessageCooldown = 5             -- Seconds between AI notifications
 
--- NEW: Cooldown variables to avoid repeated pass attempts (which can freeze movement)
+-- New cooldown to prevent rapid pass attempts
 local lastPassAttemptTime = 0
-local passAttemptCooldown = 0.5         -- In seconds; adjust as needed
+local passAttemptCooldown = 0.5         -- Seconds to wait between pass attempts
 
 -----------------------------------------------------
 -- UI THEMES (for OrionLib)
@@ -166,16 +166,13 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
-local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
+-- The old behavior: rotate directly toward the target’s current position.
+local function rotateCharacterTowardsTarget(targetPosition, _targetVelocity)
     local character = LocalPlayer.Character
     if not character then return end
     local hrp = character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    local predictedPos = targetPosition
-    if targetVelocity and targetVelocity.Magnitude > 0 then
-        predictedPos = targetPosition + targetVelocity * predictionTime
-    end
-    local targetCFrame = CFrame.new(hrp.Position, predictedPos)
+    local targetCFrame = CFrame.new(hrp.Position, targetPosition)
     local tween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {CFrame = targetCFrame})
     tween:Play()
     return tween
@@ -188,7 +185,7 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
     local direction = (endPos - startPos).Unit
     local distance = (endPos - startPos).Magnitude
-    
+
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
     if LocalPlayer.Character then
@@ -423,17 +420,6 @@ AITab:AddSlider({
     Increment = 1,
     Callback = function(value)
         bombPassDistance = value
-    end
-})
-
-AITab:AddSlider({
-    Name = "Prediction Time",
-    Min = 0.1,
-    Max = 1,
-    Default = predictionTime,
-    Increment = 0.1,
-    Callback = function(value)
-        predictionTime = value
     end
 })
 
