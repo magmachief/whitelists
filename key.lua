@@ -66,12 +66,14 @@ end
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
 
-local function createOrUpdateTargetMarker(player)
+local function createOrUpdateTargetMarker(player, distance)
     if not player or not player.Character then return end
     local body = player.Character:FindFirstChild("HumanoidRootPart")
     if not body then return end
 
     if currentTargetMarker and currentTargetPlayer == player then
+        -- Update marker text with current distance
+        currentTargetMarker:FindFirstChildOfClass("TextLabel").Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
         return
     end
 
@@ -84,15 +86,15 @@ local function createOrUpdateTargetMarker(player)
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
     marker.Adornee = body
-    marker.Size = UDim2.new(0, 50, 0, 50)
-    marker.StudsOffset = Vector3.new(0, 0, 0)
+    marker.Size = UDim2.new(0, 80, 0, 80)
+    marker.StudsOffset = Vector3.new(0, 2, 0)
     marker.AlwaysOnTop = true
     marker.Parent = body
 
     local label = Instance.new("TextLabel", marker)
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
-    label.Text = "X"
+    label.Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
     label.TextScaled = true
     label.TextColor3 = Color3.new(1, 0, 0)
     label.Font = Enum.Font.SourceSansBold
@@ -161,17 +163,16 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Old behavior: rotate directly toward the target’s current position,
--- but adjusted so that the character's Y remains the same (avoiding looking down).
-local function rotateCharacterTowardsTarget(targetPosition, _targetVelocity)
+-- Enhanced rotation: rotate directly toward the target’s current position,
+-- preserving the Y coordinate so your character remains level.
+local function rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
     local hrp = character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    -- Keep the Y coordinate level.
     local adjustedTargetPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
     local targetCFrame = CFrame.new(hrp.Position, adjustedTargetPos)
-    local tween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {CFrame = targetCFrame})
+    local tween = TweenService:Create(hrp, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
     tween:Play()
     return tween
 end
@@ -232,7 +233,6 @@ local function autoPassBombEnhanced()
                 return
             end
 
-            createOrUpdateTargetMarker(targetPlayer)
             local targetPos = targetPlayer.Character.HumanoidRootPart.Position
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).magnitude
@@ -250,27 +250,27 @@ local function autoPassBombEnhanced()
                 return
             end
 
-            -- Use a VFX effect instead of an animation.
-            local function playPassVFX()
-                local character = LocalPlayer.Character
-                if not character then return end
-                local hrp = character:FindFirstChild("HumanoidRootPart")
+            createOrUpdateTargetMarker(targetPlayer, distance)
+            -- Use a VFX effect that only surrounds the target
+            local function playPassVFX(target)
+                if not target or not target.Character then return end
+                local hrp = target.Character:FindFirstChild("HumanoidRootPart")
                 if not hrp then return end
                 local emitter = Instance.new("ParticleEmitter")
-                -- Use a Roblox VFX texture (replace the asset id below with one you like)
-                emitter.Texture = "rbxassetid://258128463"  
-                emitter.Rate = 100
-                emitter.Lifetime = NumberRange.new(0.5, 1)
-                emitter.Speed = NumberRange.new(5, 10)
-                emitter.VelocitySpread = 180
+                -- Use a Roblox VFX texture (replace this with one you prefer)
+                emitter.Texture = "rbxassetid://258128463"
+                emitter.Rate = 50                -- Lower rate
+                emitter.Lifetime = NumberRange.new(0.3, 0.5)  -- Shorter lifetime
+                emitter.Speed = NumberRange.new(2, 5)         -- Lower speed
+                emitter.VelocitySpread = 30      -- Narrow spread
                 emitter.Parent = hrp
                 delay(1, function()
                     emitter:Destroy()
                 end)
             end
 
-            playPassVFX()
-            rotateCharacterTowardsTarget(targetPos, nil)
+            playPassVFX(targetPlayer)
+            rotateCharacterTowardsTarget(targetPos)
             task.wait(0.05)  -- Short wait for smoother rotation
             if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
                 pcall(function()
