@@ -4,22 +4,33 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local PathfindingService = game:GetService("PathfindingService")
+local StarterGui = game:GetService("StarterGui")
+local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
 -----------------------------------------------------
 -- CONFIGURATION & VARIABLES
 -----------------------------------------------------
-local bombPassDistance = 10         -- Maximum pass distance (in studs)
-local AutoPassEnabled = false       -- Toggle auto-pass behavior
-local AntiSlipperyEnabled = false   -- Toggle anti-slippery feature
-local RemoveHitboxEnabled = false   -- Toggle hitbox removal
-local AI_AssistanceEnabled = false  -- AI Assistance toggle variable
-local pathfindingSpeed = 16         -- Used to calculate travel time
+-- Auto Dodge Bomb configuration
+local bombDodgeThreshold = 15         -- If a bomb is within this many studs, initiate dodge
+local bombDodgeDistance = 20            -- How far to dodge (in studs)
+local AutoDodgeEnabled = false          -- Toggle auto-dodge behavior
+
+-- Auto Pass Bomb configuration
+local bombPassDistance = 10             -- Maximum pass distance for bomb passing
+local AutoPassEnabled = false           -- Toggle auto-pass bomb behavior
+
+-- Global features and notifications
+local AntiSlipperyEnabled = false       -- Toggle anti-slippery feature
+local RemoveHitboxEnabled = false       -- Toggle hitbox removal
+local AI_AssistanceEnabled = false      -- Toggle AI Assistance notifications
+local pathfindingSpeed = 16             -- Used for autopass bomb target selection calculations
 local lastAIMessageTime = 0
-local aiMessageCooldown = 5 -- seconds between AI messages
+local aiMessageCooldown = 5             -- Seconds between AI notifications
 
 -----------------------------------------------------
--- UI THEMES
+-- UI THEMES (for OrionLib)
 -----------------------------------------------------
 local uiThemes = {
     Dark = {
@@ -51,7 +62,7 @@ local function changeUITheme(theme)
 end
 
 -----------------------------------------------------
--- VISUAL TARGET MARKER (RED "X") FOR AUTO-PASS
+-- VISUAL TARGET MARKER (for Auto Pass Bomb)
 -----------------------------------------------------
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
@@ -73,9 +84,9 @@ local function createOrUpdateTargetMarker(player)
 
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
-    marker.Adornee = body  -- Attach to the target's body
+    marker.Adornee = body
     marker.Size = UDim2.new(0, 50, 0, 50)
-    marker.StudsOffset = Vector3.new(0, 0, 0)  -- Centered on the part
+    marker.StudsOffset = Vector3.new(0, 0, 0)
     marker.AlwaysOnTop = true
     marker.Parent = body
 
@@ -100,9 +111,8 @@ local function removeTargetMarker()
 end
 
 -----------------------------------------------------
--- UTILITY FUNCTIONS
+-- UTILITY FUNCTIONS FOR AUTO PASS BOMB
 -----------------------------------------------------
--- This function chooses the optimal (fastest travel time) player without a bomb.
 local function getOptimalPlayer()
     local bestPlayer = nil
     local bestTravelTime = math.huge
@@ -112,11 +122,10 @@ local function getOptimalPlayer()
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- Skip players who already hold a bomb.
+            -- Skip players that already hold a bomb.
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
-
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).magnitude
             if distance <= bombPassDistance then
@@ -131,7 +140,6 @@ local function getOptimalPlayer()
     return bestPlayer
 end
 
--- This function chooses the closest player without a bomb.
 local function getClosestPlayer()
     local closestPlayer = nil
     local shortestDistance = bombPassDistance
@@ -141,11 +149,9 @@ local function getClosestPlayer()
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- Skip players who already hold a bomb.
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
-
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).magnitude
             if distance < shortestDistance then
@@ -162,17 +168,167 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     if not character then return end
     local hrp = character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-
     local predictionTime = 0.5
     local predictedPos = targetPosition
     if targetVelocity and targetVelocity.Magnitude > 0 then
         predictedPos = targetPosition + targetVelocity * predictionTime
     end
-
     local targetCFrame = CFrame.new(hrp.Position, predictedPos)
     local tween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {CFrame = targetCFrame})
     tween:Play()
     return tween
+end
+
+-----------------------------------------------------
+-- AUTO PASS BOMB FUNCTION
+-----------------------------------------------------
+local function autoPassBomb()
+    if not AutoPassEnabled then
+        removeTargetMarker()
+        return
+    end
+
+    pcall(function()
+        local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
+        if not bomb then
+            removeTargetMarker()
+            return
+        end
+
+        local BombEvent = bomb:FindFirstChild("RemoteEvent")
+        local targetPlayer = getOptimalPlayer() or getClosestPlayer()
+        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            if targetPlayer.Character:FindFirstChild("Bomb") then
+                removeTargetMarker()
+                return
+            end
+
+            createOrUpdateTargetMarker(targetPlayer)
+            local targetPosition = targetPlayer.Character.HumanoidRootPart.Position
+            local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+            local distance = (targetPosition - myPos).magnitude
+            if distance <= bombPassDistance then
+                local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
+                rotateCharacterTowardsTarget(targetPosition, targetVelocity)
+                task.wait(0.1)
+                if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
+                    pcall(function()
+                        StarterGui:SetCore("SendNotification", {
+                            Title = "AI Assistance",
+                            Text = "Passing bomb safely.",
+                            Duration = 5
+                        })
+                    end)
+                    lastAIMessageTime = tick()
+                end
+                BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+                print("Bomb passed to:", targetPlayer.Name)
+                removeTargetMarker()
+            else
+                removeTargetMarker()
+            end
+        else
+            removeTargetMarker()
+        end
+    end)
+end
+
+-----------------------------------------------------
+-- GROUND CHECK FUNCTION (for dodge)
+-----------------------------------------------------
+local function isGrounded(position)
+    local rayOrigin = position + Vector3.new(0, 5, 0)
+    local rayDirection = Vector3.new(0, -50, 0)
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    if LocalPlayer.Character then
+        raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    end
+    local result = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    if result then
+        return true, result.Position
+    end
+    return false, nil
+end
+
+-----------------------------------------------------
+-- ENHANCED AUTO DODGE BOMBS (SMART AI)
+-----------------------------------------------------
+local function autoDodgeBombsEnhanced()
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then
+        return
+    end
+    local hrp = character.HumanoidRootPart
+    local humanoid = character.Humanoid
+    local myPos = hrp.Position
+
+    local closestBomb = nil
+    local closestDistance = math.huge
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj.Name == "Bomb" and obj:IsA("BasePart") and not obj:IsDescendantOf(LocalPlayer.Character) then
+            local bombPos = obj.Position
+            local distance = (bombPos - myPos).Magnitude
+            if distance < closestDistance then
+                closestDistance = distance
+                closestBomb = obj
+            end
+        end
+    end
+
+    if closestBomb and closestDistance < bombDodgeThreshold then
+        local bombPos = closestBomb.Position
+        local dodgeDirection = (myPos - bombPos).Unit
+        local desiredPos = myPos + dodgeDirection * bombDodgeDistance
+
+        -- Ensure the destination is on solid ground (adjust upward if needed)
+        local grounded, groundPos = isGrounded(desiredPos)
+        if not grounded then
+            local attempt = 0
+            while not grounded and attempt < 5 do
+                desiredPos = Vector3.new(desiredPos.X, desiredPos.Y + 2, desiredPos.Z)
+                grounded, groundPos = isGrounded(desiredPos)
+                attempt = attempt + 1
+            end
+            if not grounded then
+                return
+            end
+        end
+
+        local pathParams = {
+            AgentRadius = 2,
+            AgentHeight = 5,
+            AgentCanJump = true,
+            AgentJumpHeight = 7,
+            AgentMaxSlope = 45
+        }
+        local path = PathfindingService:CreatePath(pathParams)
+        path:ComputeAsync(myPos, desiredPos)
+        if path.Status == Enum.PathStatus.Success then
+            local waypoints = path:GetWaypoints()
+            for _, waypoint in ipairs(waypoints) do
+                humanoid:MoveTo(waypoint.Position)
+                local reached = humanoid.MoveToFinished:Wait(2)
+                if not reached then
+                    break
+                end
+            end
+        else
+            local tween = TweenService:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {CFrame = CFrame.new(desiredPos)})
+            tween:Play()
+        end
+
+        if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
+            pcall(function()
+                StarterGui:SetCore("SendNotification", {
+                    Title = "AI Assistance",
+                    Text = "Dodging bomb safely!",
+                    Duration = 5
+                })
+            end)
+            lastAIMessageTime = tick()
+        end
+    end
 end
 
 -----------------------------------------------------
@@ -220,83 +376,6 @@ local function applyRemoveHitbox(enable)
 end
 
 -----------------------------------------------------
--- AI ADVICE & NOTIFICATIONS
------------------------------------------------------
-local function showAINotification(message)
-    local StarterGui = game:GetService("StarterGui")
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = "AI Assistance",
-            Text = message,
-            Duration = 5
-        })
-    end)
-end
-
-local function getAIAdviceForBombPass()
-    local advices = {
-        "AI Analysis: Optimal target detected.",
-        "AI Analysis: Recalculating trajectory...",
-        "AI Advice: Consider adjusting bomb pass distance.",
-        "AI Analysis: Target player appears to be the best candidate."
-    }
-    return advices[math.random(1, #advices)]
-end
-
------------------------------------------------------
--- AUTO PASS BOMB
------------------------------------------------------
-local function autoPassBomb()
-    if not AutoPassEnabled then
-        removeTargetMarker()
-        return
-    end
-
-    pcall(function()
-        local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
-        if not bomb then
-            -- Stop analyzing if the player doesn't have the bomb
-            removeTargetMarker()
-            return
-        end
-
-        local BombEvent = bomb:FindFirstChild("RemoteEvent")
-        local targetPlayer = getOptimalPlayer() or getClosestPlayer()
-        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            -- Extra safety: if the target already has a bomb, do not pass to them.
-            if targetPlayer.Character:FindFirstChild("Bomb") then
-                removeTargetMarker()
-                return
-            end
-
-            createOrUpdateTargetMarker(targetPlayer)
-            local targetPosition = targetPlayer.Character.HumanoidRootPart.Position
-            local myPos = LocalPlayer.Character.HumanoidRootPart.Position
-            local distance = (targetPosition - myPos).magnitude
-            if distance <= bombPassDistance then
-                local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
-                rotateCharacterTowardsTarget(targetPosition, targetVelocity)
-                task.wait(0.1)
-                
-                if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
-                    local advice = getAIAdviceForBombPass()
-                    showAINotification(advice)
-                    lastAIMessageTime = tick()
-                end
-                
-                BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
-                print("Bomb passed to:", targetPlayer.Name)
-                removeTargetMarker()
-            else
-                removeTargetMarker()
-            end
-        else
-            removeTargetMarker()
-        end
-    end)
-end
-
------------------------------------------------------
 -- APPLY FEATURES ON RESPAWN
 -----------------------------------------------------
 LocalPlayer.CharacterAdded:Connect(function(char)
@@ -309,7 +388,7 @@ end)
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
-    Name = "Yon Menu - Advanced",
+    Name = "Yon Menu - Advanced (Auto Dodge & Pass Bomb)",
     HidePremium = false,
     SaveConfig = true,
     ConfigFolder = "YonMenu_Advanced"
@@ -318,6 +397,25 @@ local AutomatedTab = Window:MakeTab({
     Name = "Automated",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
+})
+
+local autoDodgeConnection
+local autoPassConnection
+
+AutomatedTab:AddToggle({
+    Name = "Auto Dodge Bombs (Enhanced)",
+    Default = AutoDodgeEnabled,
+    Callback = function(value)
+        AutoDodgeEnabled = value
+        if AutoDodgeEnabled then
+            autoDodgeConnection = RunService.Stepped:Connect(autoDodgeBombsEnhanced)
+        else
+            if autoDodgeConnection then
+                autoDodgeConnection:Disconnect()
+                autoDodgeConnection = nil
+            end
+        end
+    end
 })
 
 AutomatedTab:AddToggle({
@@ -369,6 +467,28 @@ AutomatedTab:AddToggle({
 })
 
 AutomatedTab:AddSlider({
+    Name = "Bomb Dodge Threshold",
+    Min = 5,
+    Max = 30,
+    Default = bombDodgeThreshold,
+    Increment = 1,
+    Callback = function(value)
+        bombDodgeThreshold = value
+    end
+})
+
+AutomatedTab:AddSlider({
+    Name = "Bomb Dodge Distance",
+    Min = 10,
+    Max = 50,
+    Default = bombDodgeDistance,
+    Increment = 1,
+    Callback = function(value)
+        bombDodgeDistance = value
+    end
+})
+
+AutomatedTab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
     Max = 30,
@@ -380,4 +500,4 @@ AutomatedTab:AddSlider({
 })
 
 OrionLib:Init()
-print("Yon Menu Script Loaded with Optimal Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Dodge Bombs & Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
