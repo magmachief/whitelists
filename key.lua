@@ -250,8 +250,27 @@ local function autoPassBombEnhanced()
                 return
             end
 
-            local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
-            rotateCharacterTowardsTarget(targetPos, targetVelocity)
+            -- Use a VFX effect instead of an animation.
+            local function playPassVFX()
+                local character = LocalPlayer.Character
+                if not character then return end
+                local hrp = character:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+                local emitter = Instance.new("ParticleEmitter")
+                -- Use a Roblox VFX texture (replace the asset id below with one you like)
+                emitter.Texture = "rbxassetid://258128463"  
+                emitter.Rate = 100
+                emitter.Lifetime = NumberRange.new(0.5, 1)
+                emitter.Speed = NumberRange.new(5, 10)
+                emitter.VelocitySpread = 180
+                emitter.Parent = hrp
+                delay(1, function()
+                    emitter:Destroy()
+                end)
+            end
+
+            playPassVFX()
+            rotateCharacterTowardsTarget(targetPos, nil)
             task.wait(0.05)  -- Short wait for smoother rotation
             if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
                 pcall(function()
