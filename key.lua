@@ -1,10 +1,14 @@
+-----------------------------------------------------
 -- SERVICES
+-----------------------------------------------------
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
+-----------------------------------------------------
 -- CONFIGURATION & VARIABLES
+-----------------------------------------------------
 local bombPassDistance = 10         -- Maximum pass distance (in studs)
 local AutoPassEnabled = false       -- Toggle auto-pass behavior
 local AntiSlipperyEnabled = false   -- Toggle anti-slippery feature
@@ -13,7 +17,10 @@ local AI_AssistanceEnabled = false  -- AI Assistance toggle variable
 local pathfindingSpeed = 16         -- Used to calculate travel time
 local lastAIMessageTime = 0
 local aiMessageCooldown = 5 -- seconds between AI messages
+
+-----------------------------------------------------
 -- UI THEMES
+-----------------------------------------------------
 local uiThemes = {
     Dark = {
         MainColor = Color3.fromRGB(30, 30, 30),
@@ -43,7 +50,9 @@ local function changeUITheme(theme)
     end
 end
 
+-----------------------------------------------------
 -- VISUAL TARGET MARKER (RED "X") FOR AUTO-PASS
+-----------------------------------------------------
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
 
@@ -90,7 +99,9 @@ local function removeTargetMarker()
     end
 end
 
+-----------------------------------------------------
 -- UTILITY FUNCTIONS
+-----------------------------------------------------
 local function getOptimalPlayer()
     local bestPlayer = nil
     local bestTravelTime = math.huge
@@ -100,6 +111,11 @@ local function getOptimalPlayer()
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            -- Skip players who are holding a bomb
+            if player.Character:FindFirstChild("Bomb") then
+                continue
+            end
+
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).magnitude
             if distance <= bombPassDistance then
@@ -123,6 +139,11 @@ local function getClosestPlayer()
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            -- Skip players who are holding a bomb
+            if player.Character:FindFirstChild("Bomb") then
+                continue
+            end
+
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).magnitude
             if distance < shortestDistance then
@@ -152,7 +173,9 @@ local function rotateCharacterTowardsTarget(targetPosition, targetVelocity)
     return tween
 end
 
+-----------------------------------------------------
 -- ANTI-SLIPPERY
+-----------------------------------------------------
 local function applyAntiSlippery(enabled)
     local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     if enabled then
@@ -175,7 +198,9 @@ local function applyAntiSlippery(enabled)
     end
 end
 
+-----------------------------------------------------
 -- REMOVE HITBOX
+-----------------------------------------------------
 local function applyRemoveHitbox(enable)
     local char = LocalPlayer.Character
     if not char then return end
@@ -192,7 +217,9 @@ local function applyRemoveHitbox(enable)
     end
 end
 
+-----------------------------------------------------
 -- AI ADVICE & NOTIFICATIONS
+-----------------------------------------------------
 local function showAINotification(message)
     local StarterGui = game:GetService("StarterGui")
     pcall(function()
@@ -214,7 +241,9 @@ local function getAIAdviceForBombPass()
     return advices[math.random(1, #advices)]
 end
 
+-----------------------------------------------------
 -- AUTO PASS BOMB
+-----------------------------------------------------
 local function autoPassBomb()
     if not AutoPassEnabled then
         removeTargetMarker()
@@ -232,6 +261,12 @@ local function autoPassBomb()
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
         local targetPlayer = getOptimalPlayer() or getClosestPlayer()
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            -- Extra safety: if the target player already has a bomb, abort.
+            if targetPlayer.Character:FindFirstChild("Bomb") then
+                removeTargetMarker()
+                return
+            end
+
             createOrUpdateTargetMarker(targetPlayer)
             local targetPosition = targetPlayer.Character.HumanoidRootPart.Position
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
@@ -240,13 +275,13 @@ local function autoPassBomb()
                 local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
                 rotateCharacterTowardsTarget(targetPosition, targetVelocity)
                 task.wait(0.1)
-
+                
                 if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
                     local advice = getAIAdviceForBombPass()
                     showAINotification(advice)
                     lastAIMessageTime = tick()
                 end
-
+                
                 BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
                 print("Bomb passed to:", targetPlayer.Name)
                 removeTargetMarker()
@@ -259,13 +294,17 @@ local function autoPassBomb()
     end)
 end
 
+-----------------------------------------------------
 -- APPLY FEATURES ON RESPAWN
+-----------------------------------------------------
 LocalPlayer.CharacterAdded:Connect(function(char)
     applyAntiSlippery(AntiSlipperyEnabled)
     applyRemoveHitbox(RemoveHitboxEnabled)
 end)
 
--- OrionLib Interface (Optional)
+-----------------------------------------------------
+-- ORIONLIB INTERFACE (OPTIONAL)
+-----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced",
