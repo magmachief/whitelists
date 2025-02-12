@@ -4,7 +4,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local PathfindingService = game:GetService("PathfindingService")
 local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
@@ -15,10 +14,6 @@ local LocalPlayer = Players.LocalPlayer
 -- Auto Pass Bomb configuration
 local bombPassDistance = 10             -- Maximum pass distance for bomb passing
 local AutoPassEnabled = false           -- Toggle auto-pass bomb behavior
-
--- Advanced line-of-sight settings
-local raySpreadAngle = 10               -- Spread angle (in degrees) for multiple raycasts
-local numRaycasts = 3                   -- Number of rays to cast for line-of-sight (odd number recommended)
 
 -- Global features and notifications
 local AntiSlipperyEnabled = false       -- Toggle anti-slippery feature
@@ -121,6 +116,7 @@ local function getOptimalPlayer()
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            -- Skip players already holding a bomb.
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
@@ -161,8 +157,8 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Old behavior: rotate directly toward the target’s current position.
-local function rotateCharacterTowardsTarget(targetPosition, _targetVelocity)
+-- This function rotates directly toward the target’s current position.
+local function rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
     local hrp = character:FindFirstChild("HumanoidRootPart")
@@ -174,46 +170,9 @@ local function rotateCharacterTowardsTarget(targetPosition, _targetVelocity)
 end
 
 -----------------------------------------------------
--- MULTIPLE RAYCASTS FOR LINE-OF-SIGHT CHECK
+-- SIMPLE AUTO PASS BOMB FUNCTION (OLD BEHAVIOR)
 -----------------------------------------------------
-local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
-    local spreadRad = math.rad(raySpreadAngle)
-    local direction = (endPos - startPos).Unit
-    local distance = (endPos - startPos).Magnitude
-
-    local rayParams = RaycastParams.new()
-    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-    if LocalPlayer.Character then
-        rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
-    end
-
-    -- Central ray
-    local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
-    if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
-        return false
-    end
-
-    local raysEachSide = math.floor((numRaycasts - 1) / 2)
-    for i = 1, raysEachSide do
-        local angleOffset = spreadRad * i / raysEachSide
-        local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), angleOffset) * CFrame.new(direction)).p
-        local leftResult = Workspace:Raycast(startPos, leftDirection * distance, rayParams)
-        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return false
-        end
-        local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
-        local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
-        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return false
-        end
-    end
-    return true
-end
-
------------------------------------------------------
--- ENHANCED AUTO PASS BOMB FUNCTION (WITH ENHANCEMENTS)
------------------------------------------------------
-local function autoPassBombEnhanced()
+local function autoPassBomb()
     pcall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if not bomb then
@@ -234,35 +193,25 @@ local function autoPassBombEnhanced()
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).magnitude
 
-            if distance > bombPassDistance then
-                print("Target out of range. Pass aborted.")
+            if distance <= bombPassDistance then
+                rotateCharacterTowardsTarget(targetPos)
+                task.wait(0.05)  -- Short wait to let rotation finish
+                if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
+                    pcall(function()
+                        StarterGui:SetCore("SendNotification", {
+                            Title = "AI Assistance",
+                            Text = "Passing bomb to " .. targetPlayer.Name .. " (Distance: " .. math.floor(distance) .. " studs).",
+                            Duration = 5
+                        })
+                    end)
+                    lastAIMessageTime = tick()
+                end
+                BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+                print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
                 removeTargetMarker()
-                return
-            end
-
-            local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart") or targetPlayer.Character.HumanoidRootPart
-            if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
-                print("Line of sight blocked. Bomb pass aborted.")
+            else
                 removeTargetMarker()
-                return
             end
-
-            local targetVelocity = targetPlayer.Character.HumanoidRootPart.Velocity or Vector3.new(0, 0, 0)
-            rotateCharacterTowardsTarget(targetPos, targetVelocity)
-            task.wait(0.05)  -- Short wait for smoother rotation
-            if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
-                pcall(function()
-                    StarterGui:SetCore("SendNotification", {
-                        Title = "AI Assistance",
-                        Text = "Passing bomb to " .. targetPlayer.Name .. " (Distance: " .. math.floor(distance) .. " studs).",
-                        Duration = 5
-                    })
-                end)
-                lastAIMessageTime = tick()
-            end
-            BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
-            print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
-            removeTargetMarker()
         else
             removeTargetMarker()
         end
@@ -326,7 +275,7 @@ end)
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
-    Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
+    Name = "Yon Menu - Advanced (Auto Pass Bomb)",
     HidePremium = false,
     SaveConfig = true,
     ConfigFolder = "YonMenu_Advanced"
@@ -348,12 +297,12 @@ local autoPassConnection
 
 -- Automated features go in the Automated tab.
 AutomatedTab:AddToggle({
-    Name = "Auto Pass Bomb (Enhanced)",
+    Name = "Auto Pass Bomb",
     Default = AutoPassEnabled,
     Callback = function(value)
         AutoPassEnabled = value
         if AutoPassEnabled then
-            autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
+            autoPassConnection = RunService.Stepped:Connect(autoPassBomb)
         else
             if autoPassConnection then
                 autoPassConnection:Disconnect()
@@ -407,27 +356,5 @@ AITab:AddSlider({
     end
 })
 
-AITab:AddSlider({
-    Name = "Ray Spread Angle",
-    Min = 5,
-    Max = 20,
-    Default = raySpreadAngle,
-    Increment = 1,
-    Callback = function(value)
-        raySpreadAngle = value
-    end
-})
-
-AITab:AddSlider({
-    Name = "Number of Raycasts",
-    Min = 1,
-    Max = 5,
-    Default = numRaycasts,
-    Increment = 1,
-    Callback = function(value)
-        numRaycasts = value
-    end
-})
-
 OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
+print("Yon Menu Script Loaded with the old auto pass bomb behavior, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
