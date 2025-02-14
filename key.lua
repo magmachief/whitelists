@@ -163,8 +163,8 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Old behavior: rotate directly toward the target’s current position,
--- but adjusted so that the character's Y remains the same (avoiding looking down).
+-- Enhanced rotation: rotate directly toward the target’s current position,
+-- preserving the Y coordinate so your character remains level.
 local function rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
@@ -191,7 +191,6 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
         rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
     end
 
-    -- Central ray
     local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
     if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
         return false
@@ -269,21 +268,25 @@ local function autoPassBombEnhanced()
             end
 
             playPassVFX(targetPlayer)
-            rotateCharacterTowardsTarget(targetPos)
-            task.wait(0.05)  -- Short wait for smoother rotation
-            if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
-                pcall(function()
-                    StarterGui:SetCore("SendNotification", {
-                        Title = "AI Assistance",
-                        Text = "Passing bomb to " .. targetPlayer.Name .. " (Distance: " .. math.floor(distance) .. " studs).",
-                        Duration = 5
-                    })
-                end)
-                lastAIMessageTime = tick()
-            end
-            BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
-            print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
-            removeTargetMarker()
+            -- Instead of a fixed wait, use the Completed event of the tween
+            local rotationTween = rotateCharacterTowardsTarget(targetPos)
+            rotationTween.Completed:Connect(function(status)
+                if status == Enum.PlaybackState.Completed then
+                    if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
+                        pcall(function()
+                            StarterGui:SetCore("SendNotification", {
+                                Title = "AI Assistance",
+                                Text = "Passing bomb to " .. targetPlayer.Name .. " (Distance: " .. math.floor(distance) .. " studs).",
+                                Duration = 5
+                            })
+                        end)
+                        lastAIMessageTime = tick()
+                    end
+                    BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+                    print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
+                    removeTargetMarker()
+                end
+            end)
         else
             removeTargetMarker()
         end
@@ -385,7 +388,7 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
 
 local autoPassConnection
 
--- (Other toggles)
+-- Additional toggles
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
