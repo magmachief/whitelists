@@ -364,6 +364,22 @@ local AITab = Window:MakeTab({
     Icon = "rbxassetid://7072720870",  -- Change to your preferred asset id
     PremiumOnly = false
 })
+-- Create a tab for UI elements
+local Tab = Window:MakeTab({
+    Name = "UI Elements",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+-- Add a Colorpicker to the tab
+Tab:AddColorpicker({
+    Name = "Choose Color",                      -- Label for the color picker
+    Default = Color3.fromRGB(255, 0, 0),          -- Starting color (red)
+    Callback = function(color)
+        print("New color selected:", color)     -- Use the selected color as needed
+    end,
+    Flag = "ExampleColor",                        -- Optional flag for saving config
+    Save = true                                   -- Optional: save this setting
+})
 
 -- Store the OrionLib toggle reference for Auto Pass Bomb.
 local orionAutoPassToggle = AutomatedTab:AddToggle({
