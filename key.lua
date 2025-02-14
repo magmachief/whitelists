@@ -163,8 +163,6 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Enhanced rotation: rotate directly toward the target’s current position,
--- preserving the Y coordinate so your character remains level.
 local function rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
@@ -250,17 +248,16 @@ local function autoPassBombEnhanced()
             end
 
             createOrUpdateTargetMarker(targetPlayer, distance)
-            -- VFX effect: confined around the target.
             local function playPassVFX(target)
                 if not target or not target.Character then return end
                 local hrp = target.Character:FindFirstChild("HumanoidRootPart")
                 if not hrp then return end
                 local emitter = Instance.new("ParticleEmitter")
                 emitter.Texture = "rbxassetid://258128463"  -- Replace with your preferred VFX texture
-                emitter.Rate = 50                -- Lower rate for confined effect
-                emitter.Lifetime = NumberRange.new(0.3, 0.5)  -- Shorter lifetime
-                emitter.Speed = NumberRange.new(2, 5)         -- Lower speed
-                emitter.VelocitySpread = 30      -- Narrow spread
+                emitter.Rate = 50
+                emitter.Lifetime = NumberRange.new(0.3, 0.5)
+                emitter.Speed = NumberRange.new(2, 5)
+                emitter.VelocitySpread = 30
                 emitter.Parent = hrp
                 delay(1, function()
                     emitter:Destroy()
@@ -268,7 +265,6 @@ local function autoPassBombEnhanced()
             end
 
             playPassVFX(targetPlayer)
-            -- Instead of a fixed wait, use the Completed event of the tween
             local rotationTween = rotateCharacterTowardsTarget(targetPos)
             rotationTween.Completed:Connect(function(status)
                 if status == Enum.PlaybackState.Completed then
@@ -348,7 +344,8 @@ end)
 -----------------------------------------------------
 -- ORIONLIB INTERFACE
 -----------------------------------------------------
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
+-- Replace the loadstring with require if you stored AdvancedOrionLib in ReplicatedStorage
+local OrionLib = require(game.ReplicatedStorage.AdvancedOrionLib)
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
     HidePremium = false,
@@ -453,6 +450,19 @@ AITab:AddSlider({
     end
 })
 
+-- New Colorpicker for theme/color selection
+AITab:AddColorpicker({
+    Name = "Theme Color",
+    Default = Color3.fromRGB(255, 255, 255),
+    Callback = function(color)
+        print("Selected theme color:", color)
+        -- Optionally update your UI theme:
+        -- changeUITheme({MainColor = color, AccentColor = color, TextColor = color})
+    end,
+    Flag = "ThemeColor",
+    Save = true
+})
+
 OrionLib:Init()
 print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
 
@@ -470,7 +480,6 @@ end
 local autoPassMobileToggle = Instance.new("TextButton")
 autoPassMobileToggle.Name = "AutoPassMobileToggle"
 autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
--- Position near the bottom-right; adjust as needed
 autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
 autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
 autoPassMobileToggle.Text = "OFF"
@@ -491,7 +500,6 @@ autoPassMobileToggle.MouseButton1Click:Connect(function()
         autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
         autoPassMobileToggle.Text = "OFF"
     end
-    -- Update the OrionLib toggle to match.
     if orionAutoPassToggle and orionAutoPassToggle.Set then
         orionAutoPassToggle:Set(AutoPassEnabled)
     elseif orionAutoPassToggle then
