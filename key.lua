@@ -344,7 +344,6 @@ end)
 -----------------------------------------------------
 -- ORIONLIB INTERFACE
 -----------------------------------------------------
--- Replace the loadstring with require if you stored AdvancedOrionLib in ReplicatedStorage
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
