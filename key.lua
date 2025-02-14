@@ -370,18 +370,7 @@ local Tab = Window:MakeTab({
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
--- Add a Colorpicker to the tab
-Tab:AddColorpicker({
-    Name = "Menu Main Color",                      -- Label for the color picker
-    Default = Color3.fromRGB(255, 0, 0),          -- Starting color (red)
-    Callback = function(color)
-        --[OrionLib.Themes[OrionLib.SelectedTheme].Main = color
-        SetTheme()]--
-            print('hi')
-    end,
-    Flag = "MenuMainColor",                        -- Optional flag for saving config
-    Save = true                                   -- Optional: save this setting
-})
+
 
 -- Store the OrionLib toggle reference for Auto Pass Bomb.
 local orionAutoPassToggle = AutomatedTab:AddToggle({
