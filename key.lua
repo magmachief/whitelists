@@ -163,6 +163,8 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
+-- Old behavior: rotate directly toward the target’s current position,
+-- but adjusted so that the character's Y remains the same (avoiding looking down).
 local function rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
@@ -189,6 +191,7 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
         rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
     end
 
+    -- Central ray
     local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
     if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
         return false
@@ -248,16 +251,17 @@ local function autoPassBombEnhanced()
             end
 
             createOrUpdateTargetMarker(targetPlayer, distance)
+            -- VFX effect: confined around the target.
             local function playPassVFX(target)
                 if not target or not target.Character then return end
                 local hrp = target.Character:FindFirstChild("HumanoidRootPart")
                 if not hrp then return end
                 local emitter = Instance.new("ParticleEmitter")
                 emitter.Texture = "rbxassetid://258128463"  -- Replace with your preferred VFX texture
-                emitter.Rate = 50
-                emitter.Lifetime = NumberRange.new(0.3, 0.5)
-                emitter.Speed = NumberRange.new(2, 5)
-                emitter.VelocitySpread = 30
+                emitter.Rate = 50                -- Lower rate for confined effect
+                emitter.Lifetime = NumberRange.new(0.3, 0.5)  -- Shorter lifetime
+                emitter.Speed = NumberRange.new(2, 5)         -- Lower speed
+                emitter.VelocitySpread = 30      -- Narrow spread
                 emitter.Parent = hrp
                 delay(1, function()
                     emitter:Destroy()
@@ -265,24 +269,21 @@ local function autoPassBombEnhanced()
             end
 
             playPassVFX(targetPlayer)
-            local rotationTween = rotateCharacterTowardsTarget(targetPos)
-            rotationTween.Completed:Connect(function(status)
-                if status == Enum.PlaybackState.Completed then
-                    if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
-                        pcall(function()
-                            StarterGui:SetCore("SendNotification", {
-                                Title = "AI Assistance",
-                                Text = "Passing bomb to " .. targetPlayer.Name .. " (Distance: " .. math.floor(distance) .. " studs).",
-                                Duration = 5
-                            })
-                        end)
-                        lastAIMessageTime = tick()
-                    end
-                    BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
-                    print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
-                    removeTargetMarker()
-                end
-            end)
+            rotateCharacterTowardsTarget(targetPos)
+            task.wait(0.05)  -- Short wait for smoother rotation
+            if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
+                pcall(function()
+                    StarterGui:SetCore("SendNotification", {
+                        Title = "AI Assistance",
+                        Text = "Passing bomb to " .. targetPlayer.Name .. " (Distance: " .. math.floor(distance) .. " studs).",
+                        Duration = 5
+                    })
+                end)
+                lastAIMessageTime = tick()
+            end
+            BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("CollisionPart"))
+            print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
+            removeTargetMarker()
         else
             removeTargetMarker()
         end
@@ -344,18 +345,27 @@ end)
 -----------------------------------------------------
 -- ORIONLIB INTERFACE
 -----------------------------------------------------
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/refs/heads/main/Orion%20Lib%20Transparent%20%20.lua"))()
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
     HidePremium = false,
     SaveConfig = true,
     ConfigFolder = "YonMenu_Advanced"
 })
-local AutomatedTab = Window:MakeTab({ Name = "Automated", Icon = "rbxassetid://4483345998", PremiumOnly = false })
-local AITab = Window:MakeTab({ Name = "AI Based", Icon = "rbxassetid://7072720870", PremiumOnly = false })
+
+-- Create two tabs: one for automated features and one for AI-based settings.
+local AutomatedTab = Window:MakeTab({
+    Name = "Automated",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+local AITab = Window:MakeTab({
+    Name = "AI Based",
+    Icon = "rbxassetid://7072720870",  -- Change to your preferred asset id
+    PremiumOnly = false
+})
 
 -- Store the OrionLib toggle reference for Auto Pass Bomb.
-local autoPassConnection
 local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
@@ -372,14 +382,16 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
         end
     end
 })
------------------------------------------------------
--- FEATURE TOGGLES
------------------------------------------------------
+
+local autoPassConnection
+
+-- (Other toggles)
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
     Callback = function(value)
         AntiSlipperyEnabled = value
+        applyAntiSlippery(value)
     end
 })
 
@@ -388,6 +400,7 @@ AutomatedTab:AddToggle({
     Default = RemoveHitboxEnabled,
     Callback = function(value)
         RemoveHitboxEnabled = value
+        applyRemoveHitbox(value)
     end
 })
 
@@ -396,6 +409,11 @@ AITab:AddToggle({
     Default = false,
     Callback = function(value)
         AI_AssistanceEnabled = value
+        if AI_AssistanceEnabled then
+            print("AI Assistance enabled.")
+        else
+            print("AI Assistance disabled.")
+        end
     end
 })
 
@@ -432,28 +450,24 @@ AITab:AddSlider({
     end
 })
 
-AITab:AddColorpicker({
-    Name = "Theme Color",
-    Default = Color3.fromRGB(255, 255, 255),
-    Callback = function(color)
-        print("Selected theme color:", color)
-    end,
-    Flag = "ThemeColor",
-    Save = true
-})
-
 OrionLib:Init()
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
 
 -----------------------------------------------------
--- MOBILE TOGGLE UI FOR AUTO PASS BOMB
+-- MOBILE TOGGLE BUTTON FOR AUTO PASS BOMB
 -----------------------------------------------------
 local mobileGui = Instance.new("ScreenGui")
 mobileGui.Name = "MobileToggleGui"
-mobileGui.Parent = game:GetService("CoreGui")
+if gethui then
+    mobileGui.Parent = gethui()
+else
+    mobileGui.Parent = game:GetService("CoreGui")
+end
 
 local autoPassMobileToggle = Instance.new("TextButton")
 autoPassMobileToggle.Name = "AutoPassMobileToggle"
 autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
+-- Position near the bottom-right; adjust as needed
 autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
 autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
 autoPassMobileToggle.Text = "OFF"
@@ -467,14 +481,17 @@ uicorner.Parent = autoPassMobileToggle
 
 autoPassMobileToggle.MouseButton1Click:Connect(function()
     AutoPassEnabled = not AutoPassEnabled
-    autoPassMobileToggle.BackgroundColor3 = AutoPassEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0) 
-    autoPassMobileToggle.Text = AutoPassEnabled and "ON" or "OFF"
-
+    if AutoPassEnabled then
+        autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)  -- Green for ON
+        autoPassMobileToggle.Text = "ON"
+    else
+        autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
+        autoPassMobileToggle.Text = "OFF"
+    end
+    -- Update the OrionLib toggle to match.
     if orionAutoPassToggle and orionAutoPassToggle.Set then
         orionAutoPassToggle:Set(AutoPassEnabled)
     elseif orionAutoPassToggle then
         orionAutoPassToggle.Value = AutoPassEnabled
     end
 end)
-
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
