@@ -372,12 +372,13 @@ local Tab = Window:MakeTab({
 })
 -- Add a Colorpicker to the tab
 Tab:AddColorpicker({
-    Name = "Choose Color",                      -- Label for the color picker
+    Name = "Menu Main Color",                      -- Label for the color picker
     Default = Color3.fromRGB(255, 0, 0),          -- Starting color (red)
     Callback = function(color)
-        print("New color selected:", color)     -- Use the selected color as needed
+        OrionLib.Themes[OrionLib.SelectedTheme].Main = color
+        SetTheme()  
     end,
-    Flag = "ExampleColor",                        -- Optional flag for saving config
+    Flag = "MenuMainColor",                        -- Optional flag for saving config
     Save = true                                   -- Optional: save this setting
 })
 
