@@ -344,7 +344,7 @@ end)
 -----------------------------------------------------
 -- ORIONLIB INTERFACE
 -----------------------------------------------------
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/refs/heads/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
     HidePremium = false,
