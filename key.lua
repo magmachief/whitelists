@@ -270,7 +270,6 @@ local function autoPassBombEnhanced()
 
             playPassVFX(targetPlayer)
             rotateCharacterTowardsTarget(targetPos)
-            task.wait(0.05)  -- Short wait for smoother rotation
             if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
                 pcall(function()
                     StarterGui:SetCore("SendNotification", {
@@ -364,13 +363,6 @@ local AITab = Window:MakeTab({
     Icon = "rbxassetid://7072720870",  -- Change to your preferred asset id
     PremiumOnly = false
 })
--- Create a tab for UI elements
-local Tab = Window:MakeTab({
-    Name = "UI Elements",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
 
 -- Store the OrionLib toggle reference for Auto Pass Bomb.
 local orionAutoPassToggle = AutomatedTab:AddToggle({
