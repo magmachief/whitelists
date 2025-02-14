@@ -351,20 +351,11 @@ local Window = OrionLib:MakeWindow({
     SaveConfig = true,
     ConfigFolder = "YonMenu_Advanced"
 })
-
--- Create two tabs: one for automated features and one for AI-based settings.
-local AutomatedTab = Window:MakeTab({
-    Name = "Automated",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-local AITab = Window:MakeTab({
-    Name = "AI Based",
-    Icon = "rbxassetid://7072720870",  -- Change to your preferred asset id
-    PremiumOnly = false
-})
+local AutomatedTab = Window:MakeTab({ Name = "Automated", Icon = "rbxassetid://4483345998", PremiumOnly = false })
+local AITab = Window:MakeTab({ Name = "AI Based", Icon = "rbxassetid://7072720870", PremiumOnly = false })
 
 -- Store the OrionLib toggle reference for Auto Pass Bomb.
+local autoPassConnection
 local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
@@ -381,16 +372,14 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
         end
     end
 })
-
-local autoPassConnection
-
--- Additional toggles
+-----------------------------------------------------
+-- FEATURE TOGGLES
+-----------------------------------------------------
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
     Callback = function(value)
         AntiSlipperyEnabled = value
-        applyAntiSlippery(value)
     end
 })
 
@@ -399,7 +388,6 @@ AutomatedTab:AddToggle({
     Default = RemoveHitboxEnabled,
     Callback = function(value)
         RemoveHitboxEnabled = value
-        applyRemoveHitbox(value)
     end
 })
 
@@ -408,11 +396,6 @@ AITab:AddToggle({
     Default = false,
     Callback = function(value)
         AI_AssistanceEnabled = value
-        if AI_AssistanceEnabled then
-            print("AI Assistance enabled.")
-        else
-            print("AI Assistance disabled.")
-        end
     end
 })
 
@@ -449,32 +432,24 @@ AITab:AddSlider({
     end
 })
 
--- New Colorpicker for theme/color selection
 AITab:AddColorpicker({
     Name = "Theme Color",
     Default = Color3.fromRGB(255, 255, 255),
     Callback = function(color)
         print("Selected theme color:", color)
-        -- Optionally update your UI theme:
-        -- changeUITheme({MainColor = color, AccentColor = color, TextColor = color})
     end,
     Flag = "ThemeColor",
     Save = true
 })
 
 OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
 
 -----------------------------------------------------
--- MOBILE TOGGLE BUTTON FOR AUTO PASS BOMB
+-- MOBILE TOGGLE UI FOR AUTO PASS BOMB
 -----------------------------------------------------
 local mobileGui = Instance.new("ScreenGui")
 mobileGui.Name = "MobileToggleGui"
-if gethui then
-    mobileGui.Parent = gethui()
-else
-    mobileGui.Parent = game:GetService("CoreGui")
-end
+mobileGui.Parent = game:GetService("CoreGui")
 
 local autoPassMobileToggle = Instance.new("TextButton")
 autoPassMobileToggle.Name = "AutoPassMobileToggle"
@@ -492,16 +467,14 @@ uicorner.Parent = autoPassMobileToggle
 
 autoPassMobileToggle.MouseButton1Click:Connect(function()
     AutoPassEnabled = not AutoPassEnabled
-    if AutoPassEnabled then
-        autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)  -- Green for ON
-        autoPassMobileToggle.Text = "ON"
-    else
-        autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
-        autoPassMobileToggle.Text = "OFF"
-    end
+    autoPassMobileToggle.BackgroundColor3 = AutoPassEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0) 
+    autoPassMobileToggle.Text = AutoPassEnabled and "ON" or "OFF"
+
     if orionAutoPassToggle and orionAutoPassToggle.Set then
         orionAutoPassToggle:Set(AutoPassEnabled)
     elseif orionAutoPassToggle then
         orionAutoPassToggle.Value = AutoPassEnabled
     end
 end)
+
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
