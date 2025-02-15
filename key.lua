@@ -145,10 +145,10 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local currentSpeed = hrp.Velocity.Magnitude
     local frictionAdjustment
     if bomb then
-        -- Holding bomb: milder, dynamic adjustment
-        frictionAdjustment = math.clamp(0.5 + currentSpeed * 0.001, 0.5, 0.55)
+        -- When holding the bomb, increase friction to reduce slipperiness.
+        frictionAdjustment = math.clamp(0.5 + currentSpeed * 0.001, 0.5, 0.7)
     else
-        -- Not holding bomb: apply stronger anti-slippery if enabled
+        -- Not holding bomb: apply stronger anti-slippery if enabled.
         frictionAdjustment = AntiSlipperyEnabled and math.clamp(0.5 + currentSpeed * 0.001, 0.5, 0.65) or 0.5
     end
     local newProps = PhysicalProperties.new(frictionAdjustment, 0.3, 0.5)
@@ -508,11 +508,8 @@ UITab:AddColorpicker({
 -----------------------------------------------------
 local mobileGui = Instance.new("ScreenGui")
 mobileGui.Name = "MobileToggleGui"
-if gethui then
-    mobileGui.Parent = gethui()
-else
-    mobileGui.Parent = game:GetService("CoreGui")
-end
+-- Parent the mobile GUI to the PlayerGui to ensure it's visible
+mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local autoPassMobileToggle = Instance.new("TextButton")
 autoPassMobileToggle.Name = "AutoPassMobileToggle"
@@ -522,6 +519,7 @@ autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OF
 autoPassMobileToggle.Text = "OFF"
 autoPassMobileToggle.TextScaled = true
 autoPassMobileToggle.Font = Enum.Font.SourceSansBold
+autoPassMobileToggle.ZIndex = 10  -- Ensure it stays on top
 autoPassMobileToggle.Parent = mobileGui
 
 local uicorner = Instance.new("UICorner")
