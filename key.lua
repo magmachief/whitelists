@@ -72,7 +72,6 @@ local function createOrUpdateTargetMarker(player, distance)
     if not body then return end
 
     if currentTargetMarker and currentTargetPlayer == player then
-        -- Update marker text with current distance
         currentTargetMarker:FindFirstChildOfClass("TextLabel").Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
         return
     end
@@ -163,8 +162,7 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Old behavior: rotate directly toward the target’s current position,
--- but adjusted so that the character's Y remains the same (avoiding looking down).
+-- Rotate toward the target, keeping your Y level so you don't look down.
 local function rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
@@ -172,6 +170,7 @@ local function rotateCharacterTowardsTarget(targetPosition)
     if not hrp then return end
     local adjustedTargetPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
     local targetCFrame = CFrame.new(hrp.Position, adjustedTargetPos)
+    -- Use a short tween duration (0.1 sec) for quick rotation.
     local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
     tween:Play()
     return tween
@@ -191,7 +190,6 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
         rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
     end
 
-    -- Central ray
     local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
     if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
         return false
@@ -251,17 +249,17 @@ local function autoPassBombEnhanced()
             end
 
             createOrUpdateTargetMarker(targetPlayer, distance)
-            -- VFX effect: confined around the target.
+            -- Play a confined VFX effect around the target.
             local function playPassVFX(target)
                 if not target or not target.Character then return end
                 local hrp = target.Character:FindFirstChild("HumanoidRootPart")
                 if not hrp then return end
                 local emitter = Instance.new("ParticleEmitter")
-                emitter.Texture = "rbxassetid://258128463"  -- Replace with your preferred VFX texture
-                emitter.Rate = 50                -- Lower rate for confined effect
-                emitter.Lifetime = NumberRange.new(0.3, 0.5)  -- Shorter lifetime
-                emitter.Speed = NumberRange.new(2, 5)         -- Lower speed
-                emitter.VelocitySpread = 30      -- Narrow spread
+                emitter.Texture = "rbxassetid://258128463"  -- Use your preferred VFX texture
+                emitter.Rate = 50
+                emitter.Lifetime = NumberRange.new(0.3, 0.5)
+                emitter.Speed = NumberRange.new(2, 5)
+                emitter.VelocitySpread = 30
                 emitter.Parent = hrp
                 delay(1, function()
                     emitter:Destroy()
@@ -290,29 +288,40 @@ local function autoPassBombEnhanced()
 end
 
 -----------------------------------------------------
--- ANTI-SLIPPERY
+-- SMART ANTI-SLIPPERY / SLIDING PROPERTIES UPDATE
 -----------------------------------------------------
-local function applyAntiSlippery(enabled)
-    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    if enabled then
-        task.spawn(function()
-            while AntiSlipperyEnabled do
-                for _, part in pairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5)
-                    end
-                end
-                task.wait(0.1)
-            end
-        end)
+local function updateSlidingProperties()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local bomb = char:FindFirstChild("Bomb")
+    local newProps
+    if AntiSlipperyEnabled then
+        -- Strong anti-slippery: minimal slide.
+        newProps = PhysicalProperties.new(0.7, 0.3, 0.5)
     else
-        for _, part in pairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CustomPhysicalProperties = PhysicalProperties.new(0.5, 0.3, 0.5)
-            end
+        if bomb then
+            -- Holding the bomb: reduce sliding moderately.
+            newProps = PhysicalProperties.new(0.6, 0.3, 0.5)
+        else
+            -- Default (more slippery).
+            newProps = PhysicalProperties.new(0.5, 0.3, 0.5)
+        end
+    end
+
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CustomPhysicalProperties = newProps
         end
     end
 end
+
+-- Continuously update sliding properties.
+task.spawn(function()
+    while true do
+        updateSlidingProperties()
+        task.wait(0.1)
+    end
+end)
 
 -----------------------------------------------------
 -- REMOVE HITBOX
@@ -337,12 +346,12 @@ end
 -- APPLY FEATURES ON RESPAWN
 -----------------------------------------------------
 LocalPlayer.CharacterAdded:Connect(function(char)
-    applyAntiSlippery(AntiSlipperyEnabled)
+    updateSlidingProperties()  -- Update immediately on spawn.
     applyRemoveHitbox(RemoveHitboxEnabled)
 end)
 
 -----------------------------------------------------
--- ORIONLIB INTERFACE
+-- ORIONLIB INTERFACE (Using Advanced Orion UI Library v2.0)
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
@@ -360,7 +369,7 @@ local AutomatedTab = Window:MakeTab({
 })
 local AITab = Window:MakeTab({
     Name = "AI Based",
-    Icon = "rbxassetid://7072720870",  -- Change to your preferred asset id
+    Icon = "rbxassetid://7072720870",
     PremiumOnly = false
 })
 
@@ -383,16 +392,6 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
 })
 
 local autoPassConnection
-
--- (Other toggles)
-AutomatedTab:AddToggle({
-    Name = "Anti Slippery",
-    Default = AntiSlipperyEnabled,
-    Callback = function(value)
-        AntiSlipperyEnabled = value
-        applyAntiSlippery(value)
-    end
-})
 
 AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
@@ -449,8 +448,26 @@ AITab:AddSlider({
     end
 })
 
-OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Anti Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
+-----------------------------------------------------
+-- EXAMPLE UI ELEMENT: COLORPICKER TO CHANGE MENU MAIN COLOR
+-----------------------------------------------------
+local UITab = Window:MakeTab({
+    Name = "UI Elements",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+UITab:AddColorpicker({
+    Name = "Menu Main Color",
+    Default = Color3.fromRGB(255, 0, 0),
+    Callback = function(color)
+        OrionLib.Themes[OrionLib.SelectedTheme].Main = color
+        -- Call your SetTheme function if needed to update all UI elements.
+        -- For example, if you have a function "SetTheme()", call it here.
+        print("Menu main color updated to:", color)
+    end,
+    Flag = "MenuMainColor",
+    Save = true
+})
 
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS BOMB
@@ -466,8 +483,7 @@ end
 local autoPassMobileToggle = Instance.new("TextButton")
 autoPassMobileToggle.Name = "AutoPassMobileToggle"
 autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
--- Position near the bottom-right; adjust as needed
-autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
+autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)  -- Adjust position as needed
 autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
 autoPassMobileToggle.Text = "OFF"
 autoPassMobileToggle.TextScaled = true
@@ -487,10 +503,15 @@ autoPassMobileToggle.MouseButton1Click:Connect(function()
         autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
         autoPassMobileToggle.Text = "OFF"
     end
-    -- Update the OrionLib toggle to match.
     if orionAutoPassToggle and orionAutoPassToggle.Set then
         orionAutoPassToggle:Set(AutoPassEnabled)
     elseif orionAutoPassToggle then
         orionAutoPassToggle.Value = AutoPassEnabled
     end
 end)
+
+-----------------------------------------------------
+-- INITIALIZE UI
+-----------------------------------------------------
+OrionLib:Init()
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Smart Anti-Slippery, Remove Hitbox, UI Theme Support, and AI Assistance")
