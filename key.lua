@@ -508,19 +508,24 @@ UITab:AddColorpicker({
 -----------------------------------------------------
 local mobileGui = Instance.new("ScreenGui")
 mobileGui.Name = "MobileToggleGui"
--- Parent the mobile GUI to the PlayerGui to ensure it's visible
-mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Parent the mobile GUI to PlayerGui (with extra waiting for safety)
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+mobileGui.Parent = playerGui
+print("MobileToggleGui parented to PlayerGui.")
 
 local autoPassMobileToggle = Instance.new("TextButton")
 autoPassMobileToggle.Name = "AutoPassMobileToggle"
 autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
-autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
+-- Adjusted position: using scale instead so it appears on different resolutions
+autoPassMobileToggle.Position = UDim2.new(0.9, -60, 0.9, -60)
 autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
 autoPassMobileToggle.Text = "OFF"
 autoPassMobileToggle.TextScaled = true
 autoPassMobileToggle.Font = Enum.Font.SourceSansBold
-autoPassMobileToggle.ZIndex = 10  -- Ensure it stays on top
+autoPassMobileToggle.ZIndex = 100  -- High ZIndex to be on top
 autoPassMobileToggle.Parent = mobileGui
+print("Mobile toggle button created.")
 
 local uicorner = Instance.new("UICorner")
 uicorner.CornerRadius = UDim.new(1, 0)
