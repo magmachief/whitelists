@@ -184,6 +184,7 @@ local aiMessageCooldown = 5             -- Seconds between AI notifications
 
 local raySpreadAngle = 10               -- Angle for multiple raycasts (degrees)
 local numRaycasts = 3                   -- Number of rays (prefer odd numbers)
+
 -----------------------------------------------------
 -- VISUAL TARGET MARKER (for Auto Pass Bomb)
 -----------------------------------------------------
@@ -470,7 +471,6 @@ UITab:AddColorpicker({
     Default = Color3.fromRGB(255, 0, 0),
     Callback = function(color)
         OrionLib.Themes[OrionLib.SelectedTheme].Main = color
-        -- Update theme using our changeUITheme function if needed.
         print("Menu main color updated to:", color)
     end,
     Flag = "MenuMainColor",
@@ -496,40 +496,55 @@ print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Dynamic Fri
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS BOMB
 -----------------------------------------------------
--- Updated mobile GUI: Parent to PlayerGui and set high ZIndex for visibility.
-local mobileGui = Instance.new("ScreenGui")
-mobileGui.Name = "MobileToggleGui"
-mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+-- Function to create the mobile toggle persistently.
+local function createMobileToggle()
+    local mobileGui = Instance.new("ScreenGui")
+    mobileGui.Name = "MobileToggleGui"
+    mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    
+    local autoPassMobileToggle = Instance.new("TextButton")
+    autoPassMobileToggle.Name = "AutoPassMobileToggle"
+    autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
+    autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)  -- Adjust as needed
+    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
+    autoPassMobileToggle.Text = "OFF"
+    autoPassMobileToggle.TextScaled = true
+    autoPassMobileToggle.Font = Enum.Font.SourceSansBold
+    autoPassMobileToggle.ZIndex = 100  -- Ensure it shows on top
+    autoPassMobileToggle.Parent = mobileGui
 
-local autoPassMobileToggle = Instance.new("TextButton")
-autoPassMobileToggle.Name = "AutoPassMobileToggle"
-autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
--- Position near the bottom-right; adjust if necessary.
-autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
-autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
-autoPassMobileToggle.Text = "OFF"
-autoPassMobileToggle.TextScaled = true
-autoPassMobileToggle.Font = Enum.Font.SourceSansBold
-autoPassMobileToggle.ZIndex = 100  -- High ZIndex to ensure it shows on top.
-autoPassMobileToggle.Parent = mobileGui
+    local uicorner = Instance.new("UICorner")
+    uicorner.CornerRadius = UDim.new(1, 0)
+    uicorner.Parent = autoPassMobileToggle
 
-local uicorner = Instance.new("UICorner")
-uicorner.CornerRadius = UDim.new(1, 0)
-uicorner.Parent = autoPassMobileToggle
+    autoPassMobileToggle.MouseButton1Click:Connect(function()
+        AutoPassEnabled = not AutoPassEnabled
+        if AutoPassEnabled then
+            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)  -- Green for ON
+            autoPassMobileToggle.Text = "ON"
+        else
+            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
+            autoPassMobileToggle.Text = "OFF"
+        end
+        if orionAutoPassToggle and orionAutoPassToggle.Set then
+            orionAutoPassToggle:Set(AutoPassEnabled)
+        elseif orionAutoPassToggle then
+            orionAutoPassToggle.Value = AutoPassEnabled
+        end
+    end)
+    
+    return mobileGui, autoPassMobileToggle
+end
 
-autoPassMobileToggle.MouseButton1Click:Connect(function()
-    AutoPassEnabled = not AutoPassEnabled
-    if AutoPassEnabled then
-        autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)  -- Green for ON
-        autoPassMobileToggle.Text = "ON"
-    else
-        autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
-        autoPassMobileToggle.Text = "OFF"
-    end
-    -- Update the OrionLib toggle to match.
-    if orionAutoPassToggle and orionAutoPassToggle.Set then
-        orionAutoPassToggle:Set(AutoPassEnabled)
-    elseif orionAutoPassToggle then
-        orionAutoPassToggle.Value = AutoPassEnabled
+local mobileGui, autoPassMobileToggle = createMobileToggle()
+
+-- Monitor for removal of the mobile GUI and re-create if needed.
+LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
+    if child.Name == "MobileToggleGui" then
+        wait(1)
+        if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
+            mobileGui, autoPassMobileToggle = createMobileToggle()
+            print("Recreated mobile toggle")
+        end
     end
 end)
