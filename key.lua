@@ -372,7 +372,6 @@ local AITab = Window:MakeTab({
     Icon = "rbxassetid://7072720870",
     PremiumOnly = false
 })
-
 -- Store the OrionLib toggle reference for Auto Pass Bomb.
 local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
@@ -392,7 +391,14 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
 })
 
 local autoPassConnection
-
+AutomatedTab:AddToggle({
+    Name = "Anti Slippery",
+    Default = AntiSlipperyEnabled,
+    Callback = function(value)
+        AntiSlipperyEnabled = value
+        applyAntiSlippery(value)
+    end
+})
 AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
     Default = RemoveHitboxEnabled,
