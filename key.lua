@@ -480,7 +480,21 @@ UITab:AddColorpicker({
     Flag = "MenuMainColor",
     Save = true
 })
+-----------------------------------------------------
+-- CONTINUOUS DYNAMIC FRICTION UPDATE
+-----------------------------------------------------
+task.spawn(function()
+    while true do
+        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+        task.wait(0.1)
+    end
+end)
 
+-----------------------------------------------------
+-- INITIALIZE UI
+-----------------------------------------------------
+OrionLib:Init()
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Dynamic Friction, Remove Hitbox, UI Theme Support, and AI Assistance")
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS BOMB
 -----------------------------------------------------
@@ -524,19 +538,3 @@ autoPassMobileToggle.MouseButton1Click:Connect(function()
     end
 end)
 
-
------------------------------------------------------
--- CONTINUOUS DYNAMIC FRICTION UPDATE
------------------------------------------------------
-task.spawn(function()
-    while true do
-        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-        task.wait(0.1)
-    end
-end)
-
------------------------------------------------------
--- INITIALIZE UI
------------------------------------------------------
-OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Dynamic Friction, Remove Hitbox, UI Theme Support, and AI Assistance")
