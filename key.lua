@@ -13,18 +13,18 @@ local LocalPlayer = Players.LocalPlayer
 -- CONFIGURATION & VARIABLES
 -----------------------------------------------------
 -- Auto Pass Bomb configuration
-local bombPassDistance = 10             -- Maximum pass distance (in studs)
-local AutoPassEnabled = false           -- Toggle auto‑pass bomb behavior
+local bombPassDistance = 10             -- Maximum pass distance for bomb passing (studs)
+local AutoPassEnabled = false           -- Toggle auto-pass bomb behavior
 
--- Advanced line‑of‑sight settings
+-- Advanced line-of-sight settings
 local raySpreadAngle = 10               -- Spread angle (in degrees) for multiple raycasts
-local numRaycasts = 3                   -- Number of rays to cast for line‑of‑sight (odd number recommended)
+local numRaycasts = 3                   -- Number of rays to cast for line-of-sight (odd number recommended)
 
 -- Global features and notifications
-local AntiSlipperyEnabled = false       -- Toggle anti‑slippery feature
+local AntiSlipperyEnabled = false       -- Toggle smart anti-slippery feature
 local RemoveHitboxEnabled = false       -- Toggle hitbox removal
 local AI_AssistanceEnabled = false      -- Toggle AI Assistance notifications
-local pathfindingSpeed = 16             -- Used for auto‑pass bomb target selection calculations
+local pathfindingSpeed = 16             -- Used for auto-pass bomb target selection calculations
 local lastAIMessageTime = 0
 local aiMessageCooldown = 5             -- Seconds between AI notifications
 
@@ -115,11 +115,15 @@ end
 local function getOptimalPlayer()
     local bestPlayer = nil
     local bestTravelTime = math.huge
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if player.Character:FindFirstChild("Bomb") then continue end
+            if player.Character:FindFirstChild("Bomb") then
+                continue
+            end
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).magnitude
             if distance <= bombPassDistance then
@@ -137,11 +141,15 @@ end
 local function getClosestPlayer()
     local closestPlayer = nil
     local shortestDistance = bombPassDistance
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if player.Character:FindFirstChild("Bomb") then continue end
+            if player.Character:FindFirstChild("Bomb") then
+                continue
+            end
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).magnitude
             if distance < shortestDistance then
@@ -153,7 +161,7 @@ local function getClosestPlayer()
     return closestPlayer
 end
 
--- Rotate toward the target’s current position, keeping your Y level so you don't look down.
+-- Rotate toward the target’s current position while keeping your Y level constant.
 local function rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
@@ -245,7 +253,7 @@ local function autoPassBombEnhanced()
                 local hrp = target.Character:FindFirstChild("HumanoidRootPart")
                 if not hrp then return end
                 local emitter = Instance.new("ParticleEmitter")
-                emitter.Texture = "rbxassetid://258128463"  -- Use your preferred VFX texture
+                emitter.Texture = "rbxassetid://258128463"  -- Change to your preferred VFX texture
                 emitter.Rate = 50
                 emitter.Lifetime = NumberRange.new(0.3, 0.5)
                 emitter.Speed = NumberRange.new(2, 5)
@@ -285,14 +293,18 @@ local function updateSlidingProperties()
     local bomb = char:FindFirstChild("Bomb")
     local newProps
     if AntiSlipperyEnabled then
-        newProps = PhysicalProperties.new(0.7, 0.3, 0.5)  -- Very little sliding
+        -- Strong anti-slippery: very little sliding.
+        newProps = PhysicalProperties.new(0.7, 0.3, 0.5)
     else
         if bomb then
-            newProps = PhysicalProperties.new(0.6, 0.3, 0.5)  -- Moderate sliding when holding the bomb
+            -- Holding the bomb: moderate sliding reduction.
+            newProps = PhysicalProperties.new(0.6, 0.3, 0.5)
         else
-            newProps = PhysicalProperties.new(0.5, 0.3, 0.5)  -- Default (more slippery)
+            -- Default (more slippery).
+            newProps = PhysicalProperties.new(0.5, 0.3, 0.5)
         end
     end
+
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CustomPhysicalProperties = newProps
@@ -300,6 +312,7 @@ local function updateSlidingProperties()
     end
 end
 
+-- Continuously update sliding properties.
 task.spawn(function()
     while true do
         updateSlidingProperties()
@@ -332,20 +345,18 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 -----------------------------------------------------
--- ORIONLIB INTERFACE
+-- ORIONLIB INTERFACE (Using Advanced Orion UI Library v2.0)
 -----------------------------------------------------
--- Load OrionLib (Transparent version)
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
     HidePremium = false,
     SaveConfig = true,
     ConfigFolder = "YonMenu_Advanced",
-    -- To make the Show Icon draggable, set ShowIcon to true.
-    ShowIcon = true
+    ShowIcon = true  -- Set to true to enable dragging the menu icon
 })
 
--- Create two tabs: one for automated features and one for AI‑based settings.
+-- Create two tabs: one for automated features and one for AI-based settings.
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
     Icon = "rbxassetid://4483345998",
@@ -376,12 +387,13 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
 })
 local autoPassConnection
 
+-- Toggle for smart anti‑slippery is now included in the menu:
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
     Callback = function(value)
         AntiSlipperyEnabled = value
-        applyAntiSlippery(value)
+        updateSlidingProperties()
     end
 })
 
@@ -453,7 +465,7 @@ UITab:AddColorpicker({
     Default = Color3.fromRGB(255, 0, 0),
     Callback = function(color)
         OrionLib.Themes[OrionLib.SelectedTheme].Main = color
-        SetTheme()
+        SetTheme()  -- Update all UI elements to reflect the new color
         print("Menu main color updated to:", color)
     end,
     Flag = "MenuMainColor",
