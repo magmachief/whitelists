@@ -142,15 +142,26 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    local currentSpeed = hrp.Velocity.Magnitude
-    local frictionAdjustment
+    local frictionAdjustment = 0.5  -- default friction
+
     if bomb then
-        -- When holding the bomb, increase friction to reduce slipperiness.
-        frictionAdjustment = math.clamp(0.5 + currentSpeed * 0.001, 0.5, 0.7)
+        -- When holding the bomb, adjust friction based on how aligned your movement is with your facing.
+        local velocity = hrp.Velocity
+        local horizontalVel = Vector3.new(velocity.X, 0, velocity.Z)
+        local forward = hrp.CFrame.LookVector
+        local alignment = 1  -- assume perfect alignment by default
+        if horizontalVel.Magnitude > 0 then
+            alignment = horizontalVel:Dot(forward) / horizontalVel.Magnitude
+        end
+        -- Misalignment is 0 if you're moving straight (forward/backward) and 1 if moving completely sideways.
+        local misalignment = 1 - math.abs(alignment)
+        -- Increase friction proportionally (0.5 to 0.7) when misaligned.
+        frictionAdjustment = 0.5 + misalignment * 0.2
     else
-        -- Not holding bomb: apply stronger anti-slippery if enabled.
-        frictionAdjustment = AntiSlipperyEnabled and math.clamp(0.5 + currentSpeed * 0.001, 0.5, 0.65) or 0.5
+        -- When not holding the bomb, use the standard dynamic friction if anti-slippery is enabled.
+        frictionAdjustment = AntiSlipperyEnabled and math.clamp(0.5 + hrp.Velocity.Magnitude * 0.001, 0.5, 0.65) or 0.5
     end
+
     local newProps = PhysicalProperties.new(frictionAdjustment, 0.3, 0.5)
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
@@ -173,39 +184,6 @@ local aiMessageCooldown = 5             -- Seconds between AI notifications
 
 local raySpreadAngle = 10               -- Angle for multiple raycasts (degrees)
 local numRaycasts = 3                   -- Number of rays (prefer odd numbers)
-
------------------------------------------------------
--- UI THEMES (for OrionLib)
------------------------------------------------------
-local uiThemes = {
-    Dark = {
-        MainColor = Color3.fromRGB(30, 30, 30),
-        AccentColor = Color3.fromRGB(255, 0, 0),
-        TextColor = Color3.fromRGB(255, 255, 255)
-    },
-    Light = {
-        MainColor = Color3.fromRGB(255, 255, 255),
-        AccentColor = Color3.fromRGB(255, 0, 0),
-        TextColor = Color3.fromRGB(0, 0, 0)
-    },
-    Red = {
-        MainColor = Color3.fromRGB(150, 0, 0),
-        AccentColor = Color3.fromRGB(255, 255, 255),
-        TextColor = Color3.fromRGB(255, 255, 255)
-    }
-}
-
-local function changeUITheme(theme)
-    if OrionLib.ChangeTheme then
-        OrionLib:ChangeTheme(theme)
-    else
-        OrionLib.Config = OrionLib.Config or {}
-        OrionLib.Config.MainColor = theme.MainColor
-        OrionLib.Config.AccentColor = theme.AccentColor
-        OrionLib.Config.TextColor = theme.TextColor
-    end
-end
-
 -----------------------------------------------------
 -- VISUAL TARGET MARKER (for Auto Pass Bomb)
 -----------------------------------------------------
@@ -491,7 +469,7 @@ UITab:AddColorpicker({
     Name = "Menu Main Color",
     Default = Color3.fromRGB(255, 0, 0),
     Callback = function(color)
-        OrionLib.Themes[OrionLib.SelectedTheme].Main = color
+        OrionLib.AddColorpicker[OrionLib.SelectedTheme].Main = color
         changeUITheme({
             MainColor = color,
             AccentColor = OrionLib.Themes[OrionLib.SelectedTheme].Accent,
@@ -508,24 +486,22 @@ UITab:AddColorpicker({
 -----------------------------------------------------
 local mobileGui = Instance.new("ScreenGui")
 mobileGui.Name = "MobileToggleGui"
-
--- Parent the mobile GUI to PlayerGui (with extra waiting for safety)
-local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-mobileGui.Parent = playerGui
-print("MobileToggleGui parented to PlayerGui.")
+if gethui then
+    mobileGui.Parent = gethui()
+else
+    mobileGui.Parent = game:GetService("CoreGui")
+end
 
 local autoPassMobileToggle = Instance.new("TextButton")
 autoPassMobileToggle.Name = "AutoPassMobileToggle"
 autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
--- Adjusted position: using scale instead so it appears on different resolutions
-autoPassMobileToggle.Position = UDim2.new(0.9, -60, 0.9, -60)
+-- Position near the bottom-right; adjust as needed
+autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
 autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
 autoPassMobileToggle.Text = "OFF"
 autoPassMobileToggle.TextScaled = true
 autoPassMobileToggle.Font = Enum.Font.SourceSansBold
-autoPassMobileToggle.ZIndex = 100  -- High ZIndex to be on top
 autoPassMobileToggle.Parent = mobileGui
-print("Mobile toggle button created.")
 
 local uicorner = Instance.new("UICorner")
 uicorner.CornerRadius = UDim.new(1, 0)
@@ -540,12 +516,14 @@ autoPassMobileToggle.MouseButton1Click:Connect(function()
         autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
         autoPassMobileToggle.Text = "OFF"
     end
+    -- Update the OrionLib toggle to match.
     if orionAutoPassToggle and orionAutoPassToggle.Set then
         orionAutoPassToggle:Set(AutoPassEnabled)
     elseif orionAutoPassToggle then
         orionAutoPassToggle.Value = AutoPassEnabled
     end
 end)
+
 
 -----------------------------------------------------
 -- CONTINUOUS DYNAMIC FRICTION UPDATE
