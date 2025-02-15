@@ -158,7 +158,7 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
         -- Increase friction proportionally (0.5 to 0.7) when misaligned.
         frictionAdjustment = 0.5 + misalignment * 0.2
     else
-        -- When not holding the bomb, use the standard dynamic friction if anti-slippery is enabled.
+        -- When not holding the bomb, use standard dynamic friction if anti-slippery is enabled.
         frictionAdjustment = AntiSlipperyEnabled and math.clamp(0.5 + hrp.Velocity.Magnitude * 0.001, 0.5, 0.65) or 0.5
     end
 
@@ -469,17 +469,14 @@ UITab:AddColorpicker({
     Name = "Menu Main Color",
     Default = Color3.fromRGB(255, 0, 0),
     Callback = function(color)
-        OrionLib.AddColorpicker[OrionLib.SelectedTheme].Main = color
-        changeUITheme({
-            MainColor = color,
-            AccentColor = OrionLib.Themes[OrionLib.SelectedTheme].Accent,
-            TextColor = OrionLib.Themes[OrionLib.SelectedTheme].Text
-        })
+        OrionLib.Themes[OrionLib.SelectedTheme].Main = color
+        -- Update theme using our changeUITheme function if needed.
         print("Menu main color updated to:", color)
     end,
     Flag = "MenuMainColor",
     Save = true
 })
+
 -----------------------------------------------------
 -- CONTINUOUS DYNAMIC FRICTION UPDATE
 -----------------------------------------------------
@@ -495,26 +492,25 @@ end)
 -----------------------------------------------------
 OrionLib:Init()
 print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Dynamic Friction, Remove Hitbox, UI Theme Support, and AI Assistance")
+
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS BOMB
 -----------------------------------------------------
+-- Updated mobile GUI: Parent to PlayerGui and set high ZIndex for visibility.
 local mobileGui = Instance.new("ScreenGui")
 mobileGui.Name = "MobileToggleGui"
-if gethui then
-    mobileGui.Parent = gethui()
-else
-    mobileGui.Parent = game:GetService("CoreGui")
-end
+mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local autoPassMobileToggle = Instance.new("TextButton")
 autoPassMobileToggle.Name = "AutoPassMobileToggle"
 autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
--- Position near the bottom-right; adjust as needed
+-- Position near the bottom-right; adjust if necessary.
 autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
 autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
 autoPassMobileToggle.Text = "OFF"
 autoPassMobileToggle.TextScaled = true
 autoPassMobileToggle.Font = Enum.Font.SourceSansBold
+autoPassMobileToggle.ZIndex = 100  -- High ZIndex to ensure it shows on top.
 autoPassMobileToggle.Parent = mobileGui
 
 local uicorner = Instance.new("UICorner")
@@ -537,4 +533,3 @@ autoPassMobileToggle.MouseButton1Click:Connect(function()
         orionAutoPassToggle.Value = AutoPassEnabled
     end
 end)
-
