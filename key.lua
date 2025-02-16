@@ -7,6 +7,8 @@ local TweenService = game:GetService("TweenService")
 local PathfindingService = game:GetService("PathfindingService")
 local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
+local ContextActionService = game:GetService("ContextActionService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 -----------------------------------------------------
@@ -494,9 +496,76 @@ OrionLib:Init()
 print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Dynamic Friction, Remove Hitbox, UI Theme Support, and AI Assistance")
 
 -----------------------------------------------------
--- MOBILE TOGGLE BUTTON FOR AUTO PASS BOMB
+-- MOBILE TOGGLE BUTTONS FOR AUTO PASS BOMB & SHIFTLOCK
 -----------------------------------------------------
--- Function to create the mobile toggle persistently.
+-- Function to create the mobile toggle GUI with two buttons.
+local ShiftLockEnabled = false
+
+local function createShiftLockToggle(parent)
+    local shiftLockButton = Instance.new("TextButton")
+    shiftLockButton.Name = "ShiftLockToggle"
+    shiftLockButton.Size = UDim2.new(0, 50, 0, 50)
+    -- Position above the auto pass toggle; auto pass is at (1, -70, 1, -110), so shiftlock at (1, -70, 1, -170)
+    shiftLockButton.Position = UDim2.new(1, -70, 1, -170)
+    shiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red for OFF
+    shiftLockButton.Text = "SL OFF"
+    shiftLockButton.TextScaled = true
+    shiftLockButton.Font = Enum.Font.SourceSansBold
+    shiftLockButton.ZIndex = 100
+    shiftLockButton.Parent = parent
+
+    local shiftLockUICorner = Instance.new("UICorner")
+    shiftLockUICorner.CornerRadius = UDim.new(1, 0)
+    shiftLockUICorner.Parent = shiftLockButton
+
+    shiftLockButton.MouseButton1Click:Connect(function()
+        ToggleShiftLock()
+    end)
+    
+    return shiftLockButton
+end
+
+-- ShiftLock logic function. This toggles shiftlock by changing the player's mouse behavior and camera offsets.
+function ToggleShiftLock()
+    if not Active then
+        Active = RunService.RenderStepped:Connect(function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.Humanoid.AutoRotate = false
+                ShiftLockButton.Image = States.On
+                ShiftlockCursor.Visible = true
+                LocalPlayer.Character.HumanoidRootPart.CFrame =
+                    CFrame.new(
+                        LocalPlayer.Character.HumanoidRootPart.Position,
+                        Vector3.new(
+                            Workspace.CurrentCamera.CFrame.LookVector.X * MaxLength,
+                            LocalPlayer.Character.HumanoidRootPart.Position.Y,
+                            Workspace.CurrentCamera.CFrame.LookVector.Z * MaxLength
+                        )
+                    )
+                Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * EnabledOffset
+                Workspace.CurrentCamera.Focus =
+                    CFrame.fromMatrix(
+                        Workspace.CurrentCamera.Focus.Position,
+                        Workspace.CurrentCamera.CFrame.RightVector,
+                        Workspace.CurrentCamera.CFrame.UpVector
+                    ) * EnabledOffset
+            end
+        end)
+    else
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.AutoRotate = true
+        end
+        ShiftLockButton.Image = States.Off
+        Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * DisabledOffset
+        ShiftlockCursor.Visible = false
+        pcall(function()
+            Active:Disconnect()
+            Active = nil
+        end)
+    end
+end
+
+-- Create a ScreenGui for mobile toggles
 local function createMobileToggle()
     local mobileGui = Instance.new("ScreenGui")
     mobileGui.Name = "MobileToggleGui"
@@ -533,18 +602,79 @@ local function createMobileToggle()
         end
     end)
     
-    return mobileGui, autoPassMobileToggle
+    -- Create the shiftlock toggle above the auto pass toggle.
+    local shiftLockToggle = createShiftLockToggle(mobileGui)
+    
+    return mobileGui, autoPassMobileToggle, shiftLockToggle
 end
 
-local mobileGui, autoPassMobileToggle = createMobileToggle()
+local mobileGui, autoPassMobileToggle, shiftLockToggle = createMobileToggle()
 
 -- Monitor for removal of the mobile GUI and re-create if needed.
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
     if child.Name == "MobileToggleGui" then
         wait(1)
         if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
-            mobileGui, autoPassMobileToggle = createMobileToggle()
-            print("Recreated mobile toggle")
+            mobileGui, autoPassMobileToggle, shiftLockToggle = createMobileToggle()
+            print("Recreated mobile toggle GUI")
         end
     end
 end)
+
+-----------------------------------------------------
+-- SHIFTLOCK GUI (Standalone CoreGui-based)
+-----------------------------------------------------
+local ShiftLockScreenGui = Instance.new("ScreenGui")
+local ShiftLockButton = Instance.new("ImageButton")
+local ShiftlockCursor = Instance.new("ImageLabel")
+local CoreGui = game:GetService("CoreGui")
+local States = {
+    Off = "rbxasset://textures/ui/mouseLock_off@2x.png",
+    On = "rbxasset://textures/ui/mouseLock_on@2x.png",
+    Lock = "rbxasset://textures/MouseLockedCursor.png",
+    Lock2 = "rbxasset://SystemCursors/Cross"
+}
+local MaxLength = 900000
+local EnabledOffset = CFrame.new(1.7, 0, 0)
+local DisabledOffset = CFrame.new(-1.7, 0, 0)
+-- 'Active' is already used in our ToggleShiftLock function
+
+ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
+ShiftLockScreenGui.Parent = CoreGui
+ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ShiftLockScreenGui.ResetOnSpawn = false
+
+ShiftLockButton.Parent = ShiftLockScreenGui
+ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ShiftLockButton.BackgroundTransparency = 1
+ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0)
+ShiftLockButton.Size = UDim2.new(0.0636147112, 0, 0.0661305636, 0)
+ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
+ShiftLockButton.Image = States.Off
+
+ShiftlockCursor.Name = "Shiftlock Cursor"
+ShiftlockCursor.Parent = ShiftLockScreenGui
+ShiftlockCursor.Image = States.Lock
+ShiftlockCursor.Size = UDim2.new(0.03, 0, 0.03, 0)
+ShiftlockCursor.Position = UDim2.new(0.5, 0, 0.5, 0)
+ShiftlockCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX
+ShiftlockCursor.BackgroundTransparency = 1
+ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+ShiftlockCursor.Visible = false
+
+-- Bind the ShiftLockButton click to ToggleShiftLock
+ShiftLockButton.MouseButton1Click:Connect(function()
+    ToggleShiftLock()
+end)
+
+-- Bind a context action for shift lock (using, for example, the "ButtonR2" key; adjust as desired)
+local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(actionName, inputState, inputObject)
+    if inputState == Enum.UserInputState.Begin then
+        ToggleShiftLock()
+    end
+    return Enum.ContextActionResult.Sink
+end, false, Enum.KeyCode.ButtonR2)
+ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
+
+return {} and ShiftLockAction
