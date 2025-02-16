@@ -601,26 +601,6 @@ local function createMobileToggle()
             orionAutoPassToggle.Value = AutoPassEnabled
         end
     end)
-    
-    -- Create the shiftlock toggle above the auto pass toggle.
-    local shiftLockToggle = createShiftLockToggle(mobileGui)
-    
-    return mobileGui, autoPassMobileToggle, shiftLockToggle
-end
-
-local mobileGui, autoPassMobileToggle, shiftLockToggle = createMobileToggle()
-
--- Monitor for removal of the mobile GUI and re-create if needed.
-LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
-    if child.Name == "MobileToggleGui" then
-        wait(1)
-        if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
-            mobileGui, autoPassMobileToggle, shiftLockToggle = createMobileToggle()
-            print("Recreated mobile toggle GUI")
-        end
-    end
-end)
-
 -----------------------------------------------------
 -- SHIFTLOCK GUI (Standalone CoreGui-based)
 -----------------------------------------------------
