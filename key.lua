@@ -1,3 +1,7 @@
+--// AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
+--// This local script assumes it runs in the context of the player's character (e.g., StarterPlayerScripts).
+--// It will assist the player by suggesting or performing bomb passes and dodging incoming bombs.
+
 -----------------------------------------------------
 -- SERVICES
 -----------------------------------------------------
