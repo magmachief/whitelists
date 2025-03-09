@@ -1,6 +1,5 @@
 --// Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
---// Fully Automatic Mode with separate toggles for AI Auto Pass, Manual Auto Pass, Auto Dodge, and Anti Slippery.
---// This version does NOT auto-teleport you if you fall off the map.
+--// Final version with fallback to closest player, toggles in the menu, and shiftlock included.
 
 -----------------------------------------------------
 -- SERVICES
@@ -8,434 +7,457 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local PathfindingService = game:GetService("PathfindingService")
-local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
+local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 
 -----------------------------------------------------
--- LOCAL PLAYER SETUP
+-- CHARACTER SETUP
 -----------------------------------------------------
 local CHAR = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HUMANOID = CHAR:WaitForChild("Humanoid")
 local HRP = CHAR:WaitForChild("HumanoidRootPart")
 
 -----------------------------------------------------
--- CONFIGURATION VARIABLES
+-- MODULES
 -----------------------------------------------------
-local PASS_DISTANCE = 15           -- Maximum range for passing the bomb
-local DODGE_DISTANCE = 12          -- Distance to trigger dodge
-local DODGE_COOLDOWN = 1.5         -- Time between dodge maneuvers
-local THREAT_CHECK_INTERVAL = 0.1  -- Seconds between threat scans
-local PASS_CHECK_INTERVAL = 0.2    -- Seconds between target reevaluations
-local MAX_PREDICTION_TIME = 0.5    -- Prediction time for target movement
-local BEZIER_RESOLUTION = 20       -- Points on predicted pass path
-
--- AI decision thresholds (menu adjustable)
-local AI_DodgeThreshold = 0.5      -- Dot product threshold to trigger dodge
-local AI_PassDistanceThreshold = 5 -- If target is closer than this, pass immediately
-
-local INITIAL_BOMB_TIMER = 15      -- Bomb timer countdown
-
------------------------------------------------------
--- TOGGLE VARIABLES (Set via OrionLib Menu)
------------------------------------------------------
-local AIAutoPassEnabled = true     -- AI Auto Pass enabled
-local ManualAutoPassEnabled = false-- Manual Auto Pass toggle (separate)
-local AutoDodgeEnabled = true      -- Auto Dodge enabled
-local AntiSlipperyEnabled = false  -- When enabled with AI Auto Pass, friction is forced normal
-
------------------------------------------------------
--- OTHER VARIABLES
------------------------------------------------------
-local pathfindingSpeed = 16
-local lastAIMessageTime = 0
-local aiMessageCooldown = 5
-
-local raySpreadAngle = 10          -- for line-of-sight raycasts
-local numRaycasts = 3
-
------------------------------------------------------
--- PERSISTENT LEARNING STORAGE
------------------------------------------------------
-local playerStats = {}  -- keyed by UserId
-
------------------------------------------------------
--- HUD UI ELEMENTS
------------------------------------------------------
-local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
-screenGui.Name = "BombAI_HUD"
-
-local timerLabel = Instance.new("TextLabel", screenGui)
-timerLabel.Size = UDim2.new(0,200,0,50)
-timerLabel.Position = UDim2.new(0.5, -100, 0.1, 0)
-timerLabel.BackgroundTransparency = 1
-timerLabel.TextScaled = true
-timerLabel.Font = Enum.Font.SourceSansBold
-timerLabel.TextColor3 = Color3.new(0,1,0)
-timerLabel.Visible = false
-
-local targetHighlight = Instance.new("Highlight", Workspace)
-targetHighlight.Enabled = false
-targetHighlight.FillColor = Color3.new(0,1,0)
-targetHighlight.OutlineColor = Color3.new(0,1,0)
-targetHighlight.FillTransparency = 1
-targetHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-
-local warningLabel = Instance.new("TextLabel", screenGui)
-warningLabel.Size = UDim2.new(0,300,0,50)
-warningLabel.Position = UDim2.new(0.5, -150, 0.2, 0)
-warningLabel.BackgroundTransparency = 0.5
-warningLabel.BackgroundColor3 = Color3.new(1,0,0)
-warningLabel.TextScaled = true
-warningLabel.Font = Enum.Font.ArialBold
-warningLabel.TextColor3 = Color3.new(1,1,1)
-warningLabel.Text = ">> INCOMING BOMB <<"
-warningLabel.Visible = false
-
-local dodgeArrow = Instance.new("BillboardGui", screenGui)
-dodgeArrow.Name = "DodgeArrow"
-dodgeArrow.Size = UDim2.new(0,50,0,50)
-dodgeArrow.StudsOffset = Vector3.new(0,3,0)
-dodgeArrow.AlwaysOnTop = true
-dodgeArrow.Enabled = false
-local arrowImg = Instance.new("ImageLabel", dodgeArrow)
-arrowImg.Size = UDim2.new(1,0,1,0)
-arrowImg.BackgroundTransparency = 1
-arrowImg.Image = "rbxassetid://12345678"  -- Replace with your arrow asset ID
-arrowImg.ImageColor3 = Color3.new(1,1,0)
-
-local bezierPathGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
-bezierPathGui.Name = "PassPathViz"
-local pathFrame = Instance.new("Frame", bezierPathGui)
-pathFrame.BackgroundTransparency = 1
-pathFrame.Size = UDim2.new(1,0,1,0)
-
------------------------------------------------------
--- STATE VARIABLES
------------------------------------------------------
-local hasBomb = false
-local currentBomb = nil
-local currentTarget = nil
-local bombTimer = 0
-
------------------------------------------------------
--- UTILITY FUNCTIONS
------------------------------------------------------
-local function getDistSq(pos1, pos2)
-    local dx = pos1.X - pos2.X
-    local dy = pos1.Y - pos2.Y
-    local dz = pos1.Z - pos2.Z
-    return dx*dx + dy*dy + dz*dz
+local LoggingModule = {}
+function LoggingModule.logError(err, context)
+    warn("[ERROR] Context: " .. tostring(context) .. " | Error: " .. tostring(err))
 end
-
-local function predictPosition(player, deltaTime)
-    if not player.Character then return nil end
-    local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
-    local humanoid = player.Character:FindFirstChild("Humanoid")
-    if not rootPart or not humanoid then return rootPart and rootPart.Position or nil end
-    local pos = rootPart.Position
-    local moveDir = humanoid.MoveDirection
-    local speed = rootPart.Velocity.Magnitude
-    return pos + (moveDir * speed * deltaTime)
-end
-
-local function hasLineOfSight(origin, targetPosition)
-    local direction = targetPosition - origin
-    local rayResult = Workspace:Raycast(origin, direction)
-    if not rayResult then
-        return true
+function LoggingModule.safeCall(func, context)
+    local success, result = pcall(func)
+    if not success then
+        LoggingModule.logError(result, context)
     end
-    if (rayResult.Position - origin).Magnitude >= direction.Magnitude - 1e-3 then
-        return true
+    return success, result
+end
+
+local TargetingModule = {}
+
+function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
+    local bestPlayer = nil
+    local bestTravelTime = math.huge
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return nil
     end
-    return false
-end
-
-local function getQuadraticBezierPoint(p0, p1, p2, t)
-    local a = p0:Lerp(p1, t)
-    local b = p1:Lerp(p2, t)
-    return a:Lerp(b, t)
-end
-
-local function drawPassPath(startPos, controlPos, endPos)
-    for _, child in pairs(pathFrame:GetChildren()) do child:Destroy() end
-    for i = 0, BEZIER_RESOLUTION do
-        local t = i / BEZIER_RESOLUTION
-        local point = getQuadraticBezierPoint(startPos, controlPos, endPos, t)
-        local dot = Instance.new("Frame", pathFrame)
-        dot.BackgroundColor3 = Color3.new(0,1,0)
-        dot.BorderSizePixel = 0
-        dot.Size = UDim2.new(0, 5, 0, 5)
-        local screenPoint, onScreen = Workspace.CurrentCamera:WorldToViewportPoint(point)
-        if onScreen then
-            dot.Position = UDim2.new(0, screenPoint.X, 0, screenPoint.Y)
-        end
-        dot.AnchorPoint = Vector2.new(0.5, 0.5)
-        game:GetService("Debris"):AddItem(dot, 1)
-    end
-end
-
------------------------------------------------------
--- TARGET SELECTION & BOMB PASSING FUNCTIONS
------------------------------------------------------
-local function selectBestTarget()
-    local bestTarget = nil
-    local bestScore = math.huge  -- using distance as score (lower is better)
-    local myPos = HRP.Position
-
-    for _, player in ipairs(Players:GetPlayers()) do
+    local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+    for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if player.Character:FindFirstChild("Bomb") or player.Character:FindFirstChild("BombTool") then
+            -- skip if they have a bomb
+            if player.Character:FindFirstChild("Bomb") then
                 continue
             end
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
-            if distance < PASS_DISTANCE and distance < bestScore then
-                bestScore = distance
-                bestTarget = player
+            if distance <= bombPassDistance then
+                local travelTime = distance / pathfindingSpeed
+                if travelTime < bestTravelTime then
+                    bestTravelTime = travelTime
+                    bestPlayer = player
+                end
             end
         end
     end
-    return bestTarget
+    return bestPlayer
 end
 
-local function passBombTo(targetPlayer)
-    if not targetPlayer or not targetPlayer.Character then return end
-    print("[AI] Passing bomb to:", targetPlayer.Name)
-    local bombEvent = currentBomb and currentBomb:FindFirstChild("RemoteEvent")
-    if bombEvent then
-        bombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("HumanoidRootPart"))
-    else
-        currentBomb.Parent = targetPlayer.Character
+function TargetingModule.getClosestPlayer(bombPassDistance)
+    local closestPlayer = nil
+    local shortestDistance = bombPassDistance
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return nil
     end
+    local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            -- skip if they have a bomb
+            if player.Character:FindFirstChild("Bomb") then
+                continue
+            end
+            local targetPos = player.Character.HumanoidRootPart.Position
+            local distance = (targetPos - myPos).Magnitude
+            if distance < shortestDistance then
+                shortestDistance = distance
+                closestPlayer = player
+            end
+        end
+    end
+    return closestPlayer
 end
 
------------------------------------------------------
--- DYNAMIC FRICTION OVERRIDE FOR AI AUTO PASS
------------------------------------------------------
-local function updateFrictionForAIAutoPass()
+function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
+    local character = LocalPlayer.Character
+    if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local adjustedTargetPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
+    local targetCFrame = CFrame.new(hrp.Position, adjustedTargetPos)
+    local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
+    tween:Play()
+    return tween
+end
+
+local VisualModule = {}
+
+function VisualModule.animateMarker(marker)
+    if not marker then return end
+    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+    local goal = {Size = UDim2.new(0, 100, 0, 100)}
+    local tween = TweenService:Create(marker, tweenInfo, goal)
+    tween:Play()
+end
+
+function VisualModule.playPassVFX(target)
+    if not target or not target.Character then return end
+    local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local emitter = Instance.new("ParticleEmitter")
+    emitter.Texture = "rbxassetid://258128463"  
+    emitter.Rate = 50
+    emitter.Lifetime = NumberRange.new(0.3, 0.5)
+    emitter.Speed = NumberRange.new(2, 5)
+    emitter.VelocitySpread = 30
+    emitter.Parent = hrp
+    delay(1, function()
+        emitter:Destroy()
+    end)
+end
+
+local AINotificationsModule = {}
+
+function AINotificationsModule.sendNotification(title, text, duration)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = duration or 5
+        })
+    end)
+end
+
+local FrictionModule = {}
+
+-- Modified friction function: Only applies custom friction when holding the bomb or Anti‑Slippery is enabled.
+function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    local newProps = PhysicalProperties.new(0.5, 0.3, 0.5)
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CustomPhysicalProperties = newProps
-        end
-    end
-end
 
------------------------------------------------------
--- AUTO DODGE FUNCTION
------------------------------------------------------
-local function performFakeDodge()
-    HUMANOID:Move(Vector3.new(0,0,0), false)
-    wait(0.1)
-end
-
-local function performDodge(fromPlayer)
-    if not fromPlayer or not fromPlayer.Character then return end
-    if not HUMANOID or not HRP then return end
-    local fromRoot = fromPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not fromRoot then return end
-    local directionVec = HRP.Position - fromRoot.Position
-    directionVec = Vector3.new(directionVec.X, 0, directionVec.Z)
-    if directionVec.Magnitude == 0 then return end
-    directionVec = directionVec.Unit
-    local perpendicular = Vector3.new(-directionVec.Z, 0, directionVec.X)
-    if math.random() < 0.5 then
-        perpendicular = perpendicular * -1
-    end
-    performFakeDodge()
-    HUMANOID:Move(perpendicular * 10, false)
-    if math.random() < 0.5 then HUMANOID.Jump = true end
-    warningLabel.Visible = false
-    local uid = fromPlayer.UserId
-    if uid then
-        playerStats[uid] = playerStats[uid] or {}
-        playerStats[uid].dodgeActions = playerStats[uid].dodgeActions or {total = 0, successful = 0}
-        playerStats[uid].dodgeActions.total = playerStats[uid].dodgeActions.total + 1
-    end
-    lastDodgeTime = tick()
-    local arrowAngle = math.deg(math.atan2(perpendicular.Z, perpendicular.X))
-    arrowImg.Rotation = arrowAngle
-    dodgeArrow.Enabled = true
-    delay(0.5, function() dodgeArrow.Enabled = false end)
-end
-
------------------------------------------------------
--- AUTO PASS LOOP (AI Auto Pass)
------------------------------------------------------
-coroutine.wrap(function()
-    while true do
-        if AIAutoPassEnabled and hasBomb and currentBomb and currentBomb.Parent == CHAR then
-            updateFrictionForAIAutoPass()  -- Set friction to normal when AI auto pass is on
-            local target = selectBestTarget()
-            if target then
-                createOrUpdateTargetMarker(target, (target.Character.HumanoidRootPart.Position - HRP.Position).Magnitude)
-                local startPos = HRP.Position
-                local controlPos = startPos + (target.Character.HumanoidRootPart.Position - startPos)*0.5 + Vector3.new(0,10,0)
-                local endPos = target.Character.HumanoidRootPart.Position
-                if _G.ShowPassPath then
-                    drawPassPath(startPos, controlPos, endPos)
-                end
-                if (HRP.Position - target.Character.HumanoidRootPart.Position).Magnitude < AI_PassDistanceThreshold or bombTimer < 2 then
-                    passBombTo(target)
-                end
-            else
-                removeTargetMarker()
+    local bomb = char:FindFirstChild("Bomb")
+    
+    if bomb or AntiSlipperyEnabled then
+        local frictionAdjustment = 0.5
+        if bomb then
+            local velocity = hrp.Velocity
+            local horizontalVel = Vector3.new(velocity.X, 0, velocity.Z)
+            local forward = hrp.CFrame.LookVector
+            local alignment = 1
+            if horizontalVel.Magnitude > 0 then
+                alignment = horizontalVel:Dot(forward) / horizontalVel.Magnitude
             end
-        end
-        wait(PASS_CHECK_INTERVAL)
-    end
-end)()
-
------------------------------------------------------
--- AUTO DODGE LOOP
------------------------------------------------------
-coroutine.wrap(function()
-    while true do
-        if AutoDodgeEnabled and not hasBomb then
-            local closestThreat = nil
-            local closestDist = math.huge
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    if player.Character:FindFirstChild("Bomb") or player.Character:FindFirstChild("BombTool") then
-                        local dist = (player.Character.HumanoidRootPart.Position - HRP.Position).Magnitude
-                        if dist < closestDist then
-                            closestDist = dist
-                            closestThreat = player
-                        end
-                    end
-                end
-            end
-            if closestThreat and closestDist <= DODGE_DISTANCE then
-                local threatHum = closestThreat.Character:FindFirstChild("Humanoid")
-                local threatHRP = closestThreat.Character:FindFirstChild("HumanoidRootPart")
-                if threatHum and threatHRP then
-                    local threatDir = threatHum.MoveDirection
-                    local toMe = (HRP.Position - threatHRP.Position).Unit
-                    local approachRate = threatDir:Dot(toMe)
-                    if approachRate > AI_DodgeThreshold and tick() - lastDodgeTime > DODGE_COOLDOWN then
-                        warningLabel.Visible = true
-                        performDodge(closestThreat)
-                    end
-                end
-            else
-                warningLabel.Visible = false
-            end
+            local misalignment = 1 - math.abs(alignment)
+            frictionAdjustment = 0.5 + misalignment * 0.2
         else
-            warningLabel.Visible = false
+            frictionAdjustment = math.clamp(0.5 + hrp.Velocity.Magnitude * 0.001, 0.5, 0.65)
         end
-        wait(THREAT_CHECK_INTERVAL)
+        local newProps = PhysicalProperties.new(frictionAdjustment, 0.3, 0.5)
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CustomPhysicalProperties = newProps
+            end
+        end
+    else
+        -- Revert to default properties if neither bomb is held nor Anti‑Slippery is toggled
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CustomPhysicalProperties = nil
+            end
+        end
     end
-end)()
+end
 
 -----------------------------------------------------
--- EVENT: BOMB POSSESSION DETECTION
+-- CONFIG & VARIABLES
 -----------------------------------------------------
-CHAR.ChildAdded:Connect(function(child)
-    if child.Name:lower():find("bomb") then
-        hasBomb = true
-        currentBomb = child
-        bombTimer = INITIAL_BOMB_TIMER
-        timerLabel.Visible = true
-        timerLabel.TextColor3 = Color3.new(0,1,0)
-    end
-end)
+local bombPassDistance = 10  
+local AutoPassEnabled = false 
+local AntiSlipperyEnabled = false  
+local RemoveHitboxEnabled = false  
+local AI_AssistanceEnabled = false  
+local pathfindingSpeed = 16  
+local lastAIMessageTime = 0
+local aiMessageCooldown = 5
 
-CHAR.ChildRemoved:Connect(function(child)
-    if child == currentBomb then
-        hasBomb = false
-        currentBomb = nil
-        currentTarget = nil
-        timerLabel.Visible = false
-        targetHighlight.Enabled = false
-    end
-end)
-
-RunService.Heartbeat:Connect(function(dt)
-    if hasBomb and bombTimer > 0 then
-        bombTimer = bombTimer - dt
-        if bombTimer < 0 then bombTimer = 0 end
-    end
-end)
+local raySpreadAngle = 10
+local numRaycasts = 3
 
 -----------------------------------------------------
--- ORIONLIB MENU INTEGRATION
+-- VISUAL TARGET MARKER
+-----------------------------------------------------
+local currentTargetMarker = nil
+local currentTargetPlayer = nil
+
+local function createOrUpdateTargetMarker(player, distance)
+    if not player or not player.Character then return end
+    local body = player.Character:FindFirstChild("HumanoidRootPart")
+    if not body then return end
+
+    if currentTargetMarker and currentTargetPlayer == player then
+        currentTargetMarker:FindFirstChildOfClass("TextLabel").Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
+        return
+    end
+
+    if currentTargetMarker then
+        currentTargetMarker:Destroy()
+        currentTargetMarker = nil
+        currentTargetPlayer = nil
+    end
+
+    local marker = Instance.new("BillboardGui")
+    marker.Name = "BombPassTargetMarker"
+    marker.Adornee = body
+    marker.Size = UDim2.new(0, 80, 0, 80)
+    marker.StudsOffset = Vector3.new(0, 2, 0)
+    marker.AlwaysOnTop = true
+    marker.Parent = body
+
+    local label = Instance.new("TextLabel", marker)
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
+    label.TextScaled = true
+    label.TextColor3 = Color3.new(1, 0, 0)
+    label.Font = Enum.Font.SourceSansBold
+
+    currentTargetMarker = marker
+    currentTargetPlayer = player
+
+    VisualModule.animateMarker(marker)
+end
+
+local function removeTargetMarker()
+    if currentTargetMarker then
+        currentTargetMarker:Destroy()
+        currentTargetMarker = nil
+        currentTargetPlayer = nil
+    end
+end
+
+-----------------------------------------------------
+-- MULTIPLE RAYCASTS
+-----------------------------------------------------
+local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
+    local spreadRad = math.rad(raySpreadAngle)
+    local direction = (endPos - startPos).Unit
+    local distance = (endPos - startPos).Magnitude
+
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    if LocalPlayer.Character then
+        rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    end
+
+    local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
+    if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
+        return false
+    end
+
+    local raysEachSide = math.floor((numRaycasts - 1) / 2)
+    for i = 1, raysEachSide do
+        local angleOffset = spreadRad * i / raysEachSide
+        local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), angleOffset) * CFrame.new(direction)).p
+        local leftResult = Workspace:Raycast(startPos, leftDirection * distance, rayParams)
+        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
+            return false
+        end
+        local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
+        local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
+        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
+            return false
+        end
+    end
+    return true
+end
+
+-----------------------------------------------------
+-- AUTO PASS FUNCTION
+-----------------------------------------------------
+local function autoPassBombEnhanced()
+    if not AutoPassEnabled then return end  -- Only run if toggle is on
+
+    LoggingModule.safeCall(function()
+        local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
+        if not bomb then
+            removeTargetMarker()
+            return
+        end
+
+        local BombEvent = bomb:FindFirstChild("RemoteEvent")
+        -- fallback: best target or closest
+        local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
+            or TargetingModule.getClosestPlayer(bombPassDistance)
+
+        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            if targetPlayer.Character:FindFirstChild("Bomb") then
+                removeTargetMarker()
+                return
+            end
+
+            local targetPos = targetPlayer.Character.HumanoidRootPart.Position
+            local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+            local distance = (targetPos - myPos).Magnitude
+
+            if distance > bombPassDistance then
+                print("Target out of range. Pass aborted.")
+                removeTargetMarker()
+                return
+            end
+
+            local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart") or targetPlayer.Character.HumanoidRootPart
+            if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
+                print("Line of sight blocked. Bomb pass aborted.")
+                AINotificationsModule.sendNotification("AI Alert", "Line-of-sight blocked! Adjust your position.")
+                removeTargetMarker()
+                return
+            end
+
+            createOrUpdateTargetMarker(targetPlayer, distance)
+            VisualModule.playPassVFX(targetPlayer)
+            TargetingModule.rotateCharacterTowardsTarget(targetPos)
+
+            if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
+                AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name .. " (" .. math.floor(distance) .. " studs).")
+                lastAIMessageTime = tick()
+            end
+
+            -- Attempt the pass
+            if BombEvent then
+                BombEvent:FireServer(targetPlayer.Character, targetCollision)
+            else
+                print("No BombEvent found, re-parenting bomb directly (fallback).")
+                bomb.Parent = targetPlayer.Character
+            end
+            print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
+            removeTargetMarker()
+        else
+            removeTargetMarker()
+        end
+    end, "autoPassBombEnhanced function")
+end
+
+-----------------------------------------------------
+-- REMOVE HITBOX
+-----------------------------------------------------
+local function applyRemoveHitbox(enable)
+    local char = LocalPlayer.Character
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name == "Hitbox" then
+            if enable then
+                part.Transparency = 1
+                part.CanCollide = false
+            else
+                part.Transparency = 0
+                part.CanCollide = true
+            end
+        end
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+    applyRemoveHitbox(RemoveHitboxEnabled)
+end)
+
+-----------------------------------------------------
+-- ORIONLIB MENU
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
-    Name = "Yon Menu - Ultra Advanced Bomb AI",
+    Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
     HidePremium = false,
     SaveConfig = true,
-    ConfigFolder = "YonMenu_UltraAdvanced",
-    ShowIcon = true
+    ConfigFolder = "YonMenu_Advanced",
+    ShowIcon = true  
 })
 
+-- Create two tabs: Automated and AI-Based
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
-
 local AITab = Window:MakeTab({
-    Name = "AI Settings",
+    Name = "AI Based",
     Icon = "rbxassetid://7072720870",
     PremiumOnly = false
 })
 
-local VisualTab = Window:MakeTab({
-    Name = "Visuals",
-    Icon = "rbxassetid://12345678",  -- Replace if needed
-    PremiumOnly = false
-})
-
-AITab:AddToggle({
-    Name = "Enable AI Auto Pass",
-    Default = true,
+-- Toggle for Auto Pass Bomb Enhanced
+local orionAutoPassToggle = AutomatedTab:AddToggle({
+    Name = "Auto Pass Bomb (Enhanced)",
+    Default = AutoPassEnabled,
     Callback = function(value)
-        AIAutoPassEnabled = value
+        AutoPassEnabled = value
+        if AutoPassEnabled then
+            if not autoPassConnection then
+                autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
+            end
+        else
+            if autoPassConnection then
+                autoPassConnection:Disconnect()
+                autoPassConnection = nil
+            end
+            removeTargetMarker()
+        end
     end
 })
+local autoPassConnection
 
-AITab:AddToggle({
-    Name = "Enable Manual Auto Pass",
-    Default = false,
-    Callback = function(value)
-        ManualAutoPassEnabled = value
-    end
-})
-
-AITab:AddToggle({
-    Name = "Enable Auto Dodge",
-    Default = true,
-    Callback = function(value)
-        AutoDodgeEnabled = value
-    end
-})
-
-AITab:AddToggle({
-    Name = "Enable Anti Slippery (AI Auto Pass)",
-    Default = false,
+-- Toggle for Smart Anti‑Slippery
+AutomatedTab:AddToggle({
+    Name = "Anti Slippery",
+    Default = AntiSlipperyEnabled,
     Callback = function(value)
         AntiSlipperyEnabled = value
+        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 })
 
+-- Toggle for Remove Hitbox
+AutomatedTab:AddToggle({
+    Name = "Remove Hitbox",
+    Default = RemoveHitboxEnabled,
+    Callback = function(value)
+        RemoveHitboxEnabled = value
+        applyRemoveHitbox(value)
+    end
+})
+
+-- AI Assistance Toggle
+AITab:AddToggle({
+    Name = "AI Assistance",
+    Default = false,
+    Callback = function(value)
+        AI_AssistanceEnabled = value
+        print("AI Assistance " .. (AI_AssistanceEnabled and "enabled." or "disabled."))
+    end
+})
+
+-- Sliders for various settings
 AITab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
     Max = 30,
-    Default = PASS_DISTANCE,
+    Default = bombPassDistance,
     Increment = 1,
     Callback = function(value)
-        PASS_DISTANCE = value
+        bombPassDistance = value
     end
 })
 
@@ -461,25 +483,9 @@ AITab:AddSlider({
     end
 })
 
-VisualTab:AddToggle({
-    Name = "Show Predicted Pass Path",
-    Default = true,
-    Callback = function(value)
-        _G.ShowPassPath = value
-    end
-})
-
-VisualTab:AddSlider({
-    Name = "Bezier Resolution",
-    Min = 10,
-    Max = 50,
-    Default = BEZIER_RESOLUTION,
-    Increment = 1,
-    Callback = function(value)
-        BEZIER_RESOLUTION = value
-    end
-})
-
+-----------------------------------------------------
+-- UI ELEMENT: Colorpicker for Menu Main Color
+-----------------------------------------------------
 local UITab = Window:MakeTab({
     Name = "UI Elements",
     Icon = "rbxassetid://4483345998",
@@ -501,23 +507,19 @@ UITab:AddColorpicker({
 -----------------------------------------------------
 task.spawn(function()
     while true do
-        if AIAutoPassEnabled then
-            updateFrictionForAIAutoPass()
-        else
-            FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-        end
+        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
         task.wait(0.1)
     end
 end)
 
 -----------------------------------------------------
--- INITIALIZE ORIONLIB UI
+-- INITIALIZE ORIONLIB
 -----------------------------------------------------
 OrionLib:Init()
-print("Yon Menu Script Loaded with Ultra Advanced Bomb AI (Auto Pass, Auto Dodge, ShiftLock, Mobile Toggle)")
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Fallback to Closest Player, ShiftLock, Mobile Toggle")
 
 -----------------------------------------------------
--- MOBILE TOGGLE GUI (for Manual Auto Pass)
+-- MOBILE TOGGLE BUTTON FOR AUTO PASS
 -----------------------------------------------------
 local function createMobileToggle()
     local mobileGui = Instance.new("ScreenGui")
@@ -528,8 +530,8 @@ local function createMobileToggle()
     autoPassMobileToggle.Name = "AutoPassMobileToggle"
     autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
     autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
-    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-    autoPassMobileToggle.Text = "MANUAL OFF"
+    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  
+    autoPassMobileToggle.Text = "OFF"
     autoPassMobileToggle.TextScaled = true
     autoPassMobileToggle.Font = Enum.Font.SourceSansBold
     autoPassMobileToggle.ZIndex = 100
@@ -540,13 +542,19 @@ local function createMobileToggle()
     uicorner.Parent = autoPassMobileToggle
 
     autoPassMobileToggle.MouseButton1Click:Connect(function()
-        ManualAutoPassEnabled = not ManualAutoPassEnabled
-        if ManualAutoPassEnabled then
+        AutoPassEnabled = not AutoPassEnabled
+        if AutoPassEnabled then
             autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-            autoPassMobileToggle.Text = "MANUAL ON"
+            autoPassMobileToggle.Text = "ON"
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(true)
+            end
         else
             autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-            autoPassMobileToggle.Text = "MANUAL OFF"
+            autoPassMobileToggle.Text = "OFF"
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(false)
+            end
         end
     end)
     
@@ -591,7 +599,7 @@ ShiftLockButton.Parent = ShiftLockScreenGui
 ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 ShiftLockButton.BackgroundTransparency = 1
 ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0)
-ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.06613, 0)
+ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftLockButton.Image = ShiftStates.Off
 
@@ -656,8 +664,5 @@ local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a
 end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
 
------------------------------------------------------
--- FINAL INITIALIZATION
------------------------------------------------------
-print("Ultra Advanced Bomb Passing AI Loaded with AI Auto Pass, Manual Auto Pass, Auto Dodge, and ShiftLock")
+print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fallback to closest player, shiftlock included.")
 return {}
