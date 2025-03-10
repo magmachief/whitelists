@@ -1,4 +1,4 @@
---// Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
+ --// Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
 --// Final version with fallback to closest player, toggles in the menu, and shiftlock included.
 
 -----------------------------------------------------
