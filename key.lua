@@ -1,5 +1,6 @@
- --// Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
---// Final version with fallback to closest player, toggles in the menu, and shiftlock included.
+--// Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
+--// Final version with fallback to closest player, toggles in the menu, shiftlock included.
+--// Note: Friction remains normal unless Anti‑Slippery is toggled on.
 
 -----------------------------------------------------
 -- SERVICES
@@ -141,30 +142,15 @@ end
 
 local FrictionModule = {}
 
--- Modified friction function: Only applies custom friction when holding the bomb or Anti‑Slippery is enabled.
+-- Friction now remains normal unless Anti‑Slippery is toggled on in the menu.
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    local bomb = char:FindFirstChild("Bomb")
-    
-    if bomb or AntiSlipperyEnabled then
-        local frictionAdjustment = 0.5
-        if bomb then
-            local velocity = hrp.Velocity
-            local horizontalVel = Vector3.new(velocity.X, 0, velocity.Z)
-            local forward = hrp.CFrame.LookVector
-            local alignment = 1
-            if horizontalVel.Magnitude > 0 then
-                alignment = horizontalVel:Dot(forward) / horizontalVel.Magnitude
-            end
-            local misalignment = 1 - math.abs(alignment)
-            frictionAdjustment = 0.5 + misalignment * 0.2
-        else
-            frictionAdjustment = math.clamp(0.5 + hrp.Velocity.Magnitude * 0.001, 0.5, 0.65)
-        end
+    if AntiSlipperyEnabled then
+        local frictionAdjustment = math.clamp(0.5 + hrp.Velocity.Magnitude * 0.001, 0.5, 0.65)
         local newProps = PhysicalProperties.new(frictionAdjustment, 0.3, 0.5)
         for _, part in pairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
@@ -172,7 +158,6 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
             end
         end
     else
-        -- Revert to default properties if neither bomb is held nor Anti‑Slippery is toggled
         for _, part in pairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.CustomPhysicalProperties = nil
