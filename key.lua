@@ -1,18 +1,8 @@
---[[ 
-  Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
-  Final version with fallback to closest player, toggles in the menu, shiftlock included.
-  Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (0.7 friction).
-
-  This script integrates your bomb passing logic with an advanced Orion–style UI.
-  The menu is centered, draggable, and automatically resizes on mobile.
-  
-  The Orion UI code is loaded from an external URL. Make sure that URL is valid and up-to-date.
-  
-  API names (MakeWindow, MakeTab, AddToggle, etc.) remain unchanged for compatibility.
---]]
+-- Bomb Passing Assistant Script for "Pass the Bomb"
+-- Final version with fallback to closest player, toggles in the menu, shiftlock, and mobile toggle.
 
 -----------------------------------------------------
--- BOMB PASSING ASSISTANT SERVICES & CHARACTER SETUP
+-- SERVICES & CHARACTER SETUP
 -----------------------------------------------------
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -28,17 +18,15 @@ local HUMANOID = CHAR:WaitForChild("Humanoid")
 local HRP = CHAR:WaitForChild("HumanoidRootPart")
 
 -----------------------------------------------------
--- BOMB PASSING MODULES & VARIABLES
+-- MODULES & VARIABLES FOR BOMB PASSING
 -----------------------------------------------------
-local LoggingModule = {}
+local LoggingModule = {} 
 function LoggingModule.logError(err, context)
     warn("[ERROR] Context: " .. tostring(context) .. " | Error: " .. tostring(err))
 end
 function LoggingModule.safeCall(func, context)
     local success, result = pcall(func)
-    if not success then
-        LoggingModule.logError(result, context)
-    end
+    if not success then LoggingModule.logError(result, context) end
     return success, result
 end
 
@@ -49,9 +37,7 @@ local useSmoothRotation = true
 function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local bestPlayer = nil
     local bestTravelTime = math.huge
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -73,9 +59,7 @@ end
 function TargetingModule.getClosestPlayer(bombPassDistance)
     local closestPlayer = nil
     local shortestDistance = bombPassDistance
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -135,11 +119,7 @@ end
 local AINotificationsModule = {}
 function AINotificationsModule.sendNotification(title, text, duration)
     pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = title,
-            Text = text,
-            Duration = duration or 5
-        })
+        StarterGui:SetCore("SendNotification", { Title = title, Text = text, Duration = duration or 5 })
     end)
 end
 
@@ -169,11 +149,8 @@ local pathfindingSpeed = 16
 local lastAIMessageTime = 0
 local aiMessageCooldown = 5
 local raySpreadAngle = 10
-local numRaycasts = 3
+local numRaycasts = 5
 
------------------------------------------------------
--- TARGET MARKER FUNCTIONS
------------------------------------------------------
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
 
@@ -181,18 +158,15 @@ local function createOrUpdateTargetMarker(player, distance)
     if not player or not player.Character then return end
     local body = player.Character:FindFirstChild("HumanoidRootPart")
     if not body then return end
-
     if currentTargetMarker and currentTargetPlayer == player then
         currentTargetMarker:FindFirstChildOfClass("TextLabel").Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
         return
     end
-
     if currentTargetMarker then
         currentTargetMarker:Destroy()
         currentTargetMarker = nil
         currentTargetPlayer = nil
     end
-
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
     marker.Adornee = body
@@ -200,7 +174,6 @@ local function createOrUpdateTargetMarker(player, distance)
     marker.StudsOffset = Vector3.new(0, 2, 0)
     marker.AlwaysOnTop = true
     marker.Parent = body
-
     local label = Instance.new("TextLabel", marker)
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
@@ -208,7 +181,6 @@ local function createOrUpdateTargetMarker(player, distance)
     label.TextScaled = true
     label.TextColor3 = Color3.new(1, 0, 0)
     label.Font = Enum.Font.SourceSansBold
-
     currentTargetMarker = marker
     currentTargetPlayer = player
     VisualModule.animateMarker(marker)
@@ -222,42 +194,28 @@ local function removeTargetMarker()
     end
 end
 
------------------------------------------------------
--- MULTIPLE RAYCASTS FUNCTION
------------------------------------------------------
 local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
     local direction = (endPos - startPos).Unit
     local distance = (endPos - startPos).Magnitude
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-    if LocalPlayer.Character then
-        rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
-    end
+    if LocalPlayer.Character then rayParams.FilterDescendantsInstances = {LocalPlayer.Character} end
     local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
-    if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
-        return false
-    end
+    if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
     local raysEachSide = math.floor((numRaycasts - 1) / 2)
     for i = 1, raysEachSide do
         local angleOffset = spreadRad * i / raysEachSide
         local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), angleOffset) * CFrame.new(direction)).p
         local leftResult = Workspace:Raycast(startPos, leftDirection * distance, rayParams)
-        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return false
-        end
+        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
         local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
         local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
-        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return false
-        end
+        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
     end
     return true
 end
 
------------------------------------------------------
--- AUTO PASS BOMB FUNCTION
------------------------------------------------------
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
     LoggingModule.safeCall(function()
@@ -310,9 +268,6 @@ local function autoPassBombEnhanced()
     end, "autoPassBombEnhanced function")
 end
 
------------------------------------------------------
--- REMOVE HITBOX FUNCTION
------------------------------------------------------
 local function applyRemoveHitbox(enable)
     local char = LocalPlayer.Character
     if not char then return end
@@ -335,18 +290,23 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 -----------------------------------------------------
--- ORION LIBRARY INTEGRATION (Menu)
+-- ORION LIBRARY INTEGRATION (Using the Advanced Module)
 -----------------------------------------------------
+-- Load the advanced Orion UI module. Replace the URL with your hosted version if needed.
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
+
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
     HidePremium = false,
     SaveConfig = true,
     ConfigFolder = "YonMenu_Advanced",
-    ShowIcon = true  
+    ShowIcon = true,
+    BlurBackground = true,
+    IntroEnabled = true,
+    IntroText = "Welcome to Yon Menu",
+    Icon = "rbxassetid://13764119982"  -- Gojo icon
 })
 
--- Create two tabs: Automated and AI-Based
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
     Icon = "rbxassetid://4483345998",
@@ -358,7 +318,6 @@ local AITab = Window:MakeTab({
     PremiumOnly = false
 })
 
--- Toggle for Auto Pass Bomb Enhanced
 local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
@@ -379,7 +338,6 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
 })
 local autoPassConnection
 
--- Toggle for Smart Anti‑Slippery
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
@@ -389,7 +347,6 @@ AutomatedTab:AddToggle({
     end
 })
 
--- Toggle for Remove Hitbox
 AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
     Default = RemoveHitboxEnabled,
@@ -399,7 +356,6 @@ AutomatedTab:AddToggle({
     end
 })
 
--- AI Assistance Toggle
 AITab:AddToggle({
     Name = "AI Assistance",
     Default = false,
@@ -409,7 +365,6 @@ AITab:AddToggle({
     end
 })
 
--- Sliders for various settings
 AITab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
@@ -443,7 +398,6 @@ AITab:AddSlider({
     end
 })
 
--- New toggles for rotation method
 local orionFlickRotationToggle
 local orionSmoothRotationToggle
 
@@ -467,7 +421,6 @@ orionFlickRotationToggle = AITab:AddToggle({
         end
     end
 })
-
 orionSmoothRotationToggle = AITab:AddToggle({
     Name = "Smooth Rotation",
     Default = true,
@@ -489,7 +442,6 @@ orionSmoothRotationToggle = AITab:AddToggle({
     end
 })
 
--- UI Element: Colorpicker for Menu Main Color
 local UITab = Window:MakeTab({
     Name = "UI Elements",
     Icon = "rbxassetid://4483345998",
@@ -506,9 +458,6 @@ UITab:AddColorpicker({
     Save = true
 })
 
------------------------------------------------------
--- CONTINUOUS DYNAMIC FRICTION UPDATE
------------------------------------------------------
 task.spawn(function()
     while true do
         FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
@@ -519,29 +468,24 @@ end)
 OrionLib:Init()
 print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Fallback to Closest Player, Shiftlock, and Mobile Toggle")
 
------------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS
------------------------------------------------------
 local function createMobileToggle()
     local mobileGui = Instance.new("ScreenGui")
     mobileGui.Name = "MobileToggleGui"
     mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    
     local autoPassMobileToggle = Instance.new("TextButton")
     autoPassMobileToggle.Name = "AutoPassMobileToggle"
     autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
     autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
-    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  
+    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     autoPassMobileToggle.Text = "OFF"
     autoPassMobileToggle.TextScaled = true
     autoPassMobileToggle.Font = Enum.Font.SourceSansBold
     autoPassMobileToggle.ZIndex = 100
     autoPassMobileToggle.Parent = mobileGui
-
     local uicorner = Instance.new("UICorner")
     uicorner.CornerRadius = UDim.new(1, 0)
     uicorner.Parent = autoPassMobileToggle
-
     autoPassMobileToggle.MouseButton1Click:Connect(function()
         AutoPassEnabled = not AutoPassEnabled
         if AutoPassEnabled then
@@ -558,7 +502,6 @@ local function createMobileToggle()
             end
         end
     end)
-    
     return mobileGui, autoPassMobileToggle
 end
 
@@ -573,9 +516,7 @@ LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
     end
 end)
 
------------------------------------------------------
--- SHIFTLOCK CODE (CoreGui-based)
------------------------------------------------------
+-- SHIFTLOCK CODE (unchanged)
 local ShiftLockScreenGui = Instance.new("ScreenGui")
 local ShiftLockButton = Instance.new("ImageButton")
 local ShiftlockCursor = Instance.new("ImageLabel")
@@ -584,7 +525,6 @@ ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
 ShiftLockScreenGui.Parent = CoreGui
 ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ShiftLockScreenGui.ResetOnSpawn = false
-
 ShiftLockButton.Parent = ShiftLockScreenGui
 ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 ShiftLockButton.BackgroundTransparency = 1
@@ -592,7 +532,6 @@ ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0)
 ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
-
 ShiftlockCursor.Name = "Shiftlock Cursor"
 ShiftlockCursor.Parent = ShiftLockScreenGui
 ShiftlockCursor.Image = "rbxasset://textures/MouseLockedCursor.png"
@@ -633,13 +572,9 @@ ShiftLockButton.MouseButton1Click:Connect(function()
         ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
         Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * CFrame.new(-1.7,0,0)
         ShiftlockCursor.Visible = false
-        pcall(function()
-            SL_Active:Disconnect()
-            SL_Active = nil
-        end)
+        pcall(function() SL_Active:Disconnect() SL_Active = nil end)
     end
 end)
-
 local SL_Active
 local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(actionName, inputState, inputObject)
     if inputState == Enum.UserInputState.Begin then
