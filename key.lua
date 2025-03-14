@@ -1,5 +1,5 @@
 --// Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
---// Final version with fallback to closest player, toggles in the menu, and shiftlock included.
+--// Final version with fallback to closest player, toggles in the menu, shiftlock included.
 --// Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (0.7 friction).
 
 -----------------------------------------------------
@@ -38,6 +38,10 @@ function LoggingModule.safeCall(func, context)
 end
 
 local TargetingModule = {}
+
+-- Global rotation mode variables
+local useFlickRotation = false
+local useSmoothRotation = true
 
 function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local bestPlayer = nil
@@ -90,16 +94,26 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     return closestPlayer
 end
 
+-- Modified rotation function that checks the toggles:
 function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
     local hrp = character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
     local adjustedTargetPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
-    local targetCFrame = CFrame.new(hrp.Position, adjustedTargetPos)
-    local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
-    tween:Play()
-    return tween
+    if useFlickRotation then
+        -- Instant snap ("flick")
+        hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
+    elseif useSmoothRotation then
+        -- Smooth tween rotation
+        local targetCFrame = CFrame.new(hrp.Position, adjustedTargetPos)
+        local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
+        tween:Play()
+        return tween
+    else
+        -- fallback: instant rotation
+        hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
+    end
 end
 
 local VisualModule = {}
@@ -470,6 +484,52 @@ AITab:AddSlider({
     end
 })
 
+-- New toggles for rotation method
+local orionFlickRotationToggle
+local orionSmoothRotationToggle
+
+orionFlickRotationToggle = AITab:AddToggle({
+    Name = "Flick Rotation",
+    Default = false,
+    Callback = function(value)
+        useFlickRotation = value
+        if value then
+            useSmoothRotation = false
+            if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                orionSmoothRotationToggle:Set(false)
+            end
+        else
+            if not useSmoothRotation then
+                useSmoothRotation = true
+                if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                    orionSmoothRotationToggle:Set(true)
+                end
+            end
+        end
+    end
+})
+
+orionSmoothRotationToggle = AITab:AddToggle({
+    Name = "Smooth Rotation",
+    Default = true,
+    Callback = function(value)
+        useSmoothRotation = value
+        if value then
+            useFlickRotation = false
+            if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                orionFlickRotationToggle:Set(false)
+            end
+        else
+            if not useFlickRotation then
+                useFlickRotation = true
+                if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                    orionFlickRotationToggle:Set(true)
+                end
+            end
+        end
+    end
+})
+
 -----------------------------------------------------
 -- UI ELEMENT: Colorpicker for Menu Main Color
 -----------------------------------------------------
@@ -652,4 +712,4 @@ end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
 
 print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fallback to closest player, shiftlock included.")
-return {}
+return {} 
