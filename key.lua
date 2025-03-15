@@ -378,6 +378,9 @@ end)
 -----------------------------------------------------
 -- ORIONLIB MENU
 -----------------------------------------------------
+-----------------------------------------------------
+-- ORIONLIB MENU (Now Organized into Sections)
+-----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
@@ -387,20 +390,16 @@ local Window = OrionLib:MakeWindow({
     ShowIcon = true  
 })
 
--- Create two tabs: Automated and AI-Based
-local AutomatedTab = Window:MakeTab({
-    Name = "Automated",
+-----------------------------------------------------
+-- 📌 SECTION 1: PASS TYPE
+-----------------------------------------------------
+local PassTypeTab = Window:MakeTab({
+    Name = "Pass Type",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
-local AITab = Window:MakeTab({
-    Name = "AI Based",
-    Icon = "rbxassetid://7072720870",
-    PremiumOnly = false
-})
 
--- Toggle for Auto Pass Bomb Enhanced
-local orionAutoPassToggle = AutomatedTab:AddToggle({
+local orionAutoPassToggle = PassTypeTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
     Callback = function(value)
@@ -418,29 +417,58 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
         end
     end
 })
-local autoPassConnection
 
--- Toggle for Smart Anti‑Slippery
-AutomatedTab:AddToggle({
-    Name = "Anti Slippery",
-    Default = AntiSlipperyEnabled,
+local orionFlickRotationToggle = PassTypeTab:AddToggle({
+    Name = "Flick Rotation",
+    Default = false,
     Callback = function(value)
-        AntiSlipperyEnabled = value
-        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+        useFlickRotation = value
+        if value then
+            useSmoothRotation = false
+            if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                orionSmoothRotationToggle:Set(false)
+            end
+        else
+            if not useSmoothRotation then
+                useSmoothRotation = true
+                if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                    orionSmoothRotationToggle:Set(true)
+                end
+            end
+        end
     end
 })
 
--- Toggle for Remove Hitbox
-AutomatedTab:AddToggle({
-    Name = "Remove Hitbox",
-    Default = RemoveHitboxEnabled,
+local orionSmoothRotationToggle = PassTypeTab:AddToggle({
+    Name = "Smooth Rotation",
+    Default = true,
     Callback = function(value)
-        RemoveHitboxEnabled = value
-        applyRemoveHitbox(value)
+        useSmoothRotation = value
+        if value then
+            useFlickRotation = false
+            if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                orionFlickRotationToggle:Set(false)
+            end
+        else
+            if not useFlickRotation then
+                useFlickRotation = true
+                if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                    orionFlickRotationToggle:Set(true)
+                end
+            end
+        end
     end
 })
 
--- AI Assistance Toggle
+-----------------------------------------------------
+-- 🤖 SECTION 2: AI SETTINGS
+-----------------------------------------------------
+local AITab = Window:MakeTab({
+    Name = "AI Settings",
+    Icon = "rbxassetid://7072720870",
+    PremiumOnly = false
+})
+
 AITab:AddToggle({
     Name = "AI Assistance",
     Default = false,
@@ -450,7 +478,6 @@ AITab:AddToggle({
     end
 })
 
--- Sliders for various settings
 AITab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
@@ -484,61 +511,51 @@ AITab:AddSlider({
     end
 })
 
--- New toggles for rotation method
-local orionFlickRotationToggle
-local orionSmoothRotationToggle
-
-orionFlickRotationToggle = AITab:AddToggle({
-    Name = "Flick Rotation",
-    Default = false,
-    Callback = function(value)
-        useFlickRotation = value
-        if value then
-            useSmoothRotation = false
-            if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
-                orionSmoothRotationToggle:Set(false)
-            end
-        else
-            if not useSmoothRotation then
-                useSmoothRotation = true
-                if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
-                    orionSmoothRotationToggle:Set(true)
-                end
-            end
-        end
-    end
-})
-
-orionSmoothRotationToggle = AITab:AddToggle({
-    Name = "Smooth Rotation",
-    Default = true,
-    Callback = function(value)
-        useSmoothRotation = value
-        if value then
-            useFlickRotation = false
-            if orionFlickRotationToggle and orionFlickRotationToggle.Set then
-                orionFlickRotationToggle:Set(false)
-            end
-        else
-            if not useFlickRotation then
-                useFlickRotation = true
-                if orionFlickRotationToggle and orionFlickRotationToggle.Set then
-                    orionFlickRotationToggle:Set(true)
-                end
-            end
-        end
-    end
-})
-
 -----------------------------------------------------
--- UI ELEMENT: Colorpicker for Menu Main Color
+-- 🏃‍♂️ SECTION 3: GAMEPLAY ENHANCEMENTS
 -----------------------------------------------------
-local UITab = Window:MakeTab({
-    Name = "UI Elements",
+local GameplayTab = Window:MakeTab({
+    Name = "Gameplay Enhancements",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
-UITab:AddColorpicker({
+
+GameplayTab:AddToggle({
+    Name = "Anti Slippery",
+    Default = AntiSlipperyEnabled,
+    Callback = function(value)
+        AntiSlipperyEnabled = value
+        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+    end
+})
+
+GameplayTab:AddToggle({
+    Name = "Remove Hitbox",
+    Default = RemoveHitboxEnabled,
+    Callback = function(value)
+        RemoveHitboxEnabled = value
+        applyRemoveHitbox(value)
+    end
+})
+
+GameplayTab:AddToggle({
+    Name = "Enable Shiftlock",
+    Default = false,
+    Callback = function(value)
+        ShiftLockButton.Visible = value
+    end
+})
+
+-----------------------------------------------------
+-- 🎨 SECTION 4: VISUAL SETTINGS
+-----------------------------------------------------
+local VisualTab = Window:MakeTab({
+    Name = "Visuals",
+    Icon = "rbxassetid://7072720870",
+    PremiumOnly = false
+})
+
+VisualTab:AddColorpicker({
     Name = "Menu Main Color",
     Default = Color3.fromRGB(255, 0, 0),
     Callback = function(color)
@@ -547,6 +564,27 @@ UITab:AddColorpicker({
     end,
     Flag = "MenuMainColor",
     Save = true
+})
+
+-----------------------------------------------------
+-- 📱 SECTION 5: MOBILE & EXTRA CONTROLS
+-----------------------------------------------------
+local MobileTab = Window:MakeTab({
+    Name = "Mobile Controls",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+MobileTab:AddToggle({
+    Name = "Enable Mobile Pass Toggle",
+    Default = true,
+    Callback = function(value)
+        if value then
+            mobileGui.Enabled = true
+        else
+            mobileGui.Enabled = false
+        end
+    end
 })
 
 -----------------------------------------------------
