@@ -1,9 +1,9 @@
--- Bomb Passing Assistant Script for "Pass the Bomb"
--- Final version with fallback to closest player, toggles in the menu, shiftlock, and mobile toggle.
--- Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (0.7 friction).
+--// Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
+--// Final version with fallback to closest player, toggles in the menu, shiftlock included.
+--// Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (0.7 friction).
 
 -----------------------------------------------------
--- SERVICES & CHARACTER SETUP
+-- SERVICES
 -----------------------------------------------------
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,14 +12,18 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
+
 local LocalPlayer = Players.LocalPlayer
 
+-----------------------------------------------------
+-- CHARACTER SETUP
+-----------------------------------------------------
 local CHAR = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HUMANOID = CHAR:WaitForChild("Humanoid")
 local HRP = CHAR:WaitForChild("HumanoidRootPart")
 
 -----------------------------------------------------
--- MODULES & VARIABLES FOR BOMB PASSING
+-- MODULES
 -----------------------------------------------------
 local LoggingModule = {}
 function LoggingModule.logError(err, context)
@@ -27,13 +31,17 @@ function LoggingModule.logError(err, context)
 end
 function LoggingModule.safeCall(func, context)
     local success, result = pcall(func)
-    if not success then LoggingModule.logError(result, context) end
+    if not success then
+        LoggingModule.logError(result, context)
+    end
     return success, result
 end
 
 local TargetingModule = {}
-local useFlickRotation = false   -- If true, use instant snap ("flick") rotation
-local useSmoothRotation = true   -- If true, use smooth tween rotation
+
+-- Global rotation mode variables
+local useFlickRotation = false
+local useSmoothRotation = true
 
 function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local bestPlayer = nil
@@ -44,7 +52,10 @@ function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if player.Character:FindFirstChild("Bomb") then continue end
+            -- skip if they have a bomb
+            if player.Character:FindFirstChild("Bomb") then
+                continue
+            end
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance <= bombPassDistance then
@@ -68,7 +79,10 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if player.Character:FindFirstChild("Bomb") then continue end
+            -- skip if they have a bomb
+            if player.Character:FindFirstChild("Bomb") then
+                continue
+            end
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance < shortestDistance then
@@ -80,6 +94,7 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     return closestPlayer
 end
 
+-- Modified rotation function that checks the toggles:
 function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
@@ -87,18 +102,22 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     if not hrp then return end
     local adjustedTargetPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
     if useFlickRotation then
+        -- Instant snap ("flick")
         hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
     elseif useSmoothRotation then
+        -- Smooth tween rotation
         local targetCFrame = CFrame.new(hrp.Position, adjustedTargetPos)
         local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
         tween:Play()
         return tween
     else
+        -- fallback: instant rotation
         hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
     end
 end
 
 local VisualModule = {}
+
 function VisualModule.animateMarker(marker)
     if not marker then return end
     local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
@@ -112,16 +131,19 @@ function VisualModule.playPassVFX(target)
     local hrp = target.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
     local emitter = Instance.new("ParticleEmitter")
-    emitter.Texture = "rbxassetid://258128463"
+    emitter.Texture = "rbxassetid://258128463"  
     emitter.Rate = 50
     emitter.Lifetime = NumberRange.new(0.3, 0.5)
     emitter.Speed = NumberRange.new(2, 5)
     emitter.VelocitySpread = 30
     emitter.Parent = hrp
-    delay(1, function() emitter:Destroy() end)
+    delay(1, function()
+        emitter:Destroy()
+    end)
 end
 
 local AINotificationsModule = {}
+
 function AINotificationsModule.sendNotification(title, text, duration)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
@@ -133,21 +155,35 @@ function AINotificationsModule.sendNotification(title, text, duration)
 end
 
 local FrictionModule = {}
+
+-- Applies custom friction if Anti‑Slippery is enabled; otherwise, defaults to friction 0.5.
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    local newProps = AntiSlipperyEnabled and PhysicalProperties.new(0.7, 0.3, 0.5) or PhysicalProperties.new(0.5, 0.3, 0.5)
-    for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CustomPhysicalProperties = newProps
+
+    if AntiSlipperyEnabled then
+        -- Custom friction set to 0.7 for a less slippery experience
+        local newProps = PhysicalProperties.new(0.7, 0.3, 0.5)
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CustomPhysicalProperties = newProps
+            end
+        end
+    else
+        -- Default friction of 0.5 (normal slippery behavior)
+        local newProps = PhysicalProperties.new(0.5, 0.3, 0.5)
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CustomPhysicalProperties = newProps
+            end
         end
     end
 end
 
 -----------------------------------------------------
--- BOMB PASSING VARIABLES
+-- CONFIG & VARIABLES
 -----------------------------------------------------
 local bombPassDistance = 10  
 local AutoPassEnabled = false 
@@ -157,11 +193,12 @@ local AI_AssistanceEnabled = false
 local pathfindingSpeed = 16  
 local lastAIMessageTime = 0
 local aiMessageCooldown = 5
+
 local raySpreadAngle = 10
 local numRaycasts = 3
 
 -----------------------------------------------------
--- VISUAL TARGET MARKER FUNCTIONS
+-- VISUAL TARGET MARKER
 -----------------------------------------------------
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
@@ -200,6 +237,7 @@ local function createOrUpdateTargetMarker(player, distance)
 
     currentTargetMarker = marker
     currentTargetPlayer = player
+
     VisualModule.animateMarker(marker)
 end
 
@@ -212,7 +250,7 @@ local function removeTargetMarker()
 end
 
 -----------------------------------------------------
--- MULTIPLE RAYCASTS FUNCTION
+-- MULTIPLE RAYCASTS
 -----------------------------------------------------
 local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
@@ -251,7 +289,7 @@ end
 -- AUTO PASS FUNCTION
 -----------------------------------------------------
 local function autoPassBombEnhanced()
-    if not AutoPassEnabled then return end
+    if not AutoPassEnabled then return end  -- Only run if toggle is on
 
     LoggingModule.safeCall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
@@ -261,6 +299,7 @@ local function autoPassBombEnhanced()
         end
 
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
+        -- fallback: best target or closest
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
             or TargetingModule.getClosestPlayer(bombPassDistance)
 
@@ -297,13 +336,13 @@ local function autoPassBombEnhanced()
                 lastAIMessageTime = tick()
             end
 
+            -- Attempt the pass
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
                 print("No BombEvent found, re-parenting bomb directly (fallback).")
                 bomb.Parent = targetPlayer.Character
             end
-
             print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
             removeTargetMarker()
         else
@@ -313,7 +352,7 @@ local function autoPassBombEnhanced()
 end
 
 -----------------------------------------------------
--- REMOVE HITBOX FUNCTION
+-- REMOVE HITBOX
 -----------------------------------------------------
 local function applyRemoveHitbox(enable)
     local char = LocalPlayer.Character
@@ -337,32 +376,31 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 -----------------------------------------------------
--- NOVAUI INTEGRATION
+-- ORIONLIB MENU
 -----------------------------------------------------
--- Load NovaUI (update the URL to your hosted NovaUI module)
-local NovaUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
-
--- Create the main window (centered, draggable, mobile-friendly, with background blur)
-local Window = NovaUI:MakeWindow({
-    Name = "Yon Menu - NovaUI (Bomb Assistant)",
-    IntroEnabled = true,
-    IntroText = "Welcome to Yon Menu",
-    Icon = "rbxassetid://13764119982",  -- Gojo icon
-    BlurBackground = true
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
+local Window = OrionLib:MakeWindow({
+    Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "YonMenu_Advanced",
+    ShowIcon = true  
 })
 
------------------------------------------------------
--- CREATE TABS
------------------------------------------------------
-local AutomatedTab = Window:MakeTab({Name = "Automated"})
-local AITab = Window:MakeTab({Name = "AI Based"})
-local UITab = Window:MakeTab({Name = "UI Elements"})
+-- Create two tabs: Automated and AI-Based
+local AutomatedTab = Window:MakeTab({
+    Name = "Automated",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+local AITab = Window:MakeTab({
+    Name = "AI Based",
+    Icon = "rbxassetid://7072720870",
+    PremiumOnly = false
+})
 
------------------------------------------------------
--- SECTIONING THE AUTOMATED TAB
------------------------------------------------------
-AutomatedTab:AddLabel("Automated Settings")  -- Section header
-AutomatedTab:AddToggle({
+-- Toggle for Auto Pass Bomb Enhanced
+local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
     Callback = function(value)
@@ -380,7 +418,9 @@ AutomatedTab:AddToggle({
         end
     end
 })
-AutomatedTab:AddLabel("Movement Settings")
+local autoPassConnection
+
+-- Toggle for Smart Anti‑Slippery
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
@@ -389,6 +429,8 @@ AutomatedTab:AddToggle({
         FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 })
+
+-- Toggle for Remove Hitbox
 AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
     Default = RemoveHitboxEnabled,
@@ -398,10 +440,17 @@ AutomatedTab:AddToggle({
     end
 })
 
------------------------------------------------------
--- SECTIONING THE AI TAB
------------------------------------------------------
-AITab:AddLabel("General Settings")
+-- AI Assistance Toggle
+AITab:AddToggle({
+    Name = "AI Assistance",
+    Default = false,
+    Callback = function(value)
+        AI_AssistanceEnabled = value
+        print("AI Assistance " .. (AI_AssistanceEnabled and "enabled." or "disabled."))
+    end
+})
+
+-- Sliders for various settings
 AITab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
@@ -412,6 +461,7 @@ AITab:AddSlider({
         bombPassDistance = value
     end
 })
+
 AITab:AddSlider({
     Name = "Ray Spread Angle",
     Min = 5,
@@ -422,6 +472,7 @@ AITab:AddSlider({
         raySpreadAngle = value
     end
 })
+
 AITab:AddSlider({
     Name = "Number of Raycasts",
     Min = 1,
@@ -433,52 +484,69 @@ AITab:AddSlider({
     end
 })
 
-AITab:AddLabel("Rotation Settings")
-AITab:AddToggle({
+-- New toggles for rotation method
+local orionFlickRotationToggle
+local orionSmoothRotationToggle
+
+orionFlickRotationToggle = AITab:AddToggle({
     Name = "Flick Rotation",
     Default = false,
     Callback = function(value)
         useFlickRotation = value
         if value then
             useSmoothRotation = false
+            if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                orionSmoothRotationToggle:Set(false)
+            end
         else
-            if not useSmoothRotation then useSmoothRotation = true end
+            if not useSmoothRotation then
+                useSmoothRotation = true
+                if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                    orionSmoothRotationToggle:Set(true)
+                end
+            end
         end
     end
 })
-AITab:AddToggle({
+
+orionSmoothRotationToggle = AITab:AddToggle({
     Name = "Smooth Rotation",
     Default = true,
     Callback = function(value)
         useSmoothRotation = value
         if value then
             useFlickRotation = false
+            if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                orionFlickRotationToggle:Set(false)
+            end
         else
-            if not useFlickRotation then useFlickRotation = true end
+            if not useFlickRotation then
+                useFlickRotation = true
+                if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                    orionFlickRotationToggle:Set(true)
+                end
+            end
         end
     end
 })
 
-AITab:AddLabel("Assistance")
-AITab:AddToggle({
-    Name = "AI Assistance",
-    Default = false,
-    Callback = function(value)
-        AI_AssistanceEnabled = value
-        print("AI Assistance", value and "enabled" or "disabled")
-    end
+-----------------------------------------------------
+-- UI ELEMENT: Colorpicker for Menu Main Color
+-----------------------------------------------------
+local UITab = Window:MakeTab({
+    Name = "UI Elements",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
 })
-
------------------------------------------------------
--- UI ELEMENTS TAB
------------------------------------------------------
 UITab:AddColorpicker({
     Name = "Menu Main Color",
     Default = Color3.fromRGB(255, 0, 0),
     Callback = function(color)
-        NovaUI.Themes[NovaUI.SelectedTheme].Main = color
+        OrionLib.Themes[OrionLib.SelectedTheme].Main = color
         print("Menu main color updated to:", color)
-    end
+    end,
+    Flag = "MenuMainColor",
+    Save = true
 })
 
 -----------------------------------------------------
@@ -492,10 +560,10 @@ task.spawn(function()
 end)
 
 -----------------------------------------------------
--- INITIALIZE NOVAUI
+-- INITIALIZE ORIONLIB
 -----------------------------------------------------
-NovaUI:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Fallback to Closest Player, Shiftlock, and Mobile Toggle")
+OrionLib:Init()
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Fallback to Closest Player, ShiftLock, Mobile Toggle")
 
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS
@@ -509,7 +577,7 @@ local function createMobileToggle()
     autoPassMobileToggle.Name = "AutoPassMobileToggle"
     autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
     autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
-    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  
     autoPassMobileToggle.Text = "OFF"
     autoPassMobileToggle.TextScaled = true
     autoPassMobileToggle.Font = Enum.Font.SourceSansBold
@@ -525,9 +593,15 @@ local function createMobileToggle()
         if AutoPassEnabled then
             autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
             autoPassMobileToggle.Text = "ON"
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(true)
+            end
         else
             autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
             autoPassMobileToggle.Text = "OFF"
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(false)
+            end
         end
     end)
     
@@ -537,7 +611,7 @@ end
 local mobileGui, autoPassMobileToggle = createMobileToggle()
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
     if child.Name == "MobileToggleGui" then
-        task.wait(1)
+        wait(1)
         if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
             mobileGui, autoPassMobileToggle = createMobileToggle()
             print("Recreated mobile toggle GUI")
@@ -546,13 +620,25 @@ LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
 end)
 
 -----------------------------------------------------
--- SHIFTLOCK CODE (Unchanged)
+-- SHIFTLOCK CODE (CoreGui-based)
 -----------------------------------------------------
 local ShiftLockScreenGui = Instance.new("ScreenGui")
 local ShiftLockButton = Instance.new("ImageButton")
 local ShiftlockCursor = Instance.new("ImageLabel")
+local CoreGui = game:GetService("CoreGui")
+local ShiftStates = {
+    Off = "rbxasset://textures/ui/mouseLock_off@2x.png",
+    On = "rbxasset://textures/ui/mouseLock_on@2x.png",
+    Lock = "rbxasset://textures/MouseLockedCursor.png",
+    Lock2 = "rbxasset://SystemCursors/Cross"
+}
+local SL_MaxLength = 900000
+local SL_EnabledOffset = CFrame.new(1.7, 0, 0)
+local SL_DisabledOffset = CFrame.new(-1.7, 0, 0)
+local SL_Active
+
 ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
-ShiftLockScreenGui.Parent = game:GetService("CoreGui")
+ShiftLockScreenGui.Parent = CoreGui
 ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ShiftLockScreenGui.ResetOnSpawn = false
 
@@ -562,11 +648,11 @@ ShiftLockButton.BackgroundTransparency = 1
 ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0)
 ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
-ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
+ShiftLockButton.Image = ShiftStates.Off
 
 ShiftlockCursor.Name = "Shiftlock Cursor"
 ShiftlockCursor.Parent = ShiftLockScreenGui
-ShiftlockCursor.Image = "rbxasset://textures/MouseLockedCursor.png"
+ShiftlockCursor.Image = ShiftStates.Lock
 ShiftlockCursor.Size = UDim2.new(0.03, 0, 0.03, 0)
 ShiftlockCursor.Position = UDim2.new(0.5, 0, 0.5, 0)
 ShiftlockCursor.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -575,7 +661,6 @@ ShiftlockCursor.BackgroundTransparency = 1
 ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 ShiftlockCursor.Visible = false
 
-local SL_Active
 ShiftLockButton.MouseButton1Click:Connect(function()
     if not SL_Active then
         SL_Active = RunService.RenderStepped:Connect(function()
@@ -584,26 +669,32 @@ ShiftLockButton.MouseButton1Click:Connect(function()
             local root = char and char:FindFirstChild("HumanoidRootPart")
             if hum and root then
                 hum.AutoRotate = false
-                ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_on@2x.png"
+                ShiftLockButton.Image = ShiftStates.On
                 ShiftlockCursor.Visible = true
                 root.CFrame = CFrame.new(
                     root.Position,
                     Vector3.new(
-                        Workspace.CurrentCamera.CFrame.LookVector.X * 900000,
+                        Workspace.CurrentCamera.CFrame.LookVector.X * SL_MaxLength,
                         root.Position.Y,
-                        Workspace.CurrentCamera.CFrame.LookVector.Z * 900000
+                        Workspace.CurrentCamera.CFrame.LookVector.Z * SL_MaxLength
                     )
                 )
-                Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * CFrame.new(1.7, 0, 0)
-                Workspace.CurrentCamera.Focus = Workspace.CurrentCamera.Focus * CFrame.new(1.7, 0, 0)
+                Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_EnabledOffset
+                Workspace.CurrentCamera.Focus = CFrame.fromMatrix(
+                    Workspace.CurrentCamera.Focus.Position,
+                    Workspace.CurrentCamera.CFrame.RightVector,
+                    Workspace.CurrentCamera.CFrame.UpVector
+                ) * SL_EnabledOffset
             end
         end)
     else
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChild("Humanoid")
-        if hum then hum.AutoRotate = true end
-        ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
-        Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * CFrame.new(-1.7, 0, 0)
+        if hum then
+            hum.AutoRotate = true
+        end
+        ShiftLockButton.Image = ShiftStates.Off
+        Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
         ShiftlockCursor.Visible = false
         pcall(function()
             SL_Active:Disconnect()
@@ -620,8 +711,9 @@ local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a
 end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
 
------------------------------------------------------
--- FINAL LOG MESSAGE
------------------------------------------------------
-print("Final Ultra-Advanced Bomb AI loaded with NovaUI. Toggles are now sectioned, window is draggable, and shiftlock + mobile toggle are included.")
+print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fallback to closest player, shiftlock included.")
 return {}
+
+
+
+
