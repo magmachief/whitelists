@@ -331,7 +331,7 @@ end)
 -- REPLACE ORION WITH NOVAUI
 -----------------------------------------------------
 -- 1) Load or require the NovaUI library. Example:
-local NovaUI = loadstring(game:HttpGet("YOUR_URL_HERE/NovaUI.lua"))()
+local NovaUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/refs/heads/main/Orion%20Lib%20Transparent%20%20.lua"))()
 
 -- 2) Create the main window. NovaUI doesn't use HidePremium or SaveConfig, so we omit them.
 local Window = NovaUI:MakeWindow({
