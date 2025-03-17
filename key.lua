@@ -350,6 +350,32 @@ local function autoPassBombEnhanced()
         end
     end, "autoPassBombEnhanced function")
 end
+local function getBombTimerFromObject()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+
+    local bomb = char:FindFirstChild("Bomb")
+    if not bomb then return nil end
+
+    -- Check for a NumberValue or StringValue that represents the timer
+    for _, child in pairs(bomb:GetChildren()) do
+        if child:IsA("NumberValue") or child:IsA("IntValue") then
+            if child.Value > 0 and child.Value < 100 then -- Assume bomb timer is under 100 seconds
+                return child.Value
+            end
+        elseif child:IsA("StringValue") and string.match(child.Value, "%d+") then
+            return tonumber(child.Value)
+        end
+    end
+    return nil
+end
+
+game:GetService("RunService").Stepped:Connect(function()
+    local timeLeft = getBombTimerFromObject()
+    if timeLeft then
+        print("⏳ Bomb Timer: " .. timeLeft .. " seconds left!")
+    end
+end)
 
 -----------------------------------------------------
 -- REMOVE HITBOX
