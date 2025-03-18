@@ -168,7 +168,7 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 
     local bomb = char:FindFirstChild("Bomb")
     local NORMAL_FRICTION = 0.5
-    local ANTI_SLIPPERY_FRICTION = 0.7
+    local ANTI_SLIPPERY_FRICTION = 0.6999999999999
     local frictionValue = (AntiSlipperyEnabled and not bomb) and ANTI_SLIPPERY_FRICTION or NORMAL_FRICTION
 
     for _, part in pairs(char:GetDescendants()) do
