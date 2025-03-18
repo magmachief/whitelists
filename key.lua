@@ -153,7 +153,8 @@ end
 
 local FrictionModule = {}
 
--- Updates friction based on the Anti‑Slippery toggle. Uses 0.5 normally, or 0.7 when enabled (and you're not holding the bomb)
+-- Updates friction based on the Anti‑Slippery toggle.
+-- Uses 0.5 normally, or 0.7 when enabled (and you're not holding the bomb)
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
@@ -388,6 +389,7 @@ local function applyRemoveHitbox(enable)
 end
 
 LocalPlayer.CharacterAdded:Connect(function(char)
+    -- On respawn, only apply friction if you toggle the option.
     FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     applyRemoveHitbox(RemoveHitboxEnabled)
 end)
@@ -440,6 +442,7 @@ AutomatedTab:AddToggle({
     Default = AntiSlipperyEnabled,
     Callback = function(value)
         AntiSlipperyEnabled = value
+        -- Friction is only updated when toggled
         FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 })
@@ -525,16 +528,6 @@ UITab:AddColorpicker({
     Flag = "MenuMainColor",
     Save = true
 })
-
------------------------------------------------------
--- CONTINUOUS DYNAMIC FRICTION UPDATE
------------------------------------------------------
-task.spawn(function()
-    while true do
-        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-        task.wait(0.1)
-    end
-end)
 
 -----------------------------------------------------
 -- INITIALIZE ORIONLIB
