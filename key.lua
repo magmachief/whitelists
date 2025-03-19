@@ -179,58 +179,6 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 end
 
 -----------------------------------------------------
--- HITBOX ESP MODULE (with smaller hitbox overlay)
------------------------------------------------------
-local function createHitboxESP()
-    if not CHAR then return end
-    local hitbox = CHAR:FindFirstChild("Hitbox")
-    if hitbox and hitbox:IsA("BasePart") then
-        if hitbox:FindFirstChild("HitboxESP") then
-            hitbox:FindFirstChild("HitboxESP"):Destroy()
-        end
-        if HitboxESPEnabled then
-            local espBox = Instance.new("BoxHandleAdornment")
-            espBox.Name = "HitboxESP"
-            espBox.Size = hitbox.Size + Vector3.new(0.1, 0.1, 0.1)  -- Reduced extra size for a smaller overlay
-            espBox.Adornee = hitbox
-            espBox.Color3 = Color3.fromRGB(0, 255, 0)  -- Changed to bright green for visibility
-            espBox.AlwaysOnTop = true
-            espBox.ZIndex = 10
-            espBox.Transparency = 0.3
-            espBox.Parent = hitbox
-        end
-    end
-end
-
-local function removeHitboxESP()
-    if not CHAR then return end
-    local hitbox = CHAR:FindFirstChild("Hitbox")
-    if hitbox and hitbox:FindFirstChild("HitboxESP") then
-        hitbox:FindFirstChild("HitboxESP"):Destroy()
-    end
-end
-
-local function toggleHitboxESP(value)
-    HitboxESPEnabled = value
-    if HitboxESPEnabled then
-        createHitboxESP()
-        StarterGui:SetCore("SendNotification", {Title="Hitbox ESP", Text="ESP Enabled!", Duration=2})
-    else
-        removeHitboxESP()
-        StarterGui:SetCore("SendNotification", {Title="Hitbox ESP", Text="ESP Disabled!", Duration=2})
-    end
-end
-
-LocalPlayer.CharacterAdded:Connect(function(newChar)
-    CHAR = newChar
-    wait(1)
-    if HitboxESPEnabled then
-        createHitboxESP()
-    end
-    FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-end)
-
------------------------------------------------------
 -- CONFIG & VARIABLES
 -----------------------------------------------------
 local bombPassDistance = 10  
@@ -435,17 +383,9 @@ local function applyRemoveHitbox(enable)
     for _, part in ipairs(char:GetDescendants()) do
         if part:IsA("BasePart") and part.Name == "Hitbox" then
             if enable then
-                -- Store the original size if not already stored
-                if not part:GetAttribute("OriginalSize") then
-                    part:SetAttribute("OriginalSize", part.Size)
-                end
-                part.Size = Vector3.new(0.2, 0.2, 0.2)  -- Make hitbox small
                 part.Transparency = 1
                 part.CanCollide = false
             else
-                if part:GetAttribute("OriginalSize") then
-                    part.Size = part:GetAttribute("OriginalSize")
-                end
                 part.Transparency = 0
                 part.CanCollide = true
             end
@@ -637,7 +577,7 @@ UITab:AddColorpicker({
 -- INITIALIZE ORIONLIB
 -----------------------------------------------------
 OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, ShiftLock, Mobile Toggle")
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Fallback to Closest Player, ShiftLock, Mobile Toggle")
 
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS
