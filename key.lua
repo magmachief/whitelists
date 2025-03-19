@@ -117,9 +117,6 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     end
 end
 
------------------------------------------------------
--- VISUAL MODULE
------------------------------------------------------
 local VisualModule = {}
 
 function VisualModule.animateMarker(marker)
@@ -146,9 +143,6 @@ function VisualModule.playPassVFX(target)
     end)
 end
 
------------------------------------------------------
--- AI NOTIFICATIONS MODULE
------------------------------------------------------
 local AINotificationsModule = {}
 
 function AINotificationsModule.sendNotification(title, text, duration)
@@ -161,9 +155,6 @@ function AINotificationsModule.sendNotification(title, text, duration)
     end)
 end
 
------------------------------------------------------
--- FRICTION MODULE (ANTI‑SLIPPERY)
------------------------------------------------------
 local FrictionModule = {}
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
@@ -402,8 +393,6 @@ UITab:AddColorpicker({
     Flag = "MenuMainColor",
     Save = true
 })
-
-OrionLib:Init()
 print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, shift lock, mobile toggle and smaller Hitbox ESP overlay.")
 
 -----------------------------------------------------
@@ -727,4 +716,5 @@ print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fall
 -----------------------------------------------------
 -- FINALIZE SCRIPT
 -----------------------------------------------------
+OrionLib:Init()
 return {}
