@@ -1,9 +1,10 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
--- Features: Auto Pass, AI-Based Fallback, Shift Lock, Mobile Support, Anti‑Slippery, Hitbox ESP Toggle.
+-- Final version with fallback to closest player, toggles in the menu, shiftlock included.
+-- Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (0.7 friction).
 -----------------------------------------------------
 
---// SERVICES
+-- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -11,25 +12,15 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
-local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
-local CHAR = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
 -----------------------------------------------------
--- CONFIG & VARIABLES
+-- CHARACTER SETUP
 -----------------------------------------------------
-local bombPassDistance = 10  
-local AutoPassEnabled = false 
-local AntiSlipperyEnabled = false  
-local RemoveHitboxEnabled = false  
-local AI_AssistanceEnabled = false  
-local pathfindingSpeed = 16  
-local lastAIMessageTime = 0
-local aiMessageCooldown = 5
-local HitboxESPEnabled = false -- Toggle for Hitbox ESP
-local raySpreadAngle = 10
-local numRaycasts = 3
+local CHAR = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HUMANOID = CHAR:WaitForChild("Humanoid")
+local HRP = CHAR:WaitForChild("HumanoidRootPart")
 
 -----------------------------------------------------
 -- MODULES
@@ -47,6 +38,8 @@ function LoggingModule.safeCall(func, context)
 end
 
 local TargetingModule = {}
+
+-- Global rotation mode variables
 local useFlickRotation = false
 local useSmoothRotation = true
 
@@ -59,6 +52,7 @@ function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            -- skip if they have a bomb
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
@@ -85,6 +79,7 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            -- skip if they have a bomb
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
@@ -99,6 +94,7 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     return closestPlayer
 end
 
+-- Modified rotation function that checks the toggles:
 function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
@@ -106,13 +102,16 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     if not hrp then return end
     local adjustedTargetPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
     if useFlickRotation then
+        -- Instant snap ("flick")
         hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
     elseif useSmoothRotation then
+        -- Smooth tween rotation
         local targetCFrame = CFrame.new(hrp.Position, adjustedTargetPos)
         local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
         tween:Play()
         return tween
     else
+        -- fallback: instant rotation
         hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
     end
 end
@@ -156,15 +155,22 @@ function AINotificationsModule.sendNotification(title, text, duration)
 end
 
 local FrictionModule = {}
+
+-- Adjusted Anti‑Slippery logic:
+-- Friction is updated only when toggled (or on respawn) and not continuously.
+-- If Anti‑Slippery is enabled and the character is NOT holding the bomb, friction is set to 0.7;
+-- otherwise, friction remains at 0.5.
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
+
     local bomb = char:FindFirstChild("Bomb")
     local NORMAL_FRICTION = 0.5
     local ANTI_SLIPPERY_FRICTION = 0.7
     local frictionValue = (AntiSlipperyEnabled and not bomb) and ANTI_SLIPPERY_FRICTION or NORMAL_FRICTION
+
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CustomPhysicalProperties = PhysicalProperties.new(frictionValue, 0.3, 0.5)
@@ -187,7 +193,7 @@ local function createHitboxESP()
             espBox.Name = "HitboxESP"
             espBox.Size = hitbox.Size + Vector3.new(0.1, 0.1, 0.1)  -- Reduced extra size for a smaller overlay
             espBox.Adornee = hitbox
-            espBox.Color3 = Color3.fromRGB(255, 0, 0)
+            espBox.Color3 = Color3.fromRGB(0, 255, 0)  -- Changed to bright green for visibility
             espBox.AlwaysOnTop = true
             espBox.ZIndex = 10
             espBox.Transparency = 0.3
@@ -225,233 +231,22 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
 end)
 
 -----------------------------------------------------
--- ORIONLIB MENU SETUP
+-- CONFIG & VARIABLES
 -----------------------------------------------------
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
-local Window = OrionLib:MakeWindow({
-    Name = "Yon Menu - Advanced",
-    HidePremium = false,
-    SaveConfig = true,
-    ConfigFolder = "YonMenu_Advanced",
-    ShowIcon = true  
-})
+local bombPassDistance = 10  
+local AutoPassEnabled = false 
+local AntiSlipperyEnabled = false  
+local RemoveHitboxEnabled = false  
+local AI_AssistanceEnabled = false  
+local pathfindingSpeed = 16  
+local lastAIMessageTime = 0
+local aiMessageCooldown = 5
 
-local AutomatedTab = Window:MakeTab({
-    Name = "Automated",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
-local AITab = Window:MakeTab({
-    Name = "AI Based",
-    Icon = "rbxassetid://7072720870",
-    PremiumOnly = false
-})
-
-local UITab = Window:MakeTab({
-    Name = "UI Elements",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
--- Automated Tab Toggles
-local autoPassConnection
-local orionAutoPassToggle = AutomatedTab:AddToggle({
-    Name = "Auto Pass Bomb (Enhanced)",
-    Default = AutoPassEnabled,
-    Callback = function(value)
-        AutoPassEnabled = value
-        if AutoPassEnabled then
-            if not autoPassConnection then
-                autoPassConnection = RunService.Stepped:Connect(function()
-                    autoPassBombEnhanced()
-                end)
-            end
-        else
-            if autoPassConnection then
-                autoPassConnection:Disconnect()
-                autoPassConnection = nil
-            end
-            removeTargetMarker()
-        end
-    end
-})
-
-AutomatedTab:AddToggle({
-    Name = "Anti Slippery",
-    Default = AntiSlipperyEnabled,
-    Callback = function(value)
-        AntiSlipperyEnabled = value
-        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-    end
-})
-
-AutomatedTab:AddToggle({
-    Name = "Remove Hitbox",
-    Default = RemoveHitboxEnabled,
-    Callback = function(value)
-        RemoveHitboxEnabled = value
-        for _, part in ipairs(CHAR:GetDescendants()) do
-            if part:IsA("BasePart") and part.Name == "Hitbox" then
-                if RemoveHitboxEnabled then
-                    part.Transparency = 1
-                    part.CanCollide = false
-                else
-                    part.Transparency = 0
-                    part.CanCollide = true
-                end
-            end
-        end
-    end
-})
-
-AutomatedTab:AddToggle({
-    Name = "Hitbox ESP",
-    Default = HitboxESPEnabled,
-    Callback = function(value)
-        toggleHitboxESP(value)
-    end
-})
-
--- AI Based Tab Toggles
-AITab:AddToggle({
-    Name = "AI Assistance",
-    Default = AI_AssistanceEnabled,
-    Callback = function(value)
-        AI_AssistanceEnabled = value
-        print("AI Assistance " .. (AI_AssistanceEnabled and "enabled." or "disabled."))
-    end
-})
-
-AITab:AddSlider({
-    Name = "Bomb Pass Distance",
-    Min = 5,
-    Max = 30,
-    Default = bombPassDistance,
-    Increment = 1,
-    Callback = function(value)
-        bombPassDistance = value
-    end
-})
-
-AITab:AddSlider({
-    Name = "Ray Spread Angle",
-    Min = 5,
-    Max = 20,
-    Default = raySpreadAngle,
-    Increment = 1,
-    Callback = function(value)
-        raySpreadAngle = value
-    end
-})
-
-AITab:AddSlider({
-    Name = "Number of Raycasts",
-    Min = 1,
-    Max = 5,
-    Default = numRaycasts,
-    Increment = 1,
-    Callback = function(value)
-        numRaycasts = value
-    end
-})
-
-local orionFlickRotationToggle = AITab:AddToggle({
-    Name = "Flick Rotation",
-    Default = false,
-    Callback = function(value)
-        useFlickRotation = value
-        if value then
-            useSmoothRotation = false
-        elseif not useSmoothRotation then
-            useSmoothRotation = true
-        end
-    end
-})
-
-local orionSmoothRotationToggle = AITab:AddToggle({
-    Name = "Smooth Rotation",
-    Default = true,
-    Callback = function(value)
-        useSmoothRotation = value
-        if value then
-            useFlickRotation = false
-        elseif not useFlickRotation then
-            useFlickRotation = true
-        end
-    end
-})
-
--- UI Elements Tab
-UITab:AddColorpicker({
-    Name = "Menu Main Color",
-    Default = Color3.fromRGB(255, 0, 0),
-    Callback = function(color)
-        OrionLib.Themes[OrionLib.SelectedTheme].Main = color
-        print("Menu main color updated to:", color)
-    end,
-    Flag = "MenuMainColor",
-    Save = true
-})
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, shift lock, mobile toggle and smaller Hitbox ESP overlay.")
+local raySpreadAngle = 10
+local numRaycasts = 3
 
 -----------------------------------------------------
--- MOBILE TOGGLE BUTTON FOR AUTO PASS
------------------------------------------------------
-local function createMobileToggle()
-    local mobileGui = Instance.new("ScreenGui")
-    mobileGui.Name = "MobileToggleGui"
-    mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    
-    local autoPassMobileToggle = Instance.new("TextButton")
-    autoPassMobileToggle.Name = "AutoPassMobileToggle"
-    autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
-    autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
-    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-    autoPassMobileToggle.Text = "OFF"
-    autoPassMobileToggle.TextScaled = true
-    autoPassMobileToggle.Font = Enum.Font.SourceSansBold
-    autoPassMobileToggle.ZIndex = 100
-    autoPassMobileToggle.Parent = mobileGui
-
-    local uicorner = Instance.new("UICorner")
-    uicorner.CornerRadius = UDim.new(1, 0)
-    uicorner.Parent = autoPassMobileToggle
-
-    autoPassMobileToggle.MouseButton1Click:Connect(function()
-        AutoPassEnabled = not AutoPassEnabled
-        if AutoPassEnabled then
-            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-            autoPassMobileToggle.Text = "ON"
-            if orionAutoPassToggle and orionAutoPassToggle.Set then
-                orionAutoPassToggle:Set(true)
-            end
-        else
-            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-            autoPassMobileToggle.Text = "OFF"
-            if orionAutoPassToggle and orionAutoPassToggle.Set then
-                orionAutoPassToggle:Set(false)
-            end
-        end
-    end)
-    
-    return mobileGui, autoPassMobileToggle
-end
-
-local mobileGui, autoPassMobileToggle = createMobileToggle()
-
-LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
-    if child.Name == "MobileToggleGui" then
-        wait(1)
-        if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
-            mobileGui, autoPassMobileToggle = createMobileToggle()
-            print("Recreated mobile toggle GUI")
-        end
-    end
-end)
-
------------------------------------------------------
--- TARGET MARKER FUNCTIONS
+-- VISUAL TARGET MARKER
 -----------------------------------------------------
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
@@ -503,7 +298,7 @@ local function removeTargetMarker()
 end
 
 -----------------------------------------------------
--- MULTIPLE RAYCASTS FUNCTION
+-- MULTIPLE RAYCASTS
 -----------------------------------------------------
 local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
@@ -541,8 +336,8 @@ end
 -----------------------------------------------------
 -- AUTO PASS FUNCTION
 -----------------------------------------------------
-function autoPassBombEnhanced()
-    if not AutoPassEnabled then return end
+local function autoPassBombEnhanced()
+    if not AutoPassEnabled then return end  -- Only run if toggle is on
 
     LoggingModule.safeCall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
@@ -552,6 +347,7 @@ function autoPassBombEnhanced()
         end
 
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
+        -- fallback: best target or closest
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
             or TargetingModule.getClosestPlayer(bombPassDistance)
 
@@ -588,6 +384,7 @@ function autoPassBombEnhanced()
                 lastAIMessageTime = tick()
             end
 
+            -- Attempt the pass
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
@@ -605,8 +402,11 @@ end
 local function getBombTimerFromObject()
     local char = LocalPlayer.Character
     if not char then return nil end
+
     local bomb = char:FindFirstChild("Bomb")
     if not bomb then return nil end
+
+    -- Check for a NumberValue or StringValue that represents the timer
     for _, child in pairs(bomb:GetChildren()) do
         if child:IsA("NumberValue") or child:IsA("IntValue") then
             if child.Value > 0 and child.Value < 100 then
@@ -619,10 +419,277 @@ local function getBombTimerFromObject()
     return nil
 end
 
-RunService.Stepped:Connect(function()
+game:GetService("RunService").Stepped:Connect(function()
     local timeLeft = getBombTimerFromObject()
     if timeLeft then
         print("⏳ Bomb Timer: " .. timeLeft .. " seconds left!")
+    end
+end)
+
+-----------------------------------------------------
+-- REMOVE HITBOX
+-----------------------------------------------------
+local function applyRemoveHitbox(enable)
+    local char = LocalPlayer.Character
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name == "Hitbox" then
+            if enable then
+                -- Store the original size if not already stored
+                if not part:GetAttribute("OriginalSize") then
+                    part:SetAttribute("OriginalSize", part.Size)
+                end
+                part.Size = Vector3.new(0.2, 0.2, 0.2)  -- Make hitbox small
+                part.Transparency = 1
+                part.CanCollide = false
+            else
+                if part:GetAttribute("OriginalSize") then
+                    part.Size = part:GetAttribute("OriginalSize")
+                end
+                part.Transparency = 0
+                part.CanCollide = true
+            end
+        end
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    -- On respawn, apply friction only if toggled in the menu.
+    FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+    applyRemoveHitbox(RemoveHitboxEnabled)
+end)
+
+-----------------------------------------------------
+-- ORIONLIB MENU
+-----------------------------------------------------
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
+local Window = OrionLib:MakeWindow({
+    Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "YonMenu_Advanced",
+    ShowIcon = true  
+})
+
+-- Create two tabs: Automated and AI-Based
+local AutomatedTab = Window:MakeTab({
+    Name = "Automated",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+local AITab = Window:MakeTab({
+    Name = "AI Based",
+    Icon = "rbxassetid://7072720870",
+    PremiumOnly = false
+})
+
+-- Toggle for Auto Pass Bomb Enhanced
+local orionAutoPassToggle = AutomatedTab:AddToggle({
+    Name = "Auto Pass Bomb (Enhanced)",
+    Default = AutoPassEnabled,
+    Callback = function(value)
+        AutoPassEnabled = value
+        if AutoPassEnabled then
+            if not autoPassConnection then
+                autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
+            end
+        else
+            if autoPassConnection then
+                autoPassConnection:Disconnect()
+                autoPassConnection = nil
+            end
+            removeTargetMarker()
+        end
+    end
+})
+local autoPassConnection
+
+-- Toggle for Smart Anti‑Slippery (applies friction only on toggle and on respawn)
+AutomatedTab:AddToggle({
+    Name = "Anti Slippery",
+    Default = AntiSlipperyEnabled,
+    Callback = function(value)
+        AntiSlipperyEnabled = value
+        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+    end
+})
+
+-- Toggle for Remove Hitbox
+AutomatedTab:AddToggle({
+    Name = "Remove Hitbox",
+    Default = RemoveHitboxEnabled,
+    Callback = function(value)
+        RemoveHitboxEnabled = value
+        applyRemoveHitbox(value)
+    end
+})
+
+-- AI Assistance Toggle
+AITab:AddToggle({
+    Name = "AI Assistance",
+    Default = false,
+    Callback = function(value)
+        AI_AssistanceEnabled = value
+        print("AI Assistance " .. (AI_AssistanceEnabled and "enabled." or "disabled."))
+    end
+})
+
+-- Sliders for various settings
+AITab:AddSlider({
+    Name = "Bomb Pass Distance",
+    Min = 5,
+    Max = 30,
+    Default = bombPassDistance,
+    Increment = 1,
+    Callback = function(value)
+        bombPassDistance = value
+    end
+})
+
+AITab:AddSlider({
+    Name = "Ray Spread Angle",
+    Min = 5,
+    Max = 20,
+    Default = raySpreadAngle,
+    Increment = 1,
+    Callback = function(value)
+        raySpreadAngle = value
+    end
+})
+
+AITab:AddSlider({
+    Name = "Number of Raycasts",
+    Min = 1,
+    Max = 5,
+    Default = numRaycasts,
+    Increment = 1,
+    Callback = function(value)
+        numRaycasts = value
+    end
+})
+
+-- New toggles for rotation method
+local orionFlickRotationToggle
+local orionSmoothRotationToggle
+
+orionFlickRotationToggle = AITab:AddToggle({
+    Name = "Flick Rotation",
+    Default = false,
+    Callback = function(value)
+        useFlickRotation = value
+        if value then
+            useSmoothRotation = false
+            if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                orionSmoothRotationToggle:Set(false)
+            end
+        else
+            if not useSmoothRotation then
+                useSmoothRotation = true
+                if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                    orionSmoothRotationToggle:Set(true)
+                end
+            end
+        end
+    end
+})
+
+orionSmoothRotationToggle = AITab:AddToggle({
+    Name = "Smooth Rotation",
+    Default = true,
+    Callback = function(value)
+        useSmoothRotation = value
+        if value then
+            useFlickRotation = false
+            if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                orionFlickRotationToggle:Set(false)
+            end
+        else
+            if not useFlickRotation then
+                useFlickRotation = true
+                if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                    orionFlickRotationToggle:Set(true)
+                end
+            end
+        end
+    end
+})
+
+-----------------------------------------------------
+-- UI ELEMENT: Colorpicker for Menu Main Color
+-----------------------------------------------------
+local UITab = Window:MakeTab({
+    Name = "UI Elements",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+UITab:AddColorpicker({
+    Name = "Menu Main Color",
+    Default = Color3.fromRGB(255, 0, 0),
+    Callback = function(color)
+        OrionLib.Themes[OrionLib.SelectedTheme].Main = color
+        print("Menu main color updated to:", color)
+    end,
+    Flag = "MenuMainColor",
+    Save = true
+})
+
+-----------------------------------------------------
+-- INITIALIZE ORIONLIB
+-----------------------------------------------------
+OrionLib:Init()
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, ShiftLock, Mobile Toggle")
+
+-----------------------------------------------------
+-- MOBILE TOGGLE BUTTON FOR AUTO PASS
+-----------------------------------------------------
+local function createMobileToggle()
+    local mobileGui = Instance.new("ScreenGui")
+    mobileGui.Name = "MobileToggleGui"
+    mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    
+    local autoPassMobileToggle = Instance.new("TextButton")
+    autoPassMobileToggle.Name = "AutoPassMobileToggle"
+    autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
+    autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
+    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  
+    autoPassMobileToggle.Text = "OFF"
+    autoPassMobileToggle.TextScaled = true
+    autoPassMobileToggle.Font = Enum.Font.SourceSansBold
+    autoPassMobileToggle.ZIndex = 100
+    autoPassMobileToggle.Parent = mobileGui
+
+    local uicorner = Instance.new("UICorner")
+    uicorner.CornerRadius = UDim.new(1, 0)
+    uicorner.Parent = autoPassMobileToggle
+
+    autoPassMobileToggle.MouseButton1Click:Connect(function()
+        AutoPassEnabled = not AutoPassEnabled
+        if AutoPassEnabled then
+            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+            autoPassMobileToggle.Text = "ON"
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(true)
+            end
+        else
+            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+            autoPassMobileToggle.Text = "OFF"
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(false)
+            end
+        end
+    end)
+    
+    return mobileGui, autoPassMobileToggle
+end
+
+local mobileGui, autoPassMobileToggle = createMobileToggle()
+LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
+    if child.Name == "MobileToggleGui" then
+        wait(1)
+        if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
+            mobileGui, autoPassMobileToggle = createMobileToggle()
+            print("Recreated mobile toggle GUI")
+        end
     end
 end)
 
@@ -632,20 +699,22 @@ end)
 local ShiftLockScreenGui = Instance.new("ScreenGui")
 local ShiftLockButton = Instance.new("ImageButton")
 local ShiftlockCursor = Instance.new("ImageLabel")
-ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
-ShiftLockScreenGui.Parent = CoreGui
-ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ShiftLockScreenGui.ResetOnSpawn = false
-
+local CoreGui = game:GetService("CoreGui")
 local ShiftStates = {
     Off = "rbxasset://textures/ui/mouseLock_off@2x.png",
     On = "rbxasset://textures/ui/mouseLock_on@2x.png",
-    Lock = "rbxasset://textures/MouseLockedCursor.png"
+    Lock = "rbxasset://textures/MouseLockedCursor.png",
+    Lock2 = "rbxasset://SystemCursors/Cross"
 }
 local SL_MaxLength = 900000
 local SL_EnabledOffset = CFrame.new(1.7, 0, 0)
 local SL_DisabledOffset = CFrame.new(-1.7, 0, 0)
 local SL_Active
+
+ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
+ShiftLockScreenGui.Parent = CoreGui
+ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ShiftLockScreenGui.ResetOnSpawn = false
 
 ShiftLockButton.Parent = ShiftLockScreenGui
 ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -685,6 +754,11 @@ ShiftLockButton.MouseButton1Click:Connect(function()
                     )
                 )
                 Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_EnabledOffset
+                Workspace.CurrentCamera.Focus = CFrame.fromMatrix(
+                    Workspace.CurrentCamera.Focus.Position,
+                    Workspace.CurrentCamera.CFrame.RightVector,
+                    Workspace.CurrentCamera.CFrame.UpVector
+                ) * SL_EnabledOffset
             end
         end)
     else
@@ -712,9 +786,4 @@ end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
 
 print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fallback to closest player, shiftlock included.")
-
------------------------------------------------------
--- FINALIZE SCRIPT
------------------------------------------------------
-OrionLib:Init()
 return {}
