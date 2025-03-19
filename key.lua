@@ -117,6 +117,9 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     end
 end
 
+-----------------------------------------------------
+-- VISUAL MODULE
+-----------------------------------------------------
 local VisualModule = {}
 
 function VisualModule.animateMarker(marker)
@@ -143,6 +146,9 @@ function VisualModule.playPassVFX(target)
     end)
 end
 
+-----------------------------------------------------
+-- AI NOTIFICATIONS MODULE
+-----------------------------------------------------
 local AINotificationsModule = {}
 
 function AINotificationsModule.sendNotification(title, text, duration)
@@ -155,6 +161,9 @@ function AINotificationsModule.sendNotification(title, text, duration)
     end)
 end
 
+-----------------------------------------------------
+-- FRICTION MODULE (ANTI‑SLIPPERY)
+-----------------------------------------------------
 local FrictionModule = {}
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
@@ -173,7 +182,7 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 end
 
 -----------------------------------------------------
--- HITBOX ESP MODULE (with smaller hitbox overlay)
+-- HITBOX ESP MODULE (with smaller overlay)
 -----------------------------------------------------
 local function createHitboxESP()
     if not CHAR then return end
@@ -223,180 +232,6 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     end
     FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 end)
-
------------------------------------------------------
--- ORIONLIB MENU SETUP
------------------------------------------------------
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
-local Window = OrionLib:MakeWindow({
-    Name = "Yon Menu - Advanced",
-    HidePremium = false,
-    SaveConfig = true,
-    ConfigFolder = "YonMenu_Advanced",
-    ShowIcon = true  
-})
-
-local AutomatedTab = Window:MakeTab({
-    Name = "Automated",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
-local AITab = Window:MakeTab({
-    Name = "AI Based",
-    Icon = "rbxassetid://7072720870",
-    PremiumOnly = false
-})
-
-local UITab = Window:MakeTab({
-    Name = "UI Elements",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
--- Automated Tab Toggles
-local autoPassConnection
-local orionAutoPassToggle = AutomatedTab:AddToggle({
-    Name = "Auto Pass Bomb (Enhanced)",
-    Default = AutoPassEnabled,
-    Callback = function(value)
-        AutoPassEnabled = value
-        if AutoPassEnabled then
-            if not autoPassConnection then
-                autoPassConnection = RunService.Stepped:Connect(function()
-                    autoPassBombEnhanced()
-                end)
-            end
-        else
-            if autoPassConnection then
-                autoPassConnection:Disconnect()
-                autoPassConnection = nil
-            end
-            removeTargetMarker()
-        end
-    end
-})
-
-AutomatedTab:AddToggle({
-    Name = "Anti Slippery",
-    Default = AntiSlipperyEnabled,
-    Callback = function(value)
-        AntiSlipperyEnabled = value
-        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-    end
-})
-
-AutomatedTab:AddToggle({
-    Name = "Remove Hitbox",
-    Default = RemoveHitboxEnabled,
-    Callback = function(value)
-        RemoveHitboxEnabled = value
-        for _, part in ipairs(CHAR:GetDescendants()) do
-            if part:IsA("BasePart") and part.Name == "Hitbox" then
-                if RemoveHitboxEnabled then
-                    part.Transparency = 1
-                    part.CanCollide = false
-                else
-                    part.Transparency = 0
-                    part.CanCollide = true
-                end
-            end
-        end
-    end
-})
-
-AutomatedTab:AddToggle({
-    Name = "Hitbox ESP",
-    Default = HitboxESPEnabled,
-    Callback = function(value)
-        toggleHitboxESP(value)
-    end
-})
-
--- AI Based Tab Toggles
-AITab:AddToggle({
-    Name = "AI Assistance",
-    Default = AI_AssistanceEnabled,
-    Callback = function(value)
-        AI_AssistanceEnabled = value
-        print("AI Assistance " .. (AI_AssistanceEnabled and "enabled." or "disabled."))
-    end
-})
-
-AITab:AddSlider({
-    Name = "Bomb Pass Distance",
-    Min = 5,
-    Max = 30,
-    Default = bombPassDistance,
-    Increment = 1,
-    Callback = function(value)
-        bombPassDistance = value
-    end
-})
-
-AITab:AddSlider({
-    Name = "Ray Spread Angle",
-    Min = 5,
-    Max = 20,
-    Default = raySpreadAngle,
-    Increment = 1,
-    Callback = function(value)
-        raySpreadAngle = value
-    end
-})
-
-AITab:AddSlider({
-    Name = "Number of Raycasts",
-    Min = 1,
-    Max = 5,
-    Default = numRaycasts,
-    Increment = 1,
-    Callback = function(value)
-        numRaycasts = value
-    end
-})
-
-local orionFlickRotationToggle = AITab:AddToggle({
-    Name = "Flick Rotation",
-    Default = false,
-    Callback = function(value)
-        useFlickRotation = value
-        if value then
-            useSmoothRotation = false
-        elseif not useSmoothRotation then
-            useSmoothRotation = true
-        end
-    end
-})
-
-local orionSmoothRotationToggle = AITab:AddToggle({
-    Name = "Smooth Rotation",
-    Default = true,
-    Callback = function(value)
-        useSmoothRotation = value
-        if value then
-            useFlickRotation = false
-        elseif not useFlickRotation then
-            useFlickRotation = true
-        end
-    end
-})
-
--- UI Elements Tab
-UITab:AddColorpicker({
-    Name = "Menu Main Color",
-    Default = Color3.fromRGB(255, 0, 0),
-    Callback = function(color)
-        OrionLib.Themes[OrionLib.SelectedTheme].Main = color
-        print("Menu main color updated to:", color)
-    end,
-    Flag = "MenuMainColor",
-    Save = true
-})
-
-OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, shift lock, mobile toggle and smaller Hitbox ESP overlay.")
-
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS
 -----------------------------------------------------
@@ -627,6 +462,184 @@ RunService.Stepped:Connect(function()
         print("⏳ Bomb Timer: " .. timeLeft .. " seconds left!")
     end
 end)
+-----------------------------------------------------
+-- ORIONLIB MENU SETUP
+-----------------------------------------------------
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
+local Window = OrionLib:MakeWindow({
+    Name = "Yon Menu - Advanced",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "YonMenu_Advanced",
+    ShowIcon = true  
+})
+
+local AutomatedTab = Window:MakeTab({
+    Name = "Automated",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local AITab = Window:MakeTab({
+    Name = "AI Based",
+    Icon = "rbxassetid://7072720870",
+    PremiumOnly = false
+})
+
+local UITab = Window:MakeTab({
+    Name = "UI Elements",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-----------------------------------------------------
+-- MENU: AUTOMATED TAB TOGGLES
+-----------------------------------------------------
+local autoPassConnection
+local orionAutoPassToggle = AutomatedTab:AddToggle({
+    Name = "Auto Pass Bomb (Enhanced)",
+    Default = AutoPassEnabled,
+    Callback = function(value)
+        AutoPassEnabled = value
+        if AutoPassEnabled then
+            if not autoPassConnection then
+                autoPassConnection = RunService.Stepped:Connect(function()
+                    autoPassBombEnhanced()
+                end)
+            end
+        else
+            if autoPassConnection then
+                autoPassConnection:Disconnect()
+                autoPassConnection = nil
+            end
+            removeTargetMarker()
+        end
+    end
+})
+
+AutomatedTab:AddToggle({
+    Name = "Anti Slippery",
+    Default = AntiSlipperyEnabled,
+    Callback = function(value)
+        AntiSlipperyEnabled = value
+        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+    end
+})
+
+AutomatedTab:AddToggle({
+    Name = "Remove Hitbox",
+    Default = RemoveHitboxEnabled,
+    Callback = function(value)
+        RemoveHitboxEnabled = value
+        for _, part in ipairs(CHAR:GetDescendants()) do
+            if part:IsA("BasePart") and part.Name == "Hitbox" then
+                if RemoveHitboxEnabled then
+                    part.Transparency = 1
+                    part.CanCollide = false
+                else
+                    part.Transparency = 0
+                    part.CanCollide = true
+                end
+            end
+        end
+    end
+})
+
+AutomatedTab:AddToggle({
+    Name = "Hitbox ESP",
+    Default = HitboxESPEnabled,
+    Callback = function(value)
+        toggleHitboxESP(value)
+    end
+})
+
+-----------------------------------------------------
+-- MENU: AI BASED TAB TOGGLES & SLIDERS
+-----------------------------------------------------
+AITab:AddToggle({
+    Name = "AI Assistance",
+    Default = AI_AssistanceEnabled,
+    Callback = function(value)
+        AI_AssistanceEnabled = value
+        print("AI Assistance " .. (AI_AssistanceEnabled and "enabled." or "disabled."))
+    end
+})
+
+AITab:AddSlider({
+    Name = "Bomb Pass Distance",
+    Min = 5,
+    Max = 30,
+    Default = bombPassDistance,
+    Increment = 1,
+    Callback = function(value)
+        bombPassDistance = value
+    end
+})
+
+AITab:AddSlider({
+    Name = "Ray Spread Angle",
+    Min = 5,
+    Max = 20,
+    Default = raySpreadAngle,
+    Increment = 1,
+    Callback = function(value)
+        raySpreadAngle = value
+    end
+})
+
+AITab:AddSlider({
+    Name = "Number of Raycasts",
+    Min = 1,
+    Max = 5,
+    Default = numRaycasts,
+    Increment = 1,
+    Callback = function(value)
+        numRaycasts = value
+    end
+})
+
+local orionFlickRotationToggle = AITab:AddToggle({
+    Name = "Flick Rotation",
+    Default = false,
+    Callback = function(value)
+        useFlickRotation = value
+        if value then
+            useSmoothRotation = false
+        elseif not useSmoothRotation then
+            useSmoothRotation = true
+        end
+    end
+})
+
+local orionSmoothRotationToggle = AITab:AddToggle({
+    Name = "Smooth Rotation",
+    Default = true,
+    Callback = function(value)
+        useSmoothRotation = value
+        if value then
+            useFlickRotation = false
+        elseif not useFlickRotation then
+            useFlickRotation = true
+        end
+    end
+})
+
+-----------------------------------------------------
+-- MENU: UI ELEMENTS TAB
+-----------------------------------------------------
+UITab:AddColorpicker({
+    Name = "Menu Main Color",
+    Default = Color3.fromRGB(255, 0, 0),
+    Callback = function(color)
+        OrionLib.Themes[OrionLib.SelectedTheme].Main = color
+        print("Menu main color updated to:", color)
+    end,
+    Flag = "MenuMainColor",
+    Save = true
+})
+
+OrionLib:Init()
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, shift lock, mobile toggle, and Hitbox ESP.")
 
 -----------------------------------------------------
 -- SHIFTLOCK CODE (CoreGui-based)
