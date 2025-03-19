@@ -385,13 +385,16 @@ local function applyRemoveHitbox(enable)
             if enable then
                 part.Transparency = 1
                 part.CanCollide = false
+                part.Size = Vector3.new(0.1, 0.1, 0.1) -- Super small hitbox
             else
                 part.Transparency = 0
                 part.CanCollide = true
+                part.Size = Vector3.new(1, 1, 1) -- Default size, adjust if necessary
             end
         end
     end
 end
+
 
 LocalPlayer.CharacterAdded:Connect(function(char)
     -- On respawn, apply friction only if toggled in the menu.
