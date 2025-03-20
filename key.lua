@@ -1,10 +1,24 @@
+--[[
+    Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
+    Final version with fallback to closest player, toggles in the menu, shiftlock included.
+    Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (custom value set via menu).
 -----------------------------------------------------
--- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
--- Final version with fallback to closest player, toggles in the menu, shiftlock included.
--- Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (custom value set via menu).
------------------------------------------------------
+    FEATURES INCLUDED:
+      • Auto Pass Bomb (Enhanced) with AI Assistance
+      • Fallback to Closest Player if optimal target is not found
+      • Rotates the character smoothly or via instant flick (toggle-able)
+      • Friction adjustment with Anti‑Slippery toggle AND preset cycling
+      • Hitbox removal (with custom hitbox size) toggle AND preset cycling
+      • Hitbox ESP (optional overlay)
+      • Bomb Timer display in the output
+      • Mobile toggle button for auto pass
+      • ShiftLock functionality (CoreGui-based)
+      • OrionLib menu integration with tabs, toggles, sliders, colorpicker, etc.
+--]]
 
+-----------------------------------------------------
 -- SERVICES
+-----------------------------------------------------
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -12,6 +26,7 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -79,7 +94,6 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- skip if they have a bomb
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
@@ -94,7 +108,6 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     return closestPlayer
 end
 
--- Modified rotation function that checks the toggles:
 function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
@@ -102,16 +115,13 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     if not hrp then return end
     local adjustedTargetPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
     if useFlickRotation then
-        -- Instant snap ("flick")
         hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
     elseif useSmoothRotation then
-        -- Smooth tween rotation
         local targetCFrame = CFrame.new(hrp.Position, adjustedTargetPos)
         local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
         tween:Play()
         return tween
     else
-        -- fallback: instant rotation
         hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
     end
 end
@@ -156,10 +166,6 @@ end
 
 local FrictionModule = {}
 
--- Adjusted Anti‑Slippery logic:
--- Friction is updated only when toggled (or on respawn) and not continuously.
--- If Anti‑Slippery is enabled and the character is NOT holding the bomb, friction is set to customAntiSlipperyFriction;
--- otherwise, friction remains at 0.5.
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
@@ -180,6 +186,7 @@ end
 -----------------------------------------------------
 -- HITBOX ESP MODULE (with smaller hitbox overlay)
 -----------------------------------------------------
+local HitboxESPEnabled = false
 local function createHitboxESP()
     if not CHAR then return end
     local hitbox = CHAR:FindFirstChild("Hitbox")
@@ -190,9 +197,9 @@ local function createHitboxESP()
         if HitboxESPEnabled then
             local espBox = Instance.new("BoxHandleAdornment")
             espBox.Name = "HitboxESP"
-            espBox.Size = hitbox.Size + Vector3.new(0.1, 0.1, 0.1)  -- Reduced extra size for a smaller overlay
+            espBox.Size = hitbox.Size + Vector3.new(0.1, 0.1, 0.1)
             espBox.Adornee = hitbox
-            espBox.Color3 = Color3.fromRGB(0, 255, 0)  -- Bright green for visibility
+            espBox.Color3 = Color3.fromRGB(0, 255, 0)
             espBox.AlwaysOnTop = true
             espBox.ZIndex = 10
             espBox.Transparency = 0.3
@@ -245,8 +252,8 @@ local raySpreadAngle = 10
 local numRaycasts = 5
 
 -- New custom variables:
-local customAntiSlipperyFriction = 0.7  -- Default custom friction value when Anti‑Slippery is enabled
-local customHitboxSize = 0.1            -- Default custom hitbox size when Remove Hitbox is enabled
+local customAntiSlipperyFriction = 0.7  -- Custom friction value when Anti‑Slippery is enabled
+local customHitboxSize = 0.1            -- Custom hitbox size when Remove Hitbox is enabled
 
 -----------------------------------------------------
 -- VISUAL TARGET MARKER
@@ -340,7 +347,7 @@ end
 -- AUTO PASS FUNCTION
 -----------------------------------------------------
 local function autoPassBombEnhanced()
-    if not AutoPassEnabled then return end  -- Only run if toggle is on
+    if not AutoPassEnabled then return end
 
     LoggingModule.safeCall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
@@ -350,7 +357,6 @@ local function autoPassBombEnhanced()
         end
 
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
-        -- fallback: best target or closest
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
             or TargetingModule.getClosestPlayer(bombPassDistance)
 
@@ -387,7 +393,6 @@ local function autoPassBombEnhanced()
                 lastAIMessageTime = tick()
             end
 
-            -- Attempt the pass
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
@@ -409,7 +414,6 @@ local function getBombTimerFromObject()
     local bomb = char:FindFirstChild("Bomb")
     if not bomb then return nil end
 
-    -- Check for a NumberValue or StringValue that represents the timer
     for _, child in pairs(bomb:GetChildren()) do
         if child:IsA("NumberValue") or child:IsA("IntValue") then
             if child.Value > 0 and child.Value < 100 then
@@ -422,7 +426,7 @@ local function getBombTimerFromObject()
     return nil
 end
 
-game:GetService("RunService").Stepped:Connect(function()
+RunService.Stepped:Connect(function()
     local timeLeft = getBombTimerFromObject()
     if timeLeft then
         print("⏳ Bomb Timer: " .. timeLeft .. " seconds left!")
@@ -430,7 +434,7 @@ game:GetService("RunService").Stepped:Connect(function()
 end)
 
 -----------------------------------------------------
--- REMOVE HITBOX
+-- REMOVE HITBOX FUNCTION
 -----------------------------------------------------
 local function applyRemoveHitbox(enable)
     local char = LocalPlayer.Character
@@ -440,24 +444,18 @@ local function applyRemoveHitbox(enable)
             if enable then
                 part.Transparency = 1
                 part.CanCollide = false
-                part.Size = Vector3.new(customHitboxSize, customHitboxSize, customHitboxSize) -- Use custom hitbox size
+                part.Size = Vector3.new(customHitboxSize, customHitboxSize, customHitboxSize)
             else
                 part.Transparency = 0
                 part.CanCollide = true
-                part.Size = Vector3.new(1, 1, 1) -- Default size (adjust if necessary)
+                part.Size = Vector3.new(1, 1, 1)
             end
         end
     end
 end
 
-LocalPlayer.CharacterAdded:Connect(function(char)
-    -- On respawn, apply friction only if toggled in the menu.
-    FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-    applyRemoveHitbox(RemoveHitboxEnabled)
-end)
-
 -----------------------------------------------------
--- ORIONLIB MENU
+-- ORIONLIB MENU SETUP
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
@@ -468,7 +466,7 @@ local Window = OrionLib:MakeWindow({
     ShowIcon = true  
 })
 
--- Create two tabs: Automated and AI-Based
+-- Create Tabs
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
     Icon = "rbxassetid://4483345998",
@@ -501,13 +499,14 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
 })
 local autoPassConnection
 
--- Toggle for Smart Anti‑Slippery (applies friction only on toggle and on respawn)
+-- Toggle for Anti‑Slippery (Friction Control)
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
     Callback = function(value)
         AntiSlipperyEnabled = value
         FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+        print("Anti‑Slippery toggled to", value)
     end
 })
 
@@ -523,6 +522,7 @@ AutomatedTab:AddSlider({
         if AntiSlipperyEnabled then
             FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
         end
+        print("Custom friction set to", customAntiSlipperyFriction)
     end
 })
 
@@ -533,6 +533,7 @@ AutomatedTab:AddToggle({
     Callback = function(value)
         RemoveHitboxEnabled = value
         applyRemoveHitbox(value)
+        print("Remove Hitbox toggled to", value)
     end
 })
 
@@ -548,6 +549,38 @@ AutomatedTab:AddSlider({
         if RemoveHitboxEnabled then
             applyRemoveHitbox(true)
         end
+        print("Custom hitbox size set to", customHitboxSize)
+    end
+})
+
+-- Buttons for cycling preset values (for friction and hitbox size)
+local frictionPresets = {0.5, 0.7, 0.9, 1.0}
+local currentFrictionPreset = 1
+
+AutomatedTab:AddButton({
+    Name = "Cycle Friction Preset",
+    Callback = function()
+        currentFrictionPreset = currentFrictionPreset % #frictionPresets + 1
+        customAntiSlipperyFriction = frictionPresets[currentFrictionPreset]
+        if AntiSlipperyEnabled then
+            FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+        end
+        print("Friction preset set to", customAntiSlipperyFriction)
+    end
+})
+
+local hitboxPresets = {0.1, 0.3, 0.5, 1.0}
+local currentHitboxPreset = 1
+
+AutomatedTab:AddButton({
+    Name = "Cycle Hitbox Size",
+    Callback = function()
+        currentHitboxPreset = currentHitboxPreset % #hitboxPresets + 1
+        customHitboxSize = hitboxPresets[currentHitboxPreset]
+        if RemoveHitboxEnabled then
+            applyRemoveHitbox(true)
+        end
+        print("Hitbox size preset set to", customHitboxSize)
     end
 })
 
@@ -561,7 +594,7 @@ AITab:AddToggle({
     end
 })
 
--- Sliders for various settings
+-- Sliders for AI settings
 AITab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
@@ -595,11 +628,8 @@ AITab:AddSlider({
     end
 })
 
--- New toggles for rotation method
-local orionFlickRotationToggle
-local orionSmoothRotationToggle
-
-orionFlickRotationToggle = AITab:AddToggle({
+-- Rotation toggles
+local orionFlickRotationToggle = AITab:AddToggle({
     Name = "Flick Rotation",
     Default = false,
     Callback = function(value)
@@ -620,7 +650,7 @@ orionFlickRotationToggle = AITab:AddToggle({
     end
 })
 
-orionSmoothRotationToggle = AITab:AddToggle({
+local orionSmoothRotationToggle = AITab:AddToggle({
     Name = "Smooth Rotation",
     Default = true,
     Callback = function(value)
@@ -678,7 +708,7 @@ local function createMobileToggle()
     autoPassMobileToggle.Name = "AutoPassMobileToggle"
     autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
     autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
-    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  
+    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     autoPassMobileToggle.Text = "OFF"
     autoPassMobileToggle.TextScaled = true
     autoPassMobileToggle.Font = Enum.Font.SourceSansBold
@@ -689,13 +719,11 @@ local function createMobileToggle()
     uicorner.CornerRadius = UDim.new(1, 0)
     uicorner.Parent = autoPassMobileToggle
 
-    -- Add a UIStroke for a border
     local uistroke = Instance.new("UIStroke")
     uistroke.Thickness = 2
     uistroke.Color = Color3.fromRGB(0, 0, 0)
     uistroke.Parent = autoPassMobileToggle
 
-    -- Enhance hover appearance
     autoPassMobileToggle.MouseEnter:Connect(function()
         TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play()
     end)
@@ -769,7 +797,6 @@ ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftLockButton.Image = ShiftStates.Off
 
--- Enhance ShiftLock button appearance:
 local shiftLockUICorner = Instance.new("UICorner")
 shiftLockUICorner.CornerRadius = UDim.new(0.2, 0)
 shiftLockUICorner.Parent = ShiftLockButton
