@@ -1,7 +1,7 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
 -- Final version with fallback to closest player, toggles in the menu, shiftlock included.
--- Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (0.7 friction).
+-- Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (custom value set via menu).
 -----------------------------------------------------
 
 -- SERVICES
@@ -158,7 +158,7 @@ local FrictionModule = {}
 
 -- Adjusted Anti‑Slippery logic:
 -- Friction is updated only when toggled (or on respawn) and not continuously.
--- If Anti‑Slippery is enabled and the character is NOT holding the bomb, friction is set to 0.7;
+-- If Anti‑Slippery is enabled and the character is NOT holding the bomb, friction is set to customAntiSlipperyFriction;
 -- otherwise, friction remains at 0.5.
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
@@ -168,8 +168,7 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 
     local bomb = char:FindFirstChild("Bomb")
     local NORMAL_FRICTION = 0.5
-    local ANTI_SLIPPERY_FRICTION = 0.7
-    local frictionValue = (AntiSlipperyEnabled and not bomb) and ANTI_SLIPPERY_FRICTION or NORMAL_FRICTION
+    local frictionValue = (AntiSlipperyEnabled and not bomb) and customAntiSlipperyFriction or NORMAL_FRICTION
 
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
@@ -177,6 +176,58 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
         end
     end
 end
+
+-----------------------------------------------------
+-- HITBOX ESP MODULE (with smaller hitbox overlay)
+-----------------------------------------------------
+local function createHitboxESP()
+    if not CHAR then return end
+    local hitbox = CHAR:FindFirstChild("Hitbox")
+    if hitbox and hitbox:IsA("BasePart") then
+        if hitbox:FindFirstChild("HitboxESP") then
+            hitbox:FindFirstChild("HitboxESP"):Destroy()
+        end
+        if HitboxESPEnabled then
+            local espBox = Instance.new("BoxHandleAdornment")
+            espBox.Name = "HitboxESP"
+            espBox.Size = hitbox.Size + Vector3.new(0.1, 0.1, 0.1)  -- Reduced extra size for a smaller overlay
+            espBox.Adornee = hitbox
+            espBox.Color3 = Color3.fromRGB(0, 255, 0)  -- Bright green for visibility
+            espBox.AlwaysOnTop = true
+            espBox.ZIndex = 10
+            espBox.Transparency = 0.3
+            espBox.Parent = hitbox
+        end
+    end
+end
+
+local function removeHitboxESP()
+    if not CHAR then return end
+    local hitbox = CHAR:FindFirstChild("Hitbox")
+    if hitbox and hitbox:FindFirstChild("HitboxESP") then
+        hitbox:FindFirstChild("HitboxESP"):Destroy()
+    end
+end
+
+local function toggleHitboxESP(value)
+    HitboxESPEnabled = value
+    if HitboxESPEnabled then
+        createHitboxESP()
+        StarterGui:SetCore("SendNotification", {Title="Hitbox ESP", Text="ESP Enabled!", Duration=2})
+    else
+        removeHitboxESP()
+        StarterGui:SetCore("SendNotification", {Title="Hitbox ESP", Text="ESP Disabled!", Duration=2})
+    end
+end
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    CHAR = newChar
+    wait(1)
+    if HitboxESPEnabled then
+        createHitboxESP()
+    end
+    FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+end)
 
 -----------------------------------------------------
 -- CONFIG & VARIABLES
@@ -191,7 +242,11 @@ local lastAIMessageTime = 0
 local aiMessageCooldown = 5
 
 local raySpreadAngle = 10
-local numRaycasts = 3
+local numRaycasts = 5
+
+-- New custom variables:
+local customAntiSlipperyFriction = 0.7  -- Default custom friction value when Anti‑Slippery is enabled
+local customHitboxSize = 0.1            -- Default custom hitbox size when Remove Hitbox is enabled
 
 -----------------------------------------------------
 -- VISUAL TARGET MARKER
@@ -385,16 +440,15 @@ local function applyRemoveHitbox(enable)
             if enable then
                 part.Transparency = 1
                 part.CanCollide = false
-                part.Size = Vector3.new(0.1, 0.1, 0.1) -- Super small hitbox
+                part.Size = Vector3.new(customHitboxSize, customHitboxSize, customHitboxSize) -- Use custom hitbox size
             else
                 part.Transparency = 0
                 part.CanCollide = true
-                part.Size = Vector3.new(1, 1, 1) -- Default size, adjust if necessary
+                part.Size = Vector3.new(1, 1, 1) -- Default size (adjust if necessary)
             end
         end
     end
 end
-
 
 LocalPlayer.CharacterAdded:Connect(function(char)
     -- On respawn, apply friction only if toggled in the menu.
@@ -457,6 +511,21 @@ AutomatedTab:AddToggle({
     end
 })
 
+-- Slider for custom Anti‑Slippery Friction value
+AutomatedTab:AddSlider({
+    Name = "Custom Anti‑Slippery Friction",
+    Min = 0.5,
+    Max = 1.0,
+    Default = customAntiSlipperyFriction,
+    Increment = 0.1,
+    Callback = function(value)
+        customAntiSlipperyFriction = value
+        if AntiSlipperyEnabled then
+            FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+        end
+    end
+})
+
 -- Toggle for Remove Hitbox
 AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
@@ -464,6 +533,21 @@ AutomatedTab:AddToggle({
     Callback = function(value)
         RemoveHitboxEnabled = value
         applyRemoveHitbox(value)
+    end
+})
+
+-- Slider for Custom Hitbox Size
+AutomatedTab:AddSlider({
+    Name = "Custom Hitbox Size",
+    Min = 0.1,
+    Max = 1.0,
+    Default = customHitboxSize,
+    Increment = 0.1,
+    Callback = function(value)
+        customHitboxSize = value
+        if RemoveHitboxEnabled then
+            applyRemoveHitbox(true)
+        end
     end
 })
 
@@ -580,7 +664,7 @@ UITab:AddColorpicker({
 -- INITIALIZE ORIONLIB
 -----------------------------------------------------
 OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, Fallback to Closest Player, ShiftLock, Mobile Toggle")
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, ShiftLock, Mobile Toggle")
 
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS
@@ -605,6 +689,24 @@ local function createMobileToggle()
     uicorner.CornerRadius = UDim.new(1, 0)
     uicorner.Parent = autoPassMobileToggle
 
+    -- Add a UIStroke for a border
+    local uistroke = Instance.new("UIStroke")
+    uistroke.Thickness = 2
+    uistroke.Color = Color3.fromRGB(0, 0, 0)
+    uistroke.Parent = autoPassMobileToggle
+
+    -- Enhance hover appearance
+    autoPassMobileToggle.MouseEnter:Connect(function()
+        TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play()
+    end)
+    autoPassMobileToggle.MouseLeave:Connect(function()
+        if AutoPassEnabled then
+            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 255, 0)}):Play()
+        else
+            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 0, 0)}):Play()
+        end
+    end)
+    
     autoPassMobileToggle.MouseButton1Click:Connect(function()
         AutoPassEnabled = not AutoPassEnabled
         if AutoPassEnabled then
@@ -666,6 +768,16 @@ ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0)
 ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftLockButton.Image = ShiftStates.Off
+
+-- Enhance ShiftLock button appearance:
+local shiftLockUICorner = Instance.new("UICorner")
+shiftLockUICorner.CornerRadius = UDim.new(0.2, 0)
+shiftLockUICorner.Parent = ShiftLockButton
+
+local shiftLockUIStroke = Instance.new("UIStroke")
+shiftLockUIStroke.Thickness = 2
+shiftLockUIStroke.Color = Color3.fromRGB(0, 0, 0)
+shiftLockUIStroke.Parent = ShiftLockButton
 
 ShiftlockCursor.Name = "Shiftlock Cursor"
 ShiftlockCursor.Parent = ShiftLockScreenGui
