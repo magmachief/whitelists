@@ -67,7 +67,7 @@ function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- skip if they have a bomb
+            -- Skip if they already have a bomb
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
@@ -455,7 +455,7 @@ local function applyRemoveHitbox(enable)
 end
 
 -----------------------------------------------------
--- ORIONLIB MENU SETUP
+-- ORIONLIB MENU SETUP (Neater Layout)
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
@@ -477,9 +477,18 @@ local AITab = Window:MakeTab({
     Icon = "rbxassetid://7072720870",
     PremiumOnly = false
 })
+local UITab = Window:MakeTab({
+    Name = "UI Elements",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
 
--- Toggle for Auto Pass Bomb Enhanced
-local orionAutoPassToggle = AutomatedTab:AddToggle({
+-----------------------------
+-- Automated Tab Sections
+-----------------------------
+-- Section: Bomb Pass Settings
+AutomatedTab:AddLabel("Bomb Pass Settings")
+AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
     Callback = function(value)
@@ -497,9 +506,10 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
         end
     end
 })
-local autoPassConnection
+AutomatedTab:AddDivider()
 
--- Toggle for Anti‑Slippery (Friction Control)
+-- Section: Friction & Hitbox Settings
+AutomatedTab:AddLabel("Friction & Hitbox Settings")
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
@@ -509,8 +519,6 @@ AutomatedTab:AddToggle({
         print("Anti‑Slippery toggled to", value)
     end
 })
-
--- Slider for custom Anti‑Slippery Friction value
 AutomatedTab:AddSlider({
     Name = "Custom Anti‑Slippery Friction",
     Min = 0.5,
@@ -525,8 +533,18 @@ AutomatedTab:AddSlider({
         print("Custom friction set to", customAntiSlipperyFriction)
     end
 })
-
--- Toggle for Remove Hitbox
+AutomatedTab:AddButton({
+    Name = "Cycle Friction Preset",
+    Callback = function()
+        local frictionPresets = {0.5, 0.7, 0.9, 1.0}
+        currentFrictionPreset = (currentFrictionPreset or 0) % #frictionPresets + 1
+        customAntiSlipperyFriction = frictionPresets[currentFrictionPreset]
+        if AntiSlipperyEnabled then
+            FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+        end
+        print("Friction preset set to", customAntiSlipperyFriction)
+    end
+})
 AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
     Default = RemoveHitboxEnabled,
@@ -536,8 +554,6 @@ AutomatedTab:AddToggle({
         print("Remove Hitbox toggled to", value)
     end
 })
-
--- Slider for Custom Hitbox Size
 AutomatedTab:AddSlider({
     Name = "Custom Hitbox Size",
     Min = 0.1,
@@ -552,30 +568,11 @@ AutomatedTab:AddSlider({
         print("Custom hitbox size set to", customHitboxSize)
     end
 })
-
--- Buttons for cycling preset values (for friction and hitbox size)
-local frictionPresets = {0.5, 0.7, 0.9, 1.0}
-local currentFrictionPreset = 1
-
-AutomatedTab:AddButton({
-    Name = "Cycle Friction Preset",
-    Callback = function()
-        currentFrictionPreset = currentFrictionPreset % #frictionPresets + 1
-        customAntiSlipperyFriction = frictionPresets[currentFrictionPreset]
-        if AntiSlipperyEnabled then
-            FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-        end
-        print("Friction preset set to", customAntiSlipperyFriction)
-    end
-})
-
-local hitboxPresets = {0.1, 0.3, 0.5, 1.0}
-local currentHitboxPreset = 1
-
 AutomatedTab:AddButton({
     Name = "Cycle Hitbox Size",
     Callback = function()
-        currentHitboxPreset = currentHitboxPreset % #hitboxPresets + 1
+        local hitboxPresets = {0.1, 0.3, 0.5, 1.0}
+        currentHitboxPreset = (currentHitboxPreset or 0) % #hitboxPresets + 1
         customHitboxSize = hitboxPresets[currentHitboxPreset]
         if RemoveHitboxEnabled then
             applyRemoveHitbox(true)
@@ -583,8 +580,12 @@ AutomatedTab:AddButton({
         print("Hitbox size preset set to", customHitboxSize)
     end
 })
+AutomatedTab:AddDivider()
 
--- AI Assistance Toggle
+-----------------------------
+-- AI Based Tab Sections
+-----------------------------
+AITab:AddLabel("AI Assistance Settings")
 AITab:AddToggle({
     Name = "AI Assistance",
     Default = false,
@@ -593,8 +594,6 @@ AITab:AddToggle({
         print("AI Assistance " .. (AI_AssistanceEnabled and "enabled." or "disabled."))
     end
 })
-
--- Sliders for AI settings
 AITab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
@@ -605,7 +604,6 @@ AITab:AddSlider({
         bombPassDistance = value
     end
 })
-
 AITab:AddSlider({
     Name = "Ray Spread Angle",
     Min = 5,
@@ -616,7 +614,6 @@ AITab:AddSlider({
         raySpreadAngle = value
     end
 })
-
 AITab:AddSlider({
     Name = "Number of Raycasts",
     Min = 1,
@@ -627,8 +624,48 @@ AITab:AddSlider({
         numRaycasts = value
     end
 })
-
--- Rotation toggles
+AITab:AddDivider()
+AITab:AddLabel("Rotation Settings")
+AITab:AddToggle({
+    Name = "Flick Rotation",
+    Default = false,
+    Callback = function(value)
+        useFlickRotation = value
+        if value then
+            useSmoothRotation = false
+            if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                orionSmoothRotationToggle:Set(false)
+            end
+        else
+            if not useSmoothRotation then
+                useSmoothRotation = true
+                if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                    orionSmoothRotationToggle:Set(true)
+                end
+            end
+        end
+    end
+})
+local orionSmoothRotationToggle = AITab:AddToggle({
+    Name = "Smooth Rotation",
+    Default = true,
+    Callback = function(value)
+        useSmoothRotation = value
+        if value then
+            useFlickRotation = false
+            if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                orionFlickRotationToggle:Set(false)
+            end
+        else
+            if not useFlickRotation then
+                useFlickRotation = true
+                if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                    orionFlickRotationToggle:Set(true)
+                end
+            end
+        end
+    end
+})
 local orionFlickRotationToggle = AITab:AddToggle({
     Name = "Flick Rotation",
     Default = false,
@@ -650,35 +687,9 @@ local orionFlickRotationToggle = AITab:AddToggle({
     end
 })
 
-local orionSmoothRotationToggle = AITab:AddToggle({
-    Name = "Smooth Rotation",
-    Default = true,
-    Callback = function(value)
-        useSmoothRotation = value
-        if value then
-            useFlickRotation = false
-            if orionFlickRotationToggle and orionFlickRotationToggle.Set then
-                orionFlickRotationToggle:Set(false)
-            end
-        else
-            if not useFlickRotation then
-                useFlickRotation = true
-                if orionFlickRotationToggle and orionFlickRotationToggle.Set then
-                    orionFlickRotationToggle:Set(true)
-                end
-            end
-        end
-    end
-})
-
------------------------------------------------------
--- UI ELEMENT: Colorpicker for Menu Main Color
------------------------------------------------------
-local UITab = Window:MakeTab({
-    Name = "UI Elements",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
+-----------------------------
+-- UI Elements Tab
+-----------------------------
 UITab:AddColorpicker({
     Name = "Menu Main Color",
     Default = Color3.fromRGB(255, 0, 0),
