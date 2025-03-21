@@ -1,25 +1,10 @@
---[[
-    Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
-    Final version with fallback to closest player, toggles in the menu, shiftlock included.
-    NOTE: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (custom value set via menu).
-
-    FEATURES INCLUDED:
-      • Auto Pass Bomb (Enhanced) with AI Assistance
-      • Fallback to Closest Player if optimal target is not found
-      • Rotates the character smoothly or via instant flick (toggle-able)
-      • Friction adjustment with Anti‑Slippery toggle AND preset cycling
-      • Hitbox removal (with custom hitbox size) toggle AND preset cycling
-      • Hitbox ESP (optional overlay)
-      • Bomb Timer display in the output
-      • Mobile toggle button for auto pass
-      • ShiftLock functionality (CoreGui-based)
-      • Advanced OrionLib menu integration with tabs, toggles, sliders, colorpicker, etc.
-      • A cute, stylish, animated UI experience!
---]]
-
 -----------------------------------------------------
+-- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
+-- Final version with fallback to closest player, toggles in the menu, shiftlock included.
+-- Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (custom value set via menu).
+-----------------------------------------------------
+
 -- SERVICES
------------------------------------------------------
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -27,7 +12,6 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -39,14 +23,8 @@ local HUMANOID = CHAR:WaitForChild("Humanoid")
 local HRP = CHAR:WaitForChild("HumanoidRootPart")
 
 -----------------------------------------------------
--- REQUIRE THE ORIONLIB LIBRARY (Section 1)
+-- MODULES
 -----------------------------------------------------
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/refs/heads/main/Orion%20Lib%20Transparent%20%20.lua"))()
-
--- Adjust this if you put the library in a separate ModuleScript.
-
------------------------------------------------------
--- DEBUG & LOGGING MODULE (Already defined above)
 local LoggingModule = {}
 function LoggingModule.logError(err, context)
     warn("[ERROR] Context: " .. tostring(context) .. " | Error: " .. tostring(err))
@@ -59,28 +37,11 @@ function LoggingModule.safeCall(func, context)
     return success, result
 end
 
------------------------------------------------------
--- GLOBAL VARIABLES & CONFIG
------------------------------------------------------
-local bombPassDistance = 10  
-local AutoPassEnabled = false 
-local AntiSlipperyEnabled = false  
-local RemoveHitboxEnabled = false  
-local AI_AssistanceEnabled = false  
-local pathfindingSpeed = 16  
-local lastAIMessageTime = 0
-local aiMessageCooldown = 5
-
-local raySpreadAngle = 10
-local numRaycasts = 5
-
-local customAntiSlipperyFriction = 0.7  
-local customHitboxSize = 0.1            
-
------------------------------------------------------
--- TARGETING & VISUAL MODULES
------------------------------------------------------
 local TargetingModule = {}
+
+-- Global rotation mode variables
+local useFlickRotation = false
+local useSmoothRotation = true
 
 function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local bestPlayer = nil
@@ -91,7 +52,10 @@ function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if player.Character:FindFirstChild("Bomb") then continue end
+            -- skip if they have a bomb
+            if player.Character:FindFirstChild("Bomb") then
+                continue
+            end
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance <= bombPassDistance then
@@ -115,7 +79,10 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if player.Character:FindFirstChild("Bomb") then continue end
+            -- skip if they have a bomb
+            if player.Character:FindFirstChild("Bomb") then
+                continue
+            end
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance < shortestDistance then
@@ -127,6 +94,7 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     return closestPlayer
 end
 
+-- Modified rotation function that checks the toggles:
 function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
@@ -134,13 +102,16 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     if not hrp then return end
     local adjustedTargetPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
     if useFlickRotation then
+        -- Instant snap ("flick")
         hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
     elseif useSmoothRotation then
+        -- Smooth tween rotation
         local targetCFrame = CFrame.new(hrp.Position, adjustedTargetPos)
         local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
         tween:Play()
         return tween
     else
+        -- fallback: instant rotation
         hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
     end
 end
@@ -185,14 +156,20 @@ end
 
 local FrictionModule = {}
 
+-- Adjusted Anti‑Slippery logic:
+-- Friction is updated only when toggled (or on respawn) and not continuously.
+-- If Anti‑Slippery is enabled and the character is NOT holding the bomb, friction is set to customAntiSlipperyFriction;
+-- otherwise, friction remains at 0.5.
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
+
     local bomb = char:FindFirstChild("Bomb")
     local NORMAL_FRICTION = 0.5
     local frictionValue = (AntiSlipperyEnabled and not bomb) and customAntiSlipperyFriction or NORMAL_FRICTION
+
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CustomPhysicalProperties = PhysicalProperties.new(frictionValue, 0.3, 0.5)
@@ -201,9 +178,8 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 end
 
 -----------------------------------------------------
--- HITBOX ESP MODULE
+-- HITBOX ESP MODULE (with smaller hitbox overlay)
 -----------------------------------------------------
-local HitboxESPEnabled = false
 local function createHitboxESP()
     if not CHAR then return end
     local hitbox = CHAR:FindFirstChild("Hitbox")
@@ -214,9 +190,9 @@ local function createHitboxESP()
         if HitboxESPEnabled then
             local espBox = Instance.new("BoxHandleAdornment")
             espBox.Name = "HitboxESP"
-            espBox.Size = hitbox.Size + Vector3.new(0.1, 0.1, 0.1)
+            espBox.Size = hitbox.Size + Vector3.new(0.1, 0.1, 0.1)  -- Reduced extra size for a smaller overlay
             espBox.Adornee = hitbox
-            espBox.Color3 = Color3.fromRGB(0, 255, 0)
+            espBox.Color3 = Color3.fromRGB(0, 255, 0)  -- Bright green for visibility
             espBox.AlwaysOnTop = true
             espBox.ZIndex = 10
             espBox.Transparency = 0.3
@@ -254,6 +230,25 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
 end)
 
 -----------------------------------------------------
+-- CONFIG & VARIABLES
+-----------------------------------------------------
+local bombPassDistance = 10  
+local AutoPassEnabled = false 
+local AntiSlipperyEnabled = false  
+local RemoveHitboxEnabled = false  
+local AI_AssistanceEnabled = false  
+local pathfindingSpeed = 16  
+local lastAIMessageTime = 0
+local aiMessageCooldown = 5
+
+local raySpreadAngle = 10
+local numRaycasts = 5
+
+-- New custom variables:
+local customAntiSlipperyFriction = 0.7  -- Default custom friction value when Anti‑Slippery is enabled
+local customHitboxSize = 0.1            -- Default custom hitbox size when Remove Hitbox is enabled
+
+-----------------------------------------------------
 -- VISUAL TARGET MARKER
 -----------------------------------------------------
 local currentTargetMarker = nil
@@ -263,15 +258,18 @@ local function createOrUpdateTargetMarker(player, distance)
     if not player or not player.Character then return end
     local body = player.Character:FindFirstChild("HumanoidRootPart")
     if not body then return end
+
     if currentTargetMarker and currentTargetPlayer == player then
         currentTargetMarker:FindFirstChildOfClass("TextLabel").Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
         return
     end
+
     if currentTargetMarker then
         currentTargetMarker:Destroy()
         currentTargetMarker = nil
         currentTargetPlayer = nil
     end
+
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
     marker.Adornee = body
@@ -279,6 +277,7 @@ local function createOrUpdateTargetMarker(player, distance)
     marker.StudsOffset = Vector3.new(0, 2, 0)
     marker.AlwaysOnTop = true
     marker.Parent = body
+
     local label = Instance.new("TextLabel", marker)
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
@@ -286,8 +285,10 @@ local function createOrUpdateTargetMarker(player, distance)
     label.TextScaled = true
     label.TextColor3 = Color3.new(1, 0, 0)
     label.Font = Enum.Font.SourceSansBold
+
     currentTargetMarker = marker
     currentTargetPlayer = player
+
     VisualModule.animateMarker(marker)
 end
 
@@ -306,15 +307,18 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
     local direction = (endPos - startPos).Unit
     local distance = (endPos - startPos).Magnitude
+
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
     if LocalPlayer.Character then
         rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
     end
+
     local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
     if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
         return false
     end
+
     local raysEachSide = math.floor((numRaycasts - 1) / 2)
     for i = 1, raysEachSide do
         local angleOffset = spreadRad * i / raysEachSide
@@ -336,29 +340,36 @@ end
 -- AUTO PASS FUNCTION
 -----------------------------------------------------
 local function autoPassBombEnhanced()
-    if not AutoPassEnabled then return end
+    if not AutoPassEnabled then return end  -- Only run if toggle is on
+
     LoggingModule.safeCall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if not bomb then
             removeTargetMarker()
             return
         end
+
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
+        -- fallback: best target or closest
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
             or TargetingModule.getClosestPlayer(bombPassDistance)
+
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if targetPlayer.Character:FindFirstChild("Bomb") then
                 removeTargetMarker()
                 return
             end
+
             local targetPos = targetPlayer.Character.HumanoidRootPart.Position
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
+
             if distance > bombPassDistance then
                 print("Target out of range. Pass aborted.")
                 removeTargetMarker()
                 return
             end
+
             local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart") or targetPlayer.Character.HumanoidRootPart
             if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
                 print("Line of sight blocked. Bomb pass aborted.")
@@ -366,13 +377,17 @@ local function autoPassBombEnhanced()
                 removeTargetMarker()
                 return
             end
+
             createOrUpdateTargetMarker(targetPlayer, distance)
             VisualModule.playPassVFX(targetPlayer)
             TargetingModule.rotateCharacterTowardsTarget(targetPos)
+
             if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name .. " (" .. math.floor(distance) .. " studs).")
                 lastAIMessageTime = tick()
             end
+
+            -- Attempt the pass
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
@@ -390,8 +405,11 @@ end
 local function getBombTimerFromObject()
     local char = LocalPlayer.Character
     if not char then return nil end
+
     local bomb = char:FindFirstChild("Bomb")
     if not bomb then return nil end
+
+    -- Check for a NumberValue or StringValue that represents the timer
     for _, child in pairs(bomb:GetChildren()) do
         if child:IsA("NumberValue") or child:IsA("IntValue") then
             if child.Value > 0 and child.Value < 100 then
@@ -404,7 +422,7 @@ local function getBombTimerFromObject()
     return nil
 end
 
-RunService.Stepped:Connect(function()
+game:GetService("RunService").Stepped:Connect(function()
     local timeLeft = getBombTimerFromObject()
     if timeLeft then
         print("⏳ Bomb Timer: " .. timeLeft .. " seconds left!")
@@ -412,7 +430,7 @@ RunService.Stepped:Connect(function()
 end)
 
 -----------------------------------------------------
--- REMOVE HITBOX FUNCTION
+-- REMOVE HITBOX
 -----------------------------------------------------
 local function applyRemoveHitbox(enable)
     local char = LocalPlayer.Character
@@ -422,20 +440,26 @@ local function applyRemoveHitbox(enable)
             if enable then
                 part.Transparency = 1
                 part.CanCollide = false
-                part.Size = Vector3.new(customHitboxSize, customHitboxSize, customHitboxSize)
+                part.Size = Vector3.new(customHitboxSize, customHitboxSize, customHitboxSize) -- Use custom hitbox size
             else
                 part.Transparency = 0
                 part.CanCollide = true
-                part.Size = Vector3.new(1, 1, 1)
+                part.Size = Vector3.new(1, 1, 1) -- Default size (adjust if necessary)
             end
         end
     end
 end
 
+LocalPlayer.CharacterAdded:Connect(function(char)
+    -- On respawn, apply friction only if toggled in the menu.
+    FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+    applyRemoveHitbox(RemoveHitboxEnabled)
+end)
+
 -----------------------------------------------------
--- ORIONLIB MENU SETUP
+-- ORIONLIB MENU
 -----------------------------------------------------
--- Create the main window and tabs using OrionLib.
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
     HidePremium = false,
@@ -444,6 +468,7 @@ local Window = OrionLib:MakeWindow({
     ShowIcon = true  
 })
 
+-- Create two tabs: Automated and AI-Based
 local AutomatedTab = Window:MakeTab({
     Name = "Automated",
     Icon = "rbxassetid://4483345998",
@@ -454,17 +479,9 @@ local AITab = Window:MakeTab({
     Icon = "rbxassetid://7072720870",
     PremiumOnly = false
 })
-local UITab = Window:MakeTab({
-    Name = "UI Elements",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
 
------------------------------
--- Automated Tab Sections
------------------------------
-AutomatedTab:AddLabel("Bomb Pass Settings")
-AutomatedTab:AddToggle({
+-- Toggle for Auto Pass Bomb Enhanced
+local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
     Callback = function(value)
@@ -482,18 +499,19 @@ AutomatedTab:AddToggle({
         end
     end
 })
-AutomatedTab:AddDivider()
+local autoPassConnection
 
-AutomatedTab:AddLabel("Friction & Hitbox Settings")
+-- Toggle for Smart Anti‑Slippery (applies friction only on toggle and on respawn)
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
     Callback = function(value)
         AntiSlipperyEnabled = value
         FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-        print("Anti‑Slippery toggled to", value)
     end
 })
+
+-- Slider for custom Anti‑Slippery Friction value
 AutomatedTab:AddSlider({
     Name = "Custom Anti‑Slippery Friction",
     Min = 0.5,
@@ -505,30 +523,20 @@ AutomatedTab:AddSlider({
         if AntiSlipperyEnabled then
             FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
         end
-        print("Custom friction set to", customAntiSlipperyFriction)
     end
 })
-AutomatedTab:AddButton({
-    Name = "Cycle Friction Preset",
-    Callback = function()
-        local frictionPresets = {0.5, 0.7, 0.9, 1.0}
-        currentFrictionPreset = (currentFrictionPreset or 0) % #frictionPresets + 1
-        customAntiSlipperyFriction = frictionPresets[currentFrictionPreset]
-        if AntiSlipperyEnabled then
-            FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-        end
-        print("Friction preset set to", customAntiSlipperyFriction)
-    end
-})
+
+-- Toggle for Remove Hitbox
 AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
     Default = RemoveHitboxEnabled,
     Callback = function(value)
         RemoveHitboxEnabled = value
         applyRemoveHitbox(value)
-        print("Remove Hitbox toggled to", value)
     end
 })
+
+-- Slider for Custom Hitbox Size
 AutomatedTab:AddSlider({
     Name = "Custom Hitbox Size",
     Min = 0.1,
@@ -540,27 +548,10 @@ AutomatedTab:AddSlider({
         if RemoveHitboxEnabled then
             applyRemoveHitbox(true)
         end
-        print("Custom hitbox size set to", customHitboxSize)
     end
 })
-AutomatedTab:AddButton({
-    Name = "Cycle Hitbox Size",
-    Callback = function()
-        local hitboxPresets = {0.1, 0.3, 0.5, 1.0}
-        currentHitboxPreset = (currentHitboxPreset or 0) % #hitboxPresets + 1
-        customHitboxSize = hitboxPresets[currentHitboxPreset]
-        if RemoveHitboxEnabled then
-            applyRemoveHitbox(true)
-        end
-        print("Hitbox size preset set to", customHitboxSize)
-    end
-})
-AutomatedTab:AddDivider()
 
------------------------------
--- AI Based Tab Sections
------------------------------
-AITab:AddLabel("AI Assistance Settings")
+-- AI Assistance Toggle
 AITab:AddToggle({
     Name = "AI Assistance",
     Default = false,
@@ -569,6 +560,8 @@ AITab:AddToggle({
         print("AI Assistance " .. (AI_AssistanceEnabled and "enabled." or "disabled."))
     end
 })
+
+-- Sliders for various settings
 AITab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
@@ -579,6 +572,7 @@ AITab:AddSlider({
         bombPassDistance = value
     end
 })
+
 AITab:AddSlider({
     Name = "Ray Spread Angle",
     Min = 5,
@@ -589,6 +583,7 @@ AITab:AddSlider({
         raySpreadAngle = value
     end
 })
+
 AITab:AddSlider({
     Name = "Number of Raycasts",
     Min = 1,
@@ -599,9 +594,12 @@ AITab:AddSlider({
         numRaycasts = value
     end
 })
-AITab:AddDivider()
-AITab:AddLabel("Rotation Settings")
-AITab:AddToggle({
+
+-- New toggles for rotation method
+local orionFlickRotationToggle
+local orionSmoothRotationToggle
+
+orionFlickRotationToggle = AITab:AddToggle({
     Name = "Flick Rotation",
     Default = false,
     Callback = function(value)
@@ -621,7 +619,8 @@ AITab:AddToggle({
         end
     end
 })
-local orionSmoothRotationToggle = AITab:AddToggle({
+
+orionSmoothRotationToggle = AITab:AddToggle({
     Name = "Smooth Rotation",
     Default = true,
     Callback = function(value)
@@ -641,30 +640,15 @@ local orionSmoothRotationToggle = AITab:AddToggle({
         end
     end
 })
-local orionFlickRotationToggle = AITab:AddToggle({
-    Name = "Flick Rotation",
-    Default = false,
-    Callback = function(value)
-        useFlickRotation = value
-        if value then
-            useSmoothRotation = false
-            if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
-                orionSmoothRotationToggle:Set(false)
-            end
-        else
-            if not useSmoothRotation then
-                useSmoothRotation = true
-                if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
-                    orionSmoothRotationToggle:Set(true)
-                end
-            end
-        end
-    end
-})
 
------------------------------
--- UI Elements Tab
------------------------------
+-----------------------------------------------------
+-- UI ELEMENT: Colorpicker for Menu Main Color
+-----------------------------------------------------
+local UITab = Window:MakeTab({
+    Name = "UI Elements",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
 UITab:AddColorpicker({
     Name = "Menu Main Color",
     Default = Color3.fromRGB(255, 0, 0),
@@ -680,7 +664,7 @@ UITab:AddColorpicker({
 -- INITIALIZE ORIONLIB
 -----------------------------------------------------
 OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, shiftlock, mobile toggle, and all functions intact.")
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, ShiftLock, Mobile Toggle")
 
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS
@@ -692,43 +676,51 @@ local function createMobileToggle()
     
     local autoPassMobileToggle = Instance.new("TextButton")
     autoPassMobileToggle.Name = "AutoPassMobileToggle"
-    autoPassMobileToggle.Size = UDim2.new(0,50,0,50)
-    autoPassMobileToggle.Position = UDim2.new(1,-70,1,-110)
-    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255,0,0)
+    autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
+    autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
+    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  
     autoPassMobileToggle.Text = "OFF"
     autoPassMobileToggle.TextScaled = true
     autoPassMobileToggle.Font = Enum.Font.SourceSansBold
-    autoPassMobileToggle.ZIndex = 1000
+    autoPassMobileToggle.ZIndex = 100
     autoPassMobileToggle.Parent = mobileGui
 
     local uicorner = Instance.new("UICorner")
-    uicorner.CornerRadius = UDim.new(1,0)
+    uicorner.CornerRadius = UDim.new(1, 0)
     uicorner.Parent = autoPassMobileToggle
 
+    -- Add a UIStroke for a border
     local uistroke = Instance.new("UIStroke")
     uistroke.Thickness = 2
-    uistroke.Color = Color3.fromRGB(0,0,0)
+    uistroke.Color = Color3.fromRGB(0, 0, 0)
     uistroke.Parent = autoPassMobileToggle
 
+    -- Enhance hover appearance
     autoPassMobileToggle.MouseEnter:Connect(function()
-        TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play()
+        TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play()
     end)
     autoPassMobileToggle.MouseLeave:Connect(function()
         if AutoPassEnabled then
-            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play()
+            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 255, 0)}):Play()
         else
-            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play()
+            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 0, 0)}):Play()
         end
     end)
     
     autoPassMobileToggle.MouseButton1Click:Connect(function()
         AutoPassEnabled = not AutoPassEnabled
         if AutoPassEnabled then
-            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0,255,0)
+            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
             autoPassMobileToggle.Text = "ON"
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(true)
+            end
         else
-            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255,0,0)
+            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
             autoPassMobileToggle.Text = "OFF"
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(false)
+            end
         end
     end)
     
@@ -770,31 +762,32 @@ ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ShiftLockScreenGui.ResetOnSpawn = false
 
 ShiftLockButton.Parent = ShiftLockScreenGui
-ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
+ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 ShiftLockButton.BackgroundTransparency = 1
-ShiftLockButton.Position = UDim2.new(0.7,0,0.75,0)
-ShiftLockButton.Size = UDim2.new(0.0636,0,0.0661,0)
+ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0)
+ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftLockButton.Image = ShiftStates.Off
 
+-- Enhance ShiftLock button appearance:
 local shiftLockUICorner = Instance.new("UICorner")
-shiftLockUICorner.CornerRadius = UDim.new(0.2,0)
+shiftLockUICorner.CornerRadius = UDim.new(0.2, 0)
 shiftLockUICorner.Parent = ShiftLockButton
 
 local shiftLockUIStroke = Instance.new("UIStroke")
 shiftLockUIStroke.Thickness = 2
-shiftLockUIStroke.Color = Color3.fromRGB(0,0,0)
+shiftLockUIStroke.Color = Color3.fromRGB(0, 0, 0)
 shiftLockUIStroke.Parent = ShiftLockButton
 
 ShiftlockCursor.Name = "Shiftlock Cursor"
 ShiftlockCursor.Parent = ShiftLockScreenGui
 ShiftlockCursor.Image = ShiftStates.Lock
-ShiftlockCursor.Size = UDim2.new(0.03,0,0.03,0)
-ShiftlockCursor.Position = UDim2.new(0.5,0,0.5,0)
-ShiftlockCursor.AnchorPoint = Vector2.new(0.5,0.5)
+ShiftlockCursor.Size = UDim2.new(0.03, 0, 0.03, 0)
+ShiftlockCursor.Position = UDim2.new(0.5, 0, 0.5, 0)
+ShiftlockCursor.AnchorPoint = Vector2.new(0.5, 0.5)
 ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftlockCursor.BackgroundTransparency = 1
-ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255,0,0)
+ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 ShiftlockCursor.Visible = false
 
 ShiftLockButton.MouseButton1Click:Connect(function()
@@ -845,7 +838,7 @@ local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a
     end
     return Enum.ContextActionResult.Sink
 end, false, Enum.KeyCode.ButtonR2)
-ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8,0,0.8,0))
+ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
 
-print("Final Ultra-Advanced Bomb AI loaded. All functions are intact. Enjoy your cute, stylish, and super cool menu!")
+print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fallback to closest player, shiftlock included.")
 return {}
