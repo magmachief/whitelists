@@ -490,18 +490,21 @@ local AutomatedTab = Window:MakeTab({
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
+print("Automated Settings tab created.")
 
 local AITab = Window:MakeTab({
     Name = "AI Based Settings",
     Icon = "rbxassetid://7072720870",
     PremiumOnly = false
 })
+print("AI Based Settings tab created.")
 
 local UITab = Window:MakeTab({
     Name = "UI Elements",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
+print("UI Elements tab created.")
 
 -- Use AddLabel as section headers in Automated Tab
 AutomatedTab:AddLabel("== Bomb Passing ==", 15)
@@ -905,19 +908,23 @@ print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fall
 ------------------------------------------------------------------------------
 task.spawn(function()
     wait(0.5)
-    -- Access the Automated Settings container if available.
+    -- Adjust the Automated Settings container:
     local autoTab = OrionLib.Elements["Automated Settings"]
     if autoTab and autoTab.ItemContainer then
         autoTab.ItemContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
         autoTab.ItemContainer.ScrollBarImageTransparency = 0
         autoTab.ItemContainer.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
+    else
+        print("Automated Settings container not found.")
     end
-    -- Similarly, adjust the AI Based Settings container.
+    -- Adjust the AI Based Settings container:
     local aiTab = OrionLib.Elements["AI Based Settings"]
     if aiTab and aiTab.ItemContainer then
         aiTab.ItemContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
         aiTab.ItemContainer.ScrollBarImageTransparency = 0
         aiTab.ItemContainer.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
+    else
+        print("AI Based Settings container not found.")
     end
 end)
 
