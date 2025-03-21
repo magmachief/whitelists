@@ -1,7 +1,7 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
--- Final version with fallback to closest player, toggles in the menu (including ESP and Bomb Timer), shiftlock included.
--- Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (custom value set via menu).
+-- Final version with fallback to closest player, toggles in the menu (including ESP and Bomb Timer),
+-- shiftlock included, and with added debug logging for numeric settings and bomb timer estimation.
 -----------------------------------------------------
 
 -- SERVICES
@@ -37,7 +37,6 @@ function LoggingModule.safeCall(func, context)
 end
 
 local TargetingModule = {}
-
 -- Global rotation mode variables
 local useFlickRotation = false
 local useSmoothRotation = true
@@ -110,7 +109,6 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
 end
 
 local VisualModule = {}
-
 function VisualModule.animateMarker(marker)
     if not marker then return end
     local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
@@ -118,7 +116,6 @@ function VisualModule.animateMarker(marker)
     local tween = TweenService:Create(marker, tweenInfo, goal)
     tween:Play()
 end
-
 function VisualModule.playPassVFX(target)
     if not target or not target.Character then return end
     local hrp = target.Character:FindFirstChild("HumanoidRootPart")
@@ -136,7 +133,6 @@ function VisualModule.playPassVFX(target)
 end
 
 local AINotificationsModule = {}
-
 function AINotificationsModule.sendNotification(title, text, duration)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
@@ -148,7 +144,6 @@ function AINotificationsModule.sendNotification(title, text, duration)
 end
 
 local FrictionModule = {}
-
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
@@ -159,6 +154,7 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local NORMAL_FRICTION = 0.5
     local frictionValue = (AntiSlipperyEnabled and not bomb) and customAntiSlipperyFriction or NORMAL_FRICTION
 
+    print("Updating friction to: " .. frictionValue)
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CustomPhysicalProperties = PhysicalProperties.new(frictionValue, 0.3, 0.5)
@@ -240,8 +236,12 @@ local customHitboxSize = 0.1
 local HitboxESPEnabled = false
 local BombTimerDisplayEnabled = false
 
+-- Variables for AI-calculated bomb timer fallback
+local bombAcquiredTime = nil
+local bombDefaultDuration = 30  -- Default bomb duration if no timer is provided
+
 -----------------------------------------------------
--- BOMB TIMER UI SETUP
+-- BOMB TIMER UI SETUP AND AI TIMER CALCULATION
 -----------------------------------------------------
 local bombTimerGui = nil
 local bombTimerLabel = nil
@@ -268,30 +268,52 @@ local function getBombTimerFromObject()
     if not char then return nil end
 
     local bomb = char:FindFirstChild("Bomb")
-    if not bomb then return nil end
+    if not bomb then
+         bombAcquiredTime = nil
+         return nil
+    end
+
+    print("Bomb children:")
+    for _, child in pairs(bomb:GetChildren()) do
+        if child:IsA("NumberValue") or child:IsA("IntValue") or child:IsA("StringValue") then
+            print(child.Name, child.ClassName, child.Value)
+        end
+    end
 
     local attrTimer = bomb:GetAttribute("Timer")
     if attrTimer then
+         bombAcquiredTime = nil
          return attrTimer
     end
 
     for _, child in pairs(bomb:GetChildren()) do
         if child:IsA("NumberValue") or child:IsA("IntValue") then
             if child.Value > 0 and child.Value < 100 then
+                bombAcquiredTime = nil
                 return child.Value
             end
         elseif child:IsA("StringValue") and string.match(child.Value, "%d+") then
+            bombAcquiredTime = nil
             return tonumber(child.Value)
         end
     end
-    return nil
+
+    -- Fallback: if no timer value is found, use an AI calculation
+    if not bombAcquiredTime then
+         bombAcquiredTime = tick()
+         print("Bomb acquired time set to: " .. bombAcquiredTime)
+    end
+    local estimatedTimeLeft = bombDefaultDuration - (tick() - bombAcquiredTime)
+    print("Estimated bomb timer: " .. estimatedTimeLeft)
+    return estimatedTimeLeft > 0 and estimatedTimeLeft or nil
 end
 
 RunService.Stepped:Connect(function()
     if bombTimerLabel then
          local timeLeft = getBombTimerFromObject()
          if timeLeft then
-              bombTimerLabel.Text = "⏳ Bomb Timer: " .. timeLeft .. " seconds left!"
+              bombTimerLabel.Text = "⏳ Bomb Timer: " .. math.floor(timeLeft) .. " seconds left!"
+              print("Bomb Timer updated: " .. math.floor(timeLeft))
          else
               bombTimerLabel.Text = "Bomb Timer: N/A"
          end
@@ -450,67 +472,6 @@ local function autoPassBombEnhanced()
     end, "autoPassBombEnhanced function")
 end
 
-local function getBombTimerFromObject()
-    local char = LocalPlayer.Character
-    if not char then return nil end
-
-    local bomb = char:FindFirstChild("Bomb")
-    if not bomb then return nil end
-
-    local attrTimer = bomb:GetAttribute("Timer")
-    if attrTimer then
-         return attrTimer
-    end
-
-    for _, child in pairs(bomb:GetChildren()) do
-        if child:IsA("NumberValue") or child:IsA("IntValue") then
-            if child.Value > 0 and child.Value < 100 then
-                return child.Value
-            end
-        elseif child:IsA("StringValue") and string.match(child.Value, "%d+") then
-            return tonumber(child.Value)
-        end
-    end
-    return nil
-end
-
-RunService.Stepped:Connect(function()
-    if bombTimerLabel then
-         local timeLeft = getBombTimerFromObject()
-         if timeLeft then
-              bombTimerLabel.Text = "⏳ Bomb Timer: " .. timeLeft .. " seconds left!"
-         else
-              bombTimerLabel.Text = "Bomb Timer: N/A"
-         end
-    end
-end)
-
------------------------------------------------------
--- REMOVE HITBOX
------------------------------------------------------
-local function applyRemoveHitbox(enable)
-    local char = LocalPlayer.Character
-    if not char then return end
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") and part.Name == "Hitbox" then
-            if enable then
-                part.Transparency = 1
-                part.CanCollide = false
-                part.Size = Vector3.new(customHitboxSize, customHitboxSize, customHitboxSize)
-            else
-                part.Transparency = 0
-                part.CanCollide = true
-                part.Size = Vector3.new(1, 1, 1)
-            end
-        end
-    end
-end
-
-LocalPlayer.CharacterAdded:Connect(function(char)
-    FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-    applyRemoveHitbox(RemoveHitboxEnabled)
-end)
-
 -----------------------------------------------------
 -- ORIONLIB MENU (Restructured for Neater Organization)
 -----------------------------------------------------
@@ -530,13 +491,15 @@ local AutomatedTab = Window:MakeTab({
     PremiumOnly = false
 })
 
--- Instead of AddSection, use AddLabel for section headers.
+-- Use AddLabel as section headers.
 AutomatedTab:AddLabel("== Bomb Passing ==", 15)
 local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
+    Flag = "AutoPassBomb",
     Callback = function(value)
         AutoPassEnabled = value
+        print("Auto Pass Bomb updated: " .. tostring(value))
         if AutoPassEnabled then
             if not autoPassConnection then
                 autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
@@ -555,19 +518,23 @@ AutomatedTab:AddLabel("== Character Settings ==", 15)
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
+    Flag = "AntiSlippery",
     Callback = function(value)
         AntiSlipperyEnabled = value
+        print("Anti Slippery updated: " .. tostring(value))
         FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 })
 AutomatedTab:AddTextbox({
     Name = "Custom Anti‑Slippery Friction",
     Default = tostring(customAntiSlipperyFriction),
-    TextDisappear = true,
+    Flag = "CustomAntiSlipperyFriction",
+    TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
         if num then
             customAntiSlipperyFriction = num
+            print("Updated Custom Anti-Slippery Friction: " .. num)
             if AntiSlipperyEnabled then
                 FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
             end
@@ -577,19 +544,23 @@ AutomatedTab:AddTextbox({
 AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
     Default = RemoveHitboxEnabled,
+    Flag = "RemoveHitbox",
     Callback = function(value)
         RemoveHitboxEnabled = value
+        print("Remove Hitbox updated: " .. tostring(value))
         applyRemoveHitbox(value)
     end
 })
 AutomatedTab:AddTextbox({
     Name = "Custom Hitbox Size",
     Default = tostring(customHitboxSize),
-    TextDisappear = true,
+    Flag = "CustomHitboxSize",
+    TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
         if num then
             customHitboxSize = num
+            print("Updated Custom Hitbox Size: " .. num)
             if RemoveHitboxEnabled then
                 applyRemoveHitbox(true)
             end
@@ -601,15 +572,19 @@ AutomatedTab:AddLabel("== Display Options ==", 15)
 AutomatedTab:AddToggle({
     Name = "Hitbox ESP",
     Default = HitboxESPEnabled,
+    Flag = "HitboxESP",
     Callback = function(value)
          toggleHitboxESP(value)
+         print("Hitbox ESP updated: " .. tostring(value))
     end
 })
 AutomatedTab:AddToggle({
     Name = "Display Bomb Timer",
     Default = BombTimerDisplayEnabled,
+    Flag = "BombTimerDisplay",
     Callback = function(value)
          BombTimerDisplayEnabled = value
+         print("Display Bomb Timer updated: " .. tostring(value))
          if value then
               if not bombTimerGui then
                    createBombTimerUI()
@@ -635,41 +610,48 @@ AITab:AddLabel("== Targeting Settings ==", 15)
 AITab:AddToggle({
     Name = "AI Assistance",
     Default = false,
+    Flag = "AIAssistance",
     Callback = function(value)
         AI_AssistanceEnabled = value
-        print("AI Assistance " .. (AI_AssistanceEnabled and "enabled." or "disabled."))
+        print("AI Assistance updated: " .. tostring(value))
     end
 })
 AITab:AddTextbox({
     Name = "Bomb Pass Distance",
     Default = tostring(bombPassDistance),
-    TextDisappear = true,
+    Flag = "BombPassDistance",
+    TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
         if num then
             bombPassDistance = num
+            print("Updated Bomb Pass Distance: " .. num)
         end
     end
 })
 AITab:AddTextbox({
     Name = "Ray Spread Angle",
     Default = tostring(raySpreadAngle),
-    TextDisappear = true,
+    Flag = "RaySpreadAngle",
+    TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
         if num then
             raySpreadAngle = num
+            print("Updated Ray Spread Angle: " .. num)
         end
     end
 })
 AITab:AddTextbox({
     Name = "Number of Raycasts",
     Default = tostring(numRaycasts),
-    TextDisappear = true,
+    Flag = "NumberOfRaycasts",
+    TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
         if num then
             numRaycasts = num
+            print("Updated Number of Raycasts: " .. num)
         end
     end
 })
@@ -679,8 +661,10 @@ local orionFlickRotationToggle
 orionFlickRotationToggle = AITab:AddToggle({
     Name = "Flick Rotation",
     Default = false,
+    Flag = "FlickRotation",
     Callback = function(value)
         useFlickRotation = value
+        print("Flick Rotation updated: " .. tostring(value))
         if value then
             useSmoothRotation = false
             if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
@@ -700,8 +684,10 @@ local orionSmoothRotationToggle
 orionSmoothRotationToggle = AITab:AddToggle({
     Name = "Smooth Rotation",
     Default = true,
+    Flag = "SmoothRotation",
     Callback = function(value)
         useSmoothRotation = value
+        print("Smooth Rotation updated: " .. tostring(value))
         if value then
             useFlickRotation = false
             if orionFlickRotationToggle and orionFlickRotationToggle.Set then
@@ -727,12 +713,12 @@ local UITab = Window:MakeTab({
 UITab:AddColorpicker({
     Name = "Menu Main Color",
     Default = Color3.fromRGB(255, 0, 0),
+    Flag = "MenuMainColor",
+    Save = true,
     Callback = function(color)
         OrionLib.Themes[OrionLib.SelectedTheme].Main = color
-        print("Menu main color updated to:", color)
-    end,
-    Flag = "MenuMainColor",
-    Save = true
+        print("Menu Main Color updated to:", color)
+    end
 })
 
 -----------------------------------------------------
@@ -913,4 +899,4 @@ end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
 
 print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fallback to closest player, ESP and Bomb Timer toggles, shiftlock included.")
-return {} 
+return {}
