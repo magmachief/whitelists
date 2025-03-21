@@ -561,16 +561,17 @@ AutomatedTab:AddToggle({
         FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 })
-AutomatedTab:AddSlider({
+AutomatedTab:AddTextbox({
     Name = "Custom Anti‑Slippery Friction",
-    Min = 0.5,
-    Max = 1.0,
-    Default = customAntiSlipperyFriction,
-    Increment = 0.1,
+    Default = tostring(customAntiSlipperyFriction),
+    TextDisappear = true,
     Callback = function(value)
-        customAntiSlipperyFriction = value
-        if AntiSlipperyEnabled then
-            FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+        local num = tonumber(value)
+        if num then
+            customAntiSlipperyFriction = num
+            if AntiSlipperyEnabled then
+                FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
+            end
         end
     end
 })
@@ -582,16 +583,17 @@ AutomatedTab:AddToggle({
         applyRemoveHitbox(value)
     end
 })
-AutomatedTab:AddSlider({
+AutomatedTab:AddTextbox({
     Name = "Custom Hitbox Size",
-    Min = 0.1,
-    Max = 1.0,
-    Default = customHitboxSize,
-    Increment = 0.1,
+    Default = tostring(customHitboxSize),
+    TextDisappear = true,
     Callback = function(value)
-        customHitboxSize = value
-        if RemoveHitboxEnabled then
-            applyRemoveHitbox(true)
+        local num = tonumber(value)
+        if num then
+            customHitboxSize = num
+            if RemoveHitboxEnabled then
+                applyRemoveHitbox(true)
+            end
         end
     end
 })
@@ -641,34 +643,37 @@ AITab:AddToggle({
         print("AI Assistance " .. (AI_AssistanceEnabled and "enabled." or "disabled."))
     end
 })
-AITab:AddSlider({
+AITab:AddTextbox({
     Name = "Bomb Pass Distance",
-    Min = 5,
-    Max = 30,
-    Default = bombPassDistance,
-    Increment = 1,
+    Default = tostring(bombPassDistance),
+    TextDisappear = true,
     Callback = function(value)
-        bombPassDistance = value
+        local num = tonumber(value)
+        if num then
+            bombPassDistance = num
+        end
     end
 })
-AITab:AddSlider({
+AITab:AddTextbox({
     Name = "Ray Spread Angle",
-    Min = 5,
-    Max = 20,
-    Default = raySpreadAngle,
-    Increment = 1,
+    Default = tostring(raySpreadAngle),
+    TextDisappear = true,
     Callback = function(value)
-        raySpreadAngle = value
+        local num = tonumber(value)
+        if num then
+            raySpreadAngle = num
+        end
     end
 })
-AITab:AddSlider({
+AITab:AddTextbox({
     Name = "Number of Raycasts",
-    Min = 1,
-    Max = 5,
-    Default = numRaycasts,
-    Increment = 1,
+    Default = tostring(numRaycasts),
+    TextDisappear = true,
     Callback = function(value)
-        numRaycasts = value
+        local num = tonumber(value)
+        if num then
+            numRaycasts = num
+        end
     end
 })
 
