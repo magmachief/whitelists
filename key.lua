@@ -1,6 +1,6 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
--- Final version with fallback to closest player, toggles in the menu (including ESP and Bomb Timer),
+-- Final version with fallback to closest player, full toggles on all tabs (Automated, AI Based, and UI Elements),
 -- shiftlock included, with debug logging and AI-calculated bomb timer fallback.
 -----------------------------------------------------
 
@@ -50,9 +50,7 @@ function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if player.Character:FindFirstChild("Bomb") then
-                continue
-            end
+            if player.Character:FindFirstChild("Bomb") then continue end
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance <= bombPassDistance then
@@ -76,9 +74,7 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if player.Character:FindFirstChild("Bomb") then
-                continue
-            end
+            if player.Character:FindFirstChild("Bomb") then continue end
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance < shortestDistance then
@@ -121,15 +117,13 @@ function VisualModule.playPassVFX(target)
     local hrp = target.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
     local emitter = Instance.new("ParticleEmitter")
-    emitter.Texture = "rbxassetid://258128463"  
+    emitter.Texture = "rbxassetid://258128463"
     emitter.Rate = 50
     emitter.Lifetime = NumberRange.new(0.3, 0.5)
     emitter.Speed = NumberRange.new(2, 5)
     emitter.VelocitySpread = 30
     emitter.Parent = hrp
-    delay(1, function()
-        emitter:Destroy()
-    end)
+    delay(1, function() emitter:Destroy() end)
 end
 
 local AINotificationsModule = {}
@@ -149,11 +143,9 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-
     local bomb = char:FindFirstChild("Bomb")
     local NORMAL_FRICTION = 0.5
     local frictionValue = (AntiSlipperyEnabled and not bomb) and customAntiSlipperyFriction or NORMAL_FRICTION
-
     print("Updating friction to: " .. frictionValue)
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
@@ -163,15 +155,13 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 end
 
 -----------------------------------------------------
--- HITBOX ESP MODULE (with smaller hitbox overlay)
+-- HITBOX ESP MODULE
 -----------------------------------------------------
 local function createHitboxESP()
     if not CHAR then return end
     local hitbox = CHAR:FindFirstChild("Hitbox")
     if hitbox and hitbox:IsA("BasePart") then
-        if hitbox:FindFirstChild("HitboxESP") then
-            hitbox:FindFirstChild("HitboxESP"):Destroy()
-        end
+        if hitbox:FindFirstChild("HitboxESP") then hitbox:FindFirstChild("HitboxESP"):Destroy() end
         if HitboxESPEnabled then
             local espBox = Instance.new("BoxHandleAdornment")
             espBox.Name = "HitboxESP"
@@ -185,15 +175,11 @@ local function createHitboxESP()
         end
     end
 end
-
 local function removeHitboxESP()
     if not CHAR then return end
     local hitbox = CHAR:FindFirstChild("Hitbox")
-    if hitbox and hitbox:FindFirstChild("HitboxESP") then
-        hitbox:FindFirstChild("HitboxESP"):Destroy()
-    end
+    if hitbox and hitbox:FindFirstChild("HitboxESP") then hitbox:FindFirstChild("HitboxESP"):Destroy() end
 end
-
 local function toggleHitboxESP(value)
     HitboxESPEnabled = value
     if HitboxESPEnabled then
@@ -208,9 +194,7 @@ end
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     CHAR = newChar
     wait(1)
-    if HitboxESPEnabled then
-        createHitboxESP()
-    end
+    if HitboxESPEnabled then createHitboxESP() end
     FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 end)
 
@@ -225,32 +209,24 @@ local AI_AssistanceEnabled = false
 local pathfindingSpeed = 16  
 local lastAIMessageTime = 0
 local aiMessageCooldown = 5
-
 local raySpreadAngle = 10
 local numRaycasts = 5
-
 local customAntiSlipperyFriction = 0.7  
 local customHitboxSize = 0.1            
-
--- New toggles / flags
 local HitboxESPEnabled = false
 local BombTimerDisplayEnabled = false
-
--- Variables for AI-calculated bomb timer fallback
 local bombAcquiredTime = nil
-local bombDefaultDuration = 30  -- Default bomb duration if no timer is provided
+local bombDefaultDuration = 30  -- Default duration if no timer is found
 
 -----------------------------------------------------
--- BOMB TIMER UI SETUP AND AI TIMER CALCULATION
+-- BOMB TIMER UI SETUP & AI TIMER CALCULATION
 -----------------------------------------------------
 local bombTimerGui = nil
 local bombTimerLabel = nil
-
 local function createBombTimerUI()
     bombTimerGui = Instance.new("ScreenGui")
     bombTimerGui.Name = "BombTimerGui"
     bombTimerGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    
     bombTimerLabel = Instance.new("TextLabel")
     bombTimerLabel.Size = UDim2.new(0, 200, 0, 50)
     bombTimerLabel.Position = UDim2.new(0, 10, 0, 10)
@@ -262,30 +238,25 @@ local function createBombTimerUI()
     bombTimerLabel.Text = ""
     bombTimerLabel.Parent = bombTimerGui
 end
-
 local function getBombTimerFromObject()
     local char = LocalPlayer.Character
     if not char then return nil end
-
     local bomb = char:FindFirstChild("Bomb")
     if not bomb then
          bombAcquiredTime = nil
          return nil
     end
-
     print("Bomb children:")
     for _, child in pairs(bomb:GetChildren()) do
         if child:IsA("NumberValue") or child:IsA("IntValue") or child:IsA("StringValue") then
             print(child.Name, child.ClassName, child.Value)
         end
     end
-
     local attrTimer = bomb:GetAttribute("Timer")
     if attrTimer then
          bombAcquiredTime = nil
          return attrTimer
     end
-
     for _, child in pairs(bomb:GetChildren()) do
         if child:IsA("NumberValue") or child:IsA("IntValue") then
             if child.Value > 0 and child.Value < 100 then
@@ -297,8 +268,6 @@ local function getBombTimerFromObject()
             return tonumber(child.Value)
         end
     end
-
-    -- Fallback: if no timer value is found, use an AI calculation
     if not bombAcquiredTime then
          bombAcquiredTime = tick()
          print("Bomb acquired time set to: " .. bombAcquiredTime)
@@ -307,7 +276,6 @@ local function getBombTimerFromObject()
     print("Estimated bomb timer: " .. estimatedTimeLeft)
     return estimatedTimeLeft > 0 and estimatedTimeLeft or nil
 end
-
 RunService.Stepped:Connect(function()
     if bombTimerLabel then
          local timeLeft = getBombTimerFromObject()
@@ -325,23 +293,19 @@ end)
 -----------------------------------------------------
 local currentTargetMarker = nil
 local currentTargetPlayer = nil
-
 local function createOrUpdateTargetMarker(player, distance)
     if not player or not player.Character then return end
     local body = player.Character:FindFirstChild("HumanoidRootPart")
     if not body then return end
-
     if currentTargetMarker and currentTargetPlayer == player then
         currentTargetMarker:FindFirstChildOfClass("TextLabel").Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
         return
     end
-
     if currentTargetMarker then
         currentTargetMarker:Destroy()
         currentTargetMarker = nil
         currentTargetPlayer = nil
     end
-
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
     marker.Adornee = body
@@ -349,7 +313,6 @@ local function createOrUpdateTargetMarker(player, distance)
     marker.StudsOffset = Vector3.new(0, 2, 0)
     marker.AlwaysOnTop = true
     marker.Parent = body
-
     local label = Instance.new("TextLabel", marker)
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
@@ -357,13 +320,10 @@ local function createOrUpdateTargetMarker(player, distance)
     label.TextScaled = true
     label.TextColor3 = Color3.new(1, 0, 0)
     label.Font = Enum.Font.SourceSansBold
-
     currentTargetMarker = marker
     currentTargetPlayer = player
-
     VisualModule.animateMarker(marker)
 end
-
 local function removeTargetMarker()
     if currentTargetMarker then
         currentTargetMarker:Destroy()
@@ -379,31 +339,24 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
     local direction = (endPos - startPos).Unit
     local distance = (endPos - startPos).Magnitude
-
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
     if LocalPlayer.Character then
         rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
     end
-
     local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
     if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
         return false
     end
-
     local raysEachSide = math.floor((numRaycasts - 1) / 2)
     for i = 1, raysEachSide do
         local angleOffset = spreadRad * i / raysEachSide
         local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), angleOffset) * CFrame.new(direction)).p
         local leftResult = Workspace:Raycast(startPos, leftDirection * distance, rayParams)
-        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return false
-        end
+        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
         local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
         local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
-        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return false
-        end
+        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
     end
     return true
 end
@@ -413,34 +366,28 @@ end
 -----------------------------------------------------
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
-
     LoggingModule.safeCall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if not bomb then
             removeTargetMarker()
             return
         end
-
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
             or TargetingModule.getClosestPlayer(bombPassDistance)
-
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if targetPlayer.Character:FindFirstChild("Bomb") then
                 removeTargetMarker()
                 return
             end
-
             local targetPos = targetPlayer.Character.HumanoidRootPart.Position
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
-
             if distance > bombPassDistance then
                 print("Target out of range. Pass aborted.")
                 removeTargetMarker()
                 return
             end
-
             local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart") or targetPlayer.Character.HumanoidRootPart
             if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
                 print("Line of sight blocked. Bomb pass aborted.")
@@ -448,16 +395,13 @@ local function autoPassBombEnhanced()
                 removeTargetMarker()
                 return
             end
-
             createOrUpdateTargetMarker(targetPlayer, distance)
             VisualModule.playPassVFX(targetPlayer)
             TargetingModule.rotateCharacterTowardsTarget(targetPos)
-
             if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name .. " (" .. math.floor(distance) .. " studs).")
                 lastAIMessageTime = tick()
             end
-
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
@@ -506,7 +450,7 @@ local UITab = Window:MakeTab({
 })
 print("UI Elements tab created.")
 
--- Use AddLabel as section headers in Automated Tab
+-- Automated Settings Tab Toggles
 AutomatedTab:AddLabel("== Bomb Passing ==", 15)
 local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
@@ -528,7 +472,6 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
         end
     end
 })
-
 AutomatedTab:AddLabel("== Character Settings ==", 15)
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
@@ -550,9 +493,7 @@ AutomatedTab:AddTextbox({
         if num then
             customAntiSlipperyFriction = num
             print("Updated Custom Anti-Slippery Friction: " .. num)
-            if AntiSlipperyEnabled then
-                FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-            end
+            if AntiSlipperyEnabled then FrictionModule.updateSlidingProperties(AntiSlipperyEnabled) end
         end
     end
 })
@@ -576,13 +517,10 @@ AutomatedTab:AddTextbox({
         if num then
             customHitboxSize = num
             print("Updated Custom Hitbox Size: " .. num)
-            if RemoveHitboxEnabled then
-                applyRemoveHitbox(true)
-            end
+            if RemoveHitboxEnabled then applyRemoveHitbox(true) end
         end
     end
 })
-
 AutomatedTab:AddLabel("== Display Options ==", 15)
 AutomatedTab:AddToggle({
     Name = "Hitbox ESP",
@@ -601,9 +539,7 @@ AutomatedTab:AddToggle({
          BombTimerDisplayEnabled = value
          print("Display Bomb Timer updated: " .. tostring(value))
          if value then
-              if not bombTimerGui then
-                   createBombTimerUI()
-              end
+              if not bombTimerGui then createBombTimerUI() end
          else
               if bombTimerGui then
                    bombTimerGui:Destroy()
@@ -614,7 +550,7 @@ AutomatedTab:AddToggle({
     end
 })
 
--- AI Based Settings Tab
+-- AI Based Settings Tab Toggles
 AITab:AddLabel("== Targeting Settings ==", 15)
 AITab:AddToggle({
     Name = "AI Assistance",
@@ -664,7 +600,6 @@ AITab:AddTextbox({
         end
     end
 })
-
 AITab:AddLabel("== Rotation Settings ==", 15)
 local orionFlickRotationToggle = AITab:AddToggle({
     Name = "Flick Rotation",
@@ -727,7 +662,7 @@ UITab:AddColorpicker({
 -- INITIALIZE ORIONLIB
 -----------------------------------------------------
 OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, ESP and Bomb Timer toggles, shiftlock included.")
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, all toggles present, shiftlock included.")
 
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS
@@ -736,27 +671,23 @@ local function createMobileToggle()
     local mobileGui = Instance.new("ScreenGui")
     mobileGui.Name = "MobileToggleGui"
     mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    
     local autoPassMobileToggle = Instance.new("TextButton")
     autoPassMobileToggle.Name = "AutoPassMobileToggle"
     autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
     autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
-    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  
+    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     autoPassMobileToggle.Text = "OFF"
     autoPassMobileToggle.TextScaled = true
     autoPassMobileToggle.Font = Enum.Font.SourceSansBold
     autoPassMobileToggle.ZIndex = 100
     autoPassMobileToggle.Parent = mobileGui
-
     local uicorner = Instance.new("UICorner")
     uicorner.CornerRadius = UDim.new(1, 0)
     uicorner.Parent = autoPassMobileToggle
-
     local uistroke = Instance.new("UIStroke")
     uistroke.Thickness = 2
     uistroke.Color = Color3.fromRGB(0, 0, 0)
     uistroke.Parent = autoPassMobileToggle
-
     autoPassMobileToggle.MouseEnter:Connect(function()
         TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play()
     end)
@@ -767,7 +698,6 @@ local function createMobileToggle()
             TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 0, 0)}):Play()
         end
     end)
-    
     autoPassMobileToggle.MouseButton1Click:Connect(function()
         AutoPassEnabled = not AutoPassEnabled
         if AutoPassEnabled then
@@ -784,7 +714,6 @@ local function createMobileToggle()
             end
         end
     end)
-    
     return mobileGui, autoPassMobileToggle
 end
 
@@ -879,36 +808,27 @@ ShiftLockButton.MouseButton1Click:Connect(function()
     else
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChild("Humanoid")
-        if hum then
-            hum.AutoRotate = true
-        end
+        if hum then hum.AutoRotate = true end
         ShiftLockButton.Image = ShiftStates.Off
         Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
         ShiftlockCursor.Visible = false
-        pcall(function()
-            SL_Active:Disconnect()
-            SL_Active = nil
-        end)
+        pcall(function() SL_Active:Disconnect() SL_Active = nil end)
     end
 end)
 
 local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(actionName, inputState, inputObject)
-    if inputState == Enum.UserInputState.Begin then
-        ShiftLockButton.MouseButton1Click:Fire()
-    end
+    if inputState == Enum.UserInputState.Begin then ShiftLockButton.MouseButton1Click:Fire() end
     return Enum.ContextActionResult.Sink
 end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
 
-print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fallback to closest player, ESP and Bomb Timer toggles, shiftlock included.")
+print("Final Ultra-Advanced Bomb AI loaded. All tabs and toggles are now present, along with shiftlock and mobile toggle.")
 
 ------------------------------------------------------------------------------
--- KEY FIX: Force the tab's scrolling container(s) to auto-size and show the scrollbar.
--- This ensures that all toggles appear even on mobile.
+-- KEY FIX: Force tab scrolling containers to auto-size and show scrollbar
 ------------------------------------------------------------------------------
 task.spawn(function()
     wait(0.5)
-    -- Adjust the Automated Settings container:
     local autoTab = OrionLib.Elements["Automated Settings"]
     if autoTab and autoTab.ItemContainer then
         autoTab.ItemContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
@@ -917,7 +837,6 @@ task.spawn(function()
     else
         print("Automated Settings container not found.")
     end
-    -- Adjust the AI Based Settings container:
     local aiTab = OrionLib.Elements["AI Based Settings"]
     if aiTab and aiTab.ItemContainer then
         aiTab.ItemContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
