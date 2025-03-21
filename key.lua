@@ -530,8 +530,8 @@ local AutomatedTab = Window:MakeTab({
     PremiumOnly = false
 })
 
--- Section: Bomb Passing
-AutomatedTab:AddSection("Bomb Passing")
+-- Instead of AddSection, use AddLabel for section headers.
+AutomatedTab:AddLabel("== Bomb Passing ==", 15)
 local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
@@ -551,8 +551,7 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
     end
 })
 
--- Section: Character Settings
-AutomatedTab:AddSection("Character Settings")
+AutomatedTab:AddLabel("== Character Settings ==", 15)
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
@@ -598,8 +597,7 @@ AutomatedTab:AddTextbox({
     end
 })
 
--- Section: Display Options
-AutomatedTab:AddSection("Display Options")
+AutomatedTab:AddLabel("== Display Options ==", 15)
 AutomatedTab:AddToggle({
     Name = "Hitbox ESP",
     Default = HitboxESPEnabled,
@@ -633,8 +631,7 @@ local AITab = Window:MakeTab({
     PremiumOnly = false
 })
 
--- Section: Targeting Settings
-AITab:AddSection("Targeting Settings")
+AITab:AddLabel("== Targeting Settings ==", 15)
 AITab:AddToggle({
     Name = "AI Assistance",
     Default = false,
@@ -677,8 +674,7 @@ AITab:AddTextbox({
     end
 })
 
--- Section: Rotation Settings
-AITab:AddSection("Rotation Settings")
+AITab:AddLabel("== Rotation Settings ==", 15)
 local orionFlickRotationToggle
 orionFlickRotationToggle = AITab:AddToggle({
     Name = "Flick Rotation",
