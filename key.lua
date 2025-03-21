@@ -1,7 +1,7 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
 -- Final version with fallback to closest player, toggles in the menu (including ESP and Bomb Timer),
--- shiftlock included, and with added debug logging for numeric settings and bomb timer estimation.
+-- shiftlock included, with debug logging and AI-calculated bomb timer fallback.
 -----------------------------------------------------
 
 -- SERVICES
@@ -473,7 +473,7 @@ local function autoPassBombEnhanced()
 end
 
 -----------------------------------------------------
--- ORIONLIB MENU (Restructured for Neater Organization)
+-- ORIONLIB MENU SETUP
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
@@ -484,14 +484,26 @@ local Window = OrionLib:MakeWindow({
     ShowIcon = true  
 })
 
--- Automated Settings Tab
+-- Create three tabs
 local AutomatedTab = Window:MakeTab({
     Name = "Automated Settings",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
 
--- Use AddLabel as section headers.
+local AITab = Window:MakeTab({
+    Name = "AI Based Settings",
+    Icon = "rbxassetid://7072720870",
+    PremiumOnly = false
+})
+
+local UITab = Window:MakeTab({
+    Name = "UI Elements",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- Use AddLabel as section headers in Automated Tab
 AutomatedTab:AddLabel("== Bomb Passing ==", 15)
 local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
@@ -600,12 +612,6 @@ AutomatedTab:AddToggle({
 })
 
 -- AI Based Settings Tab
-local AITab = Window:MakeTab({
-    Name = "AI Based Settings",
-    Icon = "rbxassetid://7072720870",
-    PremiumOnly = false
-})
-
 AITab:AddLabel("== Targeting Settings ==", 15)
 AITab:AddToggle({
     Name = "AI Assistance",
@@ -657,8 +663,7 @@ AITab:AddTextbox({
 })
 
 AITab:AddLabel("== Rotation Settings ==", 15)
-local orionFlickRotationToggle
-orionFlickRotationToggle = AITab:AddToggle({
+local orionFlickRotationToggle = AITab:AddToggle({
     Name = "Flick Rotation",
     Default = false,
     Flag = "FlickRotation",
@@ -680,8 +685,7 @@ orionFlickRotationToggle = AITab:AddToggle({
         end
     end
 })
-local orionSmoothRotationToggle
-orionSmoothRotationToggle = AITab:AddToggle({
+local orionSmoothRotationToggle = AITab:AddToggle({
     Name = "Smooth Rotation",
     Default = true,
     Flag = "SmoothRotation",
@@ -705,11 +709,6 @@ orionSmoothRotationToggle = AITab:AddToggle({
 })
 
 -- UI Elements Tab
-local UITab = Window:MakeTab({
-    Name = "UI Elements",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
 UITab:AddColorpicker({
     Name = "Menu Main Color",
     Default = Color3.fromRGB(255, 0, 0),
@@ -901,22 +900,19 @@ ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
 print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fallback to closest player, ESP and Bomb Timer toggles, shiftlock included.")
 
 ------------------------------------------------------------------------------
--- *** KEY FIX: Force the tab's scrolling container to auto-size and show the scrollbar
+-- KEY FIX: Force the tab's scrolling container(s) to auto-size and show the scrollbar.
+-- This ensures that all toggles appear even on mobile.
 ------------------------------------------------------------------------------
-
--- Wait a moment for OrionLib to finish building the tab containers
 task.spawn(function()
     wait(0.5)
-    -- If the library references the container for "Automated Settings" as an internal property,
-    -- we can do something like:
+    -- Access the Automated Settings container if available.
     local autoTab = OrionLib.Elements["Automated Settings"]
     if autoTab and autoTab.ItemContainer then
         autoTab.ItemContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
         autoTab.ItemContainer.ScrollBarImageTransparency = 0
         autoTab.ItemContainer.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
     end
-
-    -- If you'd like to do the same for other tabs, just repeat for each:
+    -- Similarly, adjust the AI Based Settings container.
     local aiTab = OrionLib.Elements["AI Based Settings"]
     if aiTab and aiTab.ItemContainer then
         aiTab.ItemContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
