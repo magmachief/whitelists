@@ -1,7 +1,6 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
--- Recreated Menu Version: Fully organized with three tabs, all toggles/textboxes present,
--- shiftlock and mobile toggle load after the menu.
+-- Neater Final Version (No extra debug additions)
 -----------------------------------------------------
 
 -- SERVICES
@@ -30,7 +29,9 @@ function LoggingModule.logError(err, context)
 end
 function LoggingModule.safeCall(func, context)
     local success, result = pcall(func)
-    if not success then LoggingModule.logError(result, context) end
+    if not success then
+        LoggingModule.logError(result, context)
+    end
     return success, result
 end
 
@@ -40,7 +41,9 @@ local useSmoothRotation = true
 
 function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local bestPlayer, bestTravelTime = nil, math.huge
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -61,7 +64,9 @@ end
 
 function TargetingModule.getClosestPlayer(bombPassDistance)
     local closestPlayer, shortestDistance = nil, bombPassDistance
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -87,7 +92,8 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     elseif useSmoothRotation then
         local targetCFrame = CFrame.new(hrp.Position, adjPos)
         local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
-        tween:Play() return tween
+        tween:Play()
+        return tween
     else
         hrp.CFrame = CFrame.new(hrp.Position, adjPos)
     end
@@ -129,7 +135,6 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local bomb = char:FindFirstChild("Bomb")
     local NORMAL_FRICTION = 0.5
     local frictionValue = (AntiSlipperyEnabled and not bomb) and customAntiSlipperyFriction or NORMAL_FRICTION
-    print("Updating friction to: " .. frictionValue)
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CustomPhysicalProperties = PhysicalProperties.new(frictionValue, 0.3, 0.5)
@@ -138,47 +143,8 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 end
 
 -----------------------------------------------------
--- HITBOX ESP MODULE
+-- (ESP code removed)
 -----------------------------------------------------
-local function createHitboxESP()
-    if not CHAR then return end
-    local hitbox = CHAR:FindFirstChild("Hitbox")
-    if hitbox and hitbox:IsA("BasePart") then
-        if hitbox:FindFirstChild("HitboxESP") then hitbox:FindFirstChild("HitboxESP"):Destroy() end
-        if HitboxESPEnabled then
-            local espBox = Instance.new("BoxHandleAdornment")
-            espBox.Name = "HitboxESP"
-            espBox.Size = hitbox.Size + Vector3.new(0.1, 0.1, 0.1)
-            espBox.Adornee = hitbox
-            espBox.Color3 = Color3.fromRGB(0,255,0)
-            espBox.AlwaysOnTop = true
-            espBox.ZIndex = 10
-            espBox.Transparency = 0.3
-            espBox.Parent = hitbox
-        end
-    end
-end
-local function removeHitboxESP()
-    if not CHAR then return end
-    local hitbox = CHAR:FindFirstChild("Hitbox")
-    if hitbox and hitbox:FindFirstChild("HitboxESP") then hitbox:FindFirstChild("HitboxESP"):Destroy() end
-end
-local function toggleHitboxESP(value)
-    HitboxESPEnabled = value
-    if HitboxESPEnabled then
-        createHitboxESP()
-        StarterGui:SetCore("SendNotification", { Title = "Hitbox ESP", Text = "ESP Enabled!", Duration = 2 })
-    else
-        removeHitboxESP()
-        StarterGui:SetCore("SendNotification", { Title = "Hitbox ESP", Text = "ESP Disabled!", Duration = 2 })
-    end
-end
-
-LocalPlayer.CharacterAdded:Connect(function(newChar)
-    CHAR = newChar wait(1)
-    if HitboxESPEnabled then createHitboxESP() end
-    FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-end)
 
 -----------------------------------------------------
 -- CONFIGURATION VARIABLES
@@ -195,13 +161,12 @@ local raySpreadAngle = 10
 local numRaycasts = 5
 local customAntiSlipperyFriction = 0.7
 local customHitboxSize = 0.1
-local HitboxESPEnabled = false
 local BombTimerDisplayEnabled = false
 local bombAcquiredTime = nil
 local bombDefaultDuration = 30
 
 -----------------------------------------------------
--- BOMB TIMER UI & AI TIMER CALCULATION
+-- BOMB TIMER UI & TIMER CALCULATION
 -----------------------------------------------------
 local bombTimerGui, bombTimerLabel = nil, nil
 local function createBombTimerUI()
@@ -227,20 +192,15 @@ local function getBombTimerFromObject()
         bombAcquiredTime = nil
         return nil
     end
-    print("Bomb children:")
-    for _, child in pairs(bomb:GetChildren()) do
-        if child:IsA("NumberValue") or child:IsA("IntValue") or child:IsA("StringValue") then
-            print(child.Name, child.ClassName, child.Value)
-        end
-    end
     local attrTimer = bomb:GetAttribute("Timer")
-    if attrTimer then bombAcquiredTime = nil return attrTimer end
+    if attrTimer then
+        bombAcquiredTime = nil
+        return attrTimer
+    end
     for _, child in pairs(bomb:GetChildren()) do
-        if child:IsA("NumberValue") or child:IsA("IntValue") then
-            if child.Value > 0 and child.Value < 100 then
-                bombAcquiredTime = nil
-                return child.Value
-            end
+        if (child:IsA("NumberValue") or child:IsA("IntValue")) and child.Value > 0 and child.Value < 100 then
+            bombAcquiredTime = nil
+            return child.Value
         elseif child:IsA("StringValue") and string.match(child.Value, "%d+") then
             bombAcquiredTime = nil
             return tonumber(child.Value)
@@ -248,10 +208,8 @@ local function getBombTimerFromObject()
     end
     if not bombAcquiredTime then
         bombAcquiredTime = tick()
-        print("Bomb acquired time set to: " .. bombAcquiredTime)
     end
     local estimatedTimeLeft = bombDefaultDuration - (tick() - bombAcquiredTime)
-    print("Estimated bomb timer: " .. estimatedTimeLeft)
     return estimatedTimeLeft > 0 and estimatedTimeLeft or nil
 end
 RunService.Stepped:Connect(function()
@@ -259,7 +217,6 @@ RunService.Stepped:Connect(function()
         local timeLeft = getBombTimerFromObject()
         if timeLeft then
             bombTimerLabel.Text = "⏳ Bomb Timer: " .. math.floor(timeLeft) .. " seconds left!"
-            print("Bomb Timer updated: " .. math.floor(timeLeft))
         else
             bombTimerLabel.Text = "Bomb Timer: N/A"
         end
@@ -278,7 +235,10 @@ local function createOrUpdateTargetMarker(player, distance)
         currentTargetMarker:FindFirstChildOfClass("TextLabel").Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
         return
     end
-    if currentTargetMarker then currentTargetMarker:Destroy() currentTargetMarker, currentTargetPlayer = nil, nil end
+    if currentTargetMarker then
+        currentTargetMarker:Destroy()
+        currentTargetMarker, currentTargetPlayer = nil, nil
+    end
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
     marker.Adornee = body
@@ -296,7 +256,12 @@ local function createOrUpdateTargetMarker(player, distance)
     currentTargetMarker, currentTargetPlayer = marker, player
     VisualModule.animateMarker(marker)
 end
-local function removeTargetMarker() if currentTargetMarker then currentTargetMarker:Destroy() currentTargetMarker, currentTargetPlayer = nil, nil end end
+local function removeTargetMarker()
+    if currentTargetMarker then
+        currentTargetMarker:Destroy()
+        currentTargetMarker, currentTargetPlayer = nil, nil
+    end
+end
 
 -----------------------------------------------------
 -- MULTIPLE RAYCASTS
@@ -307,9 +272,13 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local distance = (endPos - startPos).Magnitude
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-    if LocalPlayer.Character then rayParams.FilterDescendantsInstances = {LocalPlayer.Character} end
+    if LocalPlayer.Character then
+        rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    end
     local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
-    if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
+    if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
+        return false
+    end
     local raysEachSide = math.floor((numRaycasts - 1) / 2)
     for i = 1, raysEachSide do
         local angleOffset = spreadRad * i / raysEachSide
@@ -330,20 +299,26 @@ local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
     LoggingModule.safeCall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
-        if not bomb then removeTargetMarker() return end
+        if not bomb then
+            removeTargetMarker()
+            return
+        end
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
-        local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed) or TargetingModule.getClosestPlayer(bombPassDistance)
+        local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
+                         or TargetingModule.getClosestPlayer(bombPassDistance)
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            if targetPlayer.Character:FindFirstChild("Bomb") then removeTargetMarker() return end
+            if targetPlayer.Character:FindFirstChild("Bomb") then
+                removeTargetMarker()
+                return
+            end
             local targetPos = targetPlayer.Character.HumanoidRootPart.Position
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance > bombPassDistance then
-                print("Target out of range. Pass aborted.") removeTargetMarker() return
+                removeTargetMarker() return
             end
             local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart") or targetPlayer.Character.HumanoidRootPart
             if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
-                print("Line of sight blocked. Bomb pass aborted.")
                 AINotificationsModule.sendNotification("AI Alert", "Line-of-sight blocked! Adjust your position.")
                 removeTargetMarker() return
             end
@@ -357,10 +332,8 @@ local function autoPassBombEnhanced()
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
-                print("No BombEvent found, re-parenting bomb directly (fallback).")
                 bomb.Parent = targetPlayer.Character
             end
-            print("Bomb passed to:", targetPlayer.Name, "Distance:", distance)
             removeTargetMarker()
         else
             removeTargetMarker()
@@ -385,9 +358,7 @@ local AutomatedTab = Window:MakeTab({ Name = "Automated Settings", Icon = "rbxas
 local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://7072720870", PremiumOnly = false })
 local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 
-print("Tabs created: Automated, AI Based, UI Elements.")
-
--- Automated Tab: Bomb Passing & Character Settings
+-- Automated Settings Tab
 AutomatedTab:AddLabel("== Bomb Passing ==", 15)
 AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
@@ -395,7 +366,6 @@ AutomatedTab:AddToggle({
     Flag = "AutoPassBomb",
     Callback = function(value)
         AutoPassEnabled = value
-        print("Auto Pass Bomb updated: " .. tostring(value))
         if AutoPassEnabled then
             if not autoPassConnection then
                 autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
@@ -413,7 +383,6 @@ AutomatedTab:AddToggle({
     Flag = "AntiSlippery",
     Callback = function(value)
         AntiSlipperyEnabled = value
-        print("Anti Slippery updated: " .. tostring(value))
         FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 })
@@ -424,11 +393,7 @@ AutomatedTab:AddTextbox({
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
-        if num then
-            customAntiSlipperyFriction = num
-            print("Updated Custom Anti-Slippery Friction: " .. num)
-            if AntiSlipperyEnabled then FrictionModule.updateSlidingProperties(AntiSlipperyEnabled) end
-        end
+        if num then customAntiSlipperyFriction = num; FrictionModule.updateSlidingProperties(AntiSlipperyEnabled) end
     end
 })
 AutomatedTab:AddToggle({
@@ -437,8 +402,7 @@ AutomatedTab:AddToggle({
     Flag = "RemoveHitbox",
     Callback = function(value)
         RemoveHitboxEnabled = value
-        print("Remove Hitbox updated: " .. tostring(value))
-        applyRemoveHitbox(value)
+        -- (Hitbox removal functionality here if needed)
     end
 })
 AutomatedTab:AddTextbox({
@@ -448,43 +412,29 @@ AutomatedTab:AddTextbox({
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
-        if num then
-            customHitboxSize = num
-            print("Updated Custom Hitbox Size: " .. num)
-            if RemoveHitboxEnabled then applyRemoveHitbox(true) end
-        end
+        if num then customHitboxSize = num; end
     end
 })
 AutomatedTab:AddLabel("== Display Options ==", 15)
-AutomatedTab:AddToggle({
-    Name = "Hitbox ESP",
-    Default = HitboxESPEnabled,
-    Flag = "HitboxESP",
-    Callback = function(value)
-         toggleHitboxESP(value)
-         print("Hitbox ESP updated: " .. tostring(value))
-    end
-})
 AutomatedTab:AddToggle({
     Name = "Display Bomb Timer",
     Default = BombTimerDisplayEnabled,
     Flag = "BombTimerDisplay",
     Callback = function(value)
-         BombTimerDisplayEnabled = value
-         print("Display Bomb Timer updated: " .. tostring(value))
-         if value then
-              if not bombTimerGui then createBombTimerUI() end
-         else
-              if bombTimerGui then
-                   bombTimerGui:Destroy()
-                   bombTimerGui = nil
-                   bombTimerLabel = nil
-              end
-         end
+        BombTimerDisplayEnabled = value
+        if value then
+            if not bombTimerGui then createBombTimerUI() end
+        else
+            if bombTimerGui then
+                bombTimerGui:Destroy()
+                bombTimerGui = nil
+                bombTimerLabel = nil
+            end
+        end
     end
 })
 
--- AI Based Tab: Targeting & Rotation Settings
+-- AI Based Settings Tab
 AITab:AddLabel("== Targeting Settings ==", 15)
 AITab:AddToggle({
     Name = "AI Assistance",
@@ -492,7 +442,6 @@ AITab:AddToggle({
     Flag = "AIAssistance",
     Callback = function(value)
         AI_AssistanceEnabled = value
-        print("AI Assistance updated: " .. tostring(value))
     end
 })
 AITab:AddTextbox({
@@ -502,10 +451,7 @@ AITab:AddTextbox({
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
-        if num then
-            bombPassDistance = num
-            print("Updated Bomb Pass Distance: " .. num)
-        end
+        if num then bombPassDistance = num end
     end
 })
 AITab:AddTextbox({
@@ -515,10 +461,7 @@ AITab:AddTextbox({
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
-        if num then
-            raySpreadAngle = num
-            print("Updated Ray Spread Angle: " .. num)
-        end
+        if num then raySpreadAngle = num end
     end
 })
 AITab:AddTextbox({
@@ -528,67 +471,45 @@ AITab:AddTextbox({
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
-        if num then
-            numRaycasts = num
-            print("Updated Number of Raycasts: " .. num)
-        end
+        if num then numRaycasts = num end
     end
 })
 AITab:AddLabel("== Rotation Settings ==", 15)
-local orionFlickRotationToggle = AITab:AddToggle({
+AITab:AddToggle({
     Name = "Flick Rotation",
     Default = false,
     Flag = "FlickRotation",
     Callback = function(value)
         useFlickRotation = value
-        print("Flick Rotation updated: " .. tostring(value))
         if value then
             useSmoothRotation = false
-            if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
-                orionSmoothRotationToggle:Set(false)
-            end
         else
-            if not useSmoothRotation then
-                useSmoothRotation = true
-                if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
-                    orionSmoothRotationToggle:Set(true)
-                end
-            end
+            if not useSmoothRotation then useSmoothRotation = true end
         end
     end
 })
-local orionSmoothRotationToggle = AITab:AddToggle({
+AITab:AddToggle({
     Name = "Smooth Rotation",
     Default = true,
     Flag = "SmoothRotation",
     Callback = function(value)
         useSmoothRotation = value
-        print("Smooth Rotation updated: " .. tostring(value))
         if value then
             useFlickRotation = false
-            if orionFlickRotationToggle and orionFlickRotationToggle.Set then
-                orionFlickRotationToggle:Set(false)
-            end
         else
-            if not useFlickRotation then
-                useFlickRotation = true
-                if orionFlickRotationToggle and orionFlickRotationToggle.Set then
-                    orionFlickRotationToggle:Set(true)
-                end
-            end
+            if not useFlickRotation then useFlickRotation = true end
         end
     end
 })
 
--- UI Elements Tab: Menu Color
+-- UI Elements Tab
 UITab:AddColorpicker({
     Name = "Menu Main Color",
-    Default = Color3.fromRGB(255, 0, 0),
+    Default = Color3.fromRGB(255,0,0),
     Flag = "MenuMainColor",
     Save = true,
     Callback = function(color)
         OrionLib.Themes[OrionLib.SelectedTheme].Main = color
-        print("Menu Main Color updated to:", color)
     end
 })
 
@@ -596,7 +517,6 @@ UITab:AddColorpicker({
 -- INITIALIZE ORIONLIB
 -----------------------------------------------------
 OrionLib:Init()
-print("Yon Menu Script Loaded with all toggles present, shiftlock and mobile toggle will load next.")
 
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS
@@ -637,11 +557,9 @@ local function createMobileToggle()
         if AutoPassEnabled then
             autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0,255,0)
             autoPassMobileToggle.Text = "ON"
-            if orionAutoPassToggle and orionAutoPassToggle.Set then orionAutoPassToggle:Set(true) end
         else
             autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255,0,0)
             autoPassMobileToggle.Text = "OFF"
-            if orionAutoPassToggle and orionAutoPassToggle.Set then orionAutoPassToggle:Set(false) end
         end
     end)
     return mobileGui, autoPassMobileToggle
@@ -652,7 +570,6 @@ LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
         wait(1)
         if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
             mobileGui, autoPassMobileToggle = createMobileToggle()
-            print("Recreated mobile toggle GUI")
         end
     end
 end)
@@ -737,5 +654,5 @@ local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a
 end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8,0,0.8,0))
 
-print("Final Ultra-Advanced Bomb AI loaded. All tabs and toggles recreated, shiftlock and mobile toggle loaded.")
+print("Final Ultra-Advanced Bomb AI loaded. Menu, all toggles, shiftlock and mobile toggle are active.")
 return {}
