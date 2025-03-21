@@ -1667,9 +1667,6 @@ end
 -----------------------------------------------------
 -- END OF ORIONLIB MODULE
 -----------------------------------------------------
--- (OrionLib is now fully integrated, no remote loadstring is required)
-OrionLib:Init()
-
 -----------------------------------------------------
 -- Now integrate the Bomb Passing Assistant functions with the above OrionLib menu
 -----------------------------------------------------
