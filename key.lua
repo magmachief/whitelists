@@ -82,6 +82,7 @@ end
 
 -----------------------------------------------------
 -- ORIONLIB: Advanced Orion UI Library v2025+ (Cute & Stylish Edition)
+-- All functions integrated below (no remote loadstring required)
 -----------------------------------------------------
 local OrionLib = {
     Elements = {},
@@ -1640,12 +1641,17 @@ end
 -----------------------------------------------------
 -- END OF ORIONLIB MODULE
 -----------------------------------------------------
-return OrionLib
+-- Since the entire OrionLib code is now integrated, we don't require loadstring.
+-- (The module ends here)
+-----------------------------------------------------
+-- Initialize OrionLib
+OrionLib:Init()
 
 -----------------------------------------------------
 -- Now integrate the Bomb Passing Assistant functions with the above OrionLib menu
 -----------------------------------------------------
--- Load OrionLib (Cute & Stylish Edition)
+
+-- Create the main window
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
     HidePremium = false,
