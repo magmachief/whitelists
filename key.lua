@@ -82,7 +82,7 @@ end
 
 -----------------------------------------------------
 -- ORIONLIB: Advanced Orion UI Library v2025+ (Cute & Stylish Edition)
--- All functions integrated below (no remote loadstring required)
+-- (Integrated directly here – no loadstring is required)
 -----------------------------------------------------
 local OrionLib = {
     Elements = {},
@@ -416,9 +416,13 @@ local NotificationHolder = SetProps(SetChildren(MakeElement("TFrame"), {
     AnchorPoint = Vector2.new(1, 1),
     Parent = Orion
 })
-AddConnection(NotificationHolder.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-    NotificationHolder.CanvasSize = UDim2.new(0, 0, 0, NotificationHolder.UIListLayout.AbsoluteContentSize.Y + 16)
-end)
+if NotificationHolder:IsA("ScrollingFrame") then
+    AddConnection(NotificationHolder.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
+        NotificationHolder.CanvasSize = UDim2.new(0, 0, 0, NotificationHolder.UIListLayout.AbsoluteContentSize.Y + 16)
+    end)
+else
+    DebugModule.log("NotificationHolder is not a ScrollingFrame; skipping CanvasSize update.")
+end
 
 function OrionLib:MakeNotification(config)
     task.spawn(function()
@@ -509,9 +513,13 @@ function OrionLib:MakeWindow(config)
         MakeElement("List"),
         MakeElement("Padding", 8,0,0,8)
     }), "Divider")
-    AddConnection(TabHolder.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-        TabHolder.CanvasSize = UDim2.new(0,0,0, TabHolder.UIListLayout.AbsoluteContentSize.Y + 16)
-    end)
+    if TabHolder:IsA("ScrollingFrame") then
+        AddConnection(TabHolder.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
+            TabHolder.CanvasSize = UDim2.new(0,0,0, TabHolder.UIListLayout.AbsoluteContentSize.Y + 16)
+        end)
+    else
+        DebugModule.log("TabHolder is not a ScrollingFrame; skipping CanvasSize update.")
+    end
 
     local CloseBtn = SetChildren(SetProps(MakeElement("Button"), {
         Size = UDim2.new(0.5,0,1,0),
@@ -762,7 +770,9 @@ function OrionLib:MakeWindow(config)
             MakeElement("Padding",15,10,10,15)
         }), "Divider")
         AddConnection(Container.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-            Container.CanvasSize = UDim2.new(0,0,0, Container.UIListLayout.AbsoluteContentSize.Y + 30)
+            if Container:IsA("ScrollingFrame") then
+                Container.CanvasSize = UDim2.new(0,0,0, Container.UIListLayout.AbsoluteContentSize.Y + 30)
+            end
         end)
         if firstTab then
             firstTab = false
@@ -789,9 +799,18 @@ function OrionLib:MakeWindow(config)
             TabFrame.Title.Font = Enum.Font.FredokaOne
             Container.Visible = true
         end)
+        -- Add a divider method to the tab element
+        local function AddDivider()
+            local divider = Instance.new("Frame")
+            divider.Size = UDim2.new(1, 0, 0, 2)
+            divider.BackgroundColor3 = OrionLib.Themes[OrionLib.SelectedTheme].Divider
+            divider.BorderSizePixel = 0
+            divider.Parent = Container
+        end
+
         local function GetElements(itemParent)
             local ElementFunction = {}
-            -- Add Label
+            -- (Below are methods to add labels, buttons, toggles, sliders, etc.)
             function ElementFunction:AddLabel(text)
                 local labelFrame = AddThemeObject(SetChildren(SetProps(MakeElement("RoundFrame", Color3.fromRGB(255,255,255), 0,5), {
                     Size = UDim2.new(1,0,0,30),
@@ -812,7 +831,7 @@ function OrionLib:MakeWindow(config)
                 end
                 return labelFunction
             end
-            -- Add Paragraph
+
             function ElementFunction:AddParagraph(text, content)
                 text = text or "Text"
                 content = content or "Content"
@@ -847,7 +866,7 @@ function OrionLib:MakeWindow(config)
                 end
                 return paragraphFunction
             end
-            -- Add Button
+
             function ElementFunction:AddButton(buttonConfig)
                 buttonConfig = buttonConfig or {}
                 buttonConfig.Name = buttonConfig.Name or "Button"
@@ -910,7 +929,7 @@ function OrionLib:MakeWindow(config)
                 end
                 return button
             end
-            -- Add Toggle
+
             function ElementFunction:AddToggle(toggleConfig)
                 toggleConfig = toggleConfig or {}
                 toggleConfig.Name = toggleConfig.Name or "Toggle"
@@ -1000,7 +1019,7 @@ function OrionLib:MakeWindow(config)
                 end)
                 return toggle
             end
-            -- Add Slider
+
             function ElementFunction:AddSlider(sliderConfig)
                 sliderConfig = sliderConfig or {}
                 sliderConfig.Name = sliderConfig.Name or "Slider"
@@ -1089,7 +1108,7 @@ function OrionLib:MakeWindow(config)
                 end
                 return slider
             end
-            -- Add Dropdown
+
             function ElementFunction:AddDropdown(dropdownConfig)
                 dropdownConfig = dropdownConfig or {}
                 dropdownConfig.Name = dropdownConfig.Name or "Dropdown"
@@ -1150,7 +1169,9 @@ function OrionLib:MakeWindow(config)
                     MakeElement("Corner")
                 }), "Second")
                 AddConnection(dropdownList:GetPropertyChangedSignal("AbsoluteContentSize"), function()
-                    dropdownContainer.CanvasSize = UDim2.new(0,0,0, dropdownList.AbsoluteContentSize.Y)
+                    if dropdownContainer:IsA("ScrollingFrame") then
+                        dropdownContainer.CanvasSize = UDim2.new(0,0,0, dropdownList.AbsoluteContentSize.Y)
+                    end
                 end)
                 local function AddOptions(options)
                     for _, option in ipairs(options) do
@@ -1231,7 +1252,7 @@ function OrionLib:MakeWindow(config)
                 end
                 return dropdown
             end
-            -- Add Bind
+
             function ElementFunction:AddBind(bindConfig)
                 bindConfig.Name = bindConfig.Name or "Bind"
                 bindConfig.Default = bindConfig.Default or Enum.KeyCode.Unknown
@@ -1356,7 +1377,7 @@ function OrionLib:MakeWindow(config)
                 end
                 return bind
             end
-            -- Add Textbox
+
             function ElementFunction:AddTextbox(textboxConfig)
                 textboxConfig = textboxConfig or {}
                 textboxConfig.Name = textboxConfig.Name or "Textbox"
@@ -1440,7 +1461,7 @@ function OrionLib:MakeWindow(config)
                     }):Play()
                 end)
             end
-            -- Add Colorpicker
+
             function ElementFunction:AddColorpicker(colorpickerConfig)
                 colorpickerConfig = colorpickerConfig or {}
                 colorpickerConfig.Name = colorpickerConfig.Name or "Colorpicker"
@@ -1632,6 +1653,11 @@ function OrionLib:MakeWindow(config)
             })
         end
 
+        -- Expose the AddDivider method to this tab
+        elementFunction.AddDivider = function()
+            AddDivider()
+        end
+
         return elementFunction
     end
 
@@ -1641,45 +1667,13 @@ end
 -----------------------------------------------------
 -- END OF ORIONLIB MODULE
 -----------------------------------------------------
--- Since the entire OrionLib code is now integrated, we don't require loadstring.
--- (The module ends here)
------------------------------------------------------
--- Initialize OrionLib
+-- (OrionLib is now fully integrated, no remote loadstring is required)
 OrionLib:Init()
 
 -----------------------------------------------------
 -- Now integrate the Bomb Passing Assistant functions with the above OrionLib menu
 -----------------------------------------------------
-
--- Create the main window
-local Window = OrionLib:MakeWindow({
-    Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
-    HidePremium = false,
-    SaveConfig = true,
-    ConfigFolder = "YonMenu_Advanced",
-    ShowIcon = true  
-})
-
--- Create Tabs: Automated, AI Based, and UI Elements
-local AutomatedTab = Window:MakeTab({
-    Name = "Automated",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-local AITab = Window:MakeTab({
-    Name = "AI Based",
-    Icon = "rbxassetid://7072720870",
-    PremiumOnly = false
-})
-local UITab = Window:MakeTab({
-    Name = "UI Elements",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
------------------------------
--- Global Config & Variables
------------------------------
+-- Global configuration variables
 local bombPassDistance = 10  
 local AutoPassEnabled = false 
 local AntiSlipperyEnabled = false  
@@ -1695,9 +1689,9 @@ local numRaycasts = 5
 local customAntiSlipperyFriction = 0.7  
 local customHitboxSize = 0.1            
 
------------------------------
+-----------------------------------------------------
 -- Targeting & Visual Modules
------------------------------
+-----------------------------------------------------
 local TargetingModule = {}
 
 function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
@@ -2053,6 +2047,7 @@ end
 -----------------------------------------------------
 -- ORIONLIB MENU SETUP (Neater Layout)
 -----------------------------------------------------
+-- Automated Tab
 AutomatedTab:AddLabel("Bomb Pass Settings")
 AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
@@ -2147,9 +2142,7 @@ AutomatedTab:AddButton({
 })
 AutomatedTab:AddDivider()
 
------------------------------
--- AI Based Tab Sections
------------------------------
+-- AI Based Tab
 AITab:AddLabel("AI Assistance Settings")
 AITab:AddToggle({
     Name = "AI Assistance",
@@ -2252,9 +2245,7 @@ local orionFlickRotationToggle = AITab:AddToggle({
     end
 })
 
------------------------------
 -- UI Elements Tab
------------------------------
 UITab:AddColorpicker({
     Name = "Menu Main Color",
     Default = Color3.fromRGB(255, 0, 0),
@@ -2288,7 +2279,7 @@ local function createMobileToggle()
     autoPassMobileToggle.Text = "OFF"
     autoPassMobileToggle.TextScaled = true
     autoPassMobileToggle.Font = Enum.Font.SourceSansBold
-    autoPassMobileToggle.ZIndex = 100
+    autoPassMobileToggle.ZIndex = 1000 -- High ZIndex to ensure visibility
     autoPassMobileToggle.Parent = mobileGui
 
     local uicorner = Instance.new("UICorner")
