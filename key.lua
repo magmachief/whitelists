@@ -1,7 +1,7 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
--- Final version with fallback to closest player, full toggles on all tabs (Automated, AI Based, and UI Elements),
--- shiftlock included, with debug logging and AI-calculated bomb timer fallback.
+-- Recreated Menu Version: Fully organized with three tabs, all toggles/textboxes present,
+-- shiftlock and mobile toggle load after the menu.
 -----------------------------------------------------
 
 -- SERVICES
@@ -22,7 +22,7 @@ local HUMANOID = CHAR:WaitForChild("Humanoid")
 local HRP = CHAR:WaitForChild("HumanoidRootPart")
 
 -----------------------------------------------------
--- MODULES
+-- MODULES & UTILITY FUNCTIONS
 -----------------------------------------------------
 local LoggingModule = {}
 function LoggingModule.logError(err, context)
@@ -30,23 +30,17 @@ function LoggingModule.logError(err, context)
 end
 function LoggingModule.safeCall(func, context)
     local success, result = pcall(func)
-    if not success then
-        LoggingModule.logError(result, context)
-    end
+    if not success then LoggingModule.logError(result, context) end
     return success, result
 end
 
 local TargetingModule = {}
--- Global rotation mode variables
 local useFlickRotation = false
 local useSmoothRotation = true
 
 function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
-    local bestPlayer = nil
-    local bestTravelTime = math.huge
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
+    local bestPlayer, bestTravelTime = nil, math.huge
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -66,17 +60,13 @@ function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
 end
 
 function TargetingModule.getClosestPlayer(bombPassDistance)
-    local closestPlayer = nil
-    local shortestDistance = bombPassDistance
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
+    local closestPlayer, shortestDistance = nil, bombPassDistance
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             if player.Character:FindFirstChild("Bomb") then continue end
-            local targetPos = player.Character.HumanoidRootPart.Position
-            local distance = (targetPos - myPos).Magnitude
+            local distance = (player.Character.HumanoidRootPart.Position - myPos).Magnitude
             if distance < shortestDistance then
                 shortestDistance = distance
                 closestPlayer = player
@@ -91,25 +81,22 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     if not character then return end
     local hrp = character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    local adjustedTargetPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
+    local adjPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
     if useFlickRotation then
-        hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
+        hrp.CFrame = CFrame.new(hrp.Position, adjPos)
     elseif useSmoothRotation then
-        local targetCFrame = CFrame.new(hrp.Position, adjustedTargetPos)
+        local targetCFrame = CFrame.new(hrp.Position, adjPos)
         local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
-        tween:Play()
-        return tween
+        tween:Play() return tween
     else
-        hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
+        hrp.CFrame = CFrame.new(hrp.Position, adjPos)
     end
 end
 
 local VisualModule = {}
 function VisualModule.animateMarker(marker)
     if not marker then return end
-    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-    local goal = {Size = UDim2.new(0, 100, 0, 100)}
-    local tween = TweenService:Create(marker, tweenInfo, goal)
+    local tween = TweenService:Create(marker, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Size = UDim2.new(0,100,0,100)})
     tween:Play()
 end
 function VisualModule.playPassVFX(target)
@@ -129,11 +116,7 @@ end
 local AINotificationsModule = {}
 function AINotificationsModule.sendNotification(title, text, duration)
     pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = title,
-            Text = text,
-            Duration = duration or 5
-        })
+        StarterGui:SetCore("SendNotification", { Title = title, Text = text, Duration = duration or 5 })
     end)
 end
 
@@ -167,7 +150,7 @@ local function createHitboxESP()
             espBox.Name = "HitboxESP"
             espBox.Size = hitbox.Size + Vector3.new(0.1, 0.1, 0.1)
             espBox.Adornee = hitbox
-            espBox.Color3 = Color3.fromRGB(0, 255, 0)
+            espBox.Color3 = Color3.fromRGB(0,255,0)
             espBox.AlwaysOnTop = true
             espBox.ZIndex = 10
             espBox.Transparency = 0.3
@@ -184,55 +167,53 @@ local function toggleHitboxESP(value)
     HitboxESPEnabled = value
     if HitboxESPEnabled then
         createHitboxESP()
-        StarterGui:SetCore("SendNotification", {Title="Hitbox ESP", Text="ESP Enabled!", Duration=2})
+        StarterGui:SetCore("SendNotification", { Title = "Hitbox ESP", Text = "ESP Enabled!", Duration = 2 })
     else
         removeHitboxESP()
-        StarterGui:SetCore("SendNotification", {Title="Hitbox ESP", Text="ESP Disabled!", Duration=2})
+        StarterGui:SetCore("SendNotification", { Title = "Hitbox ESP", Text = "ESP Disabled!", Duration = 2 })
     end
 end
 
 LocalPlayer.CharacterAdded:Connect(function(newChar)
-    CHAR = newChar
-    wait(1)
+    CHAR = newChar wait(1)
     if HitboxESPEnabled then createHitboxESP() end
     FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 end)
 
 -----------------------------------------------------
--- CONFIG & VARIABLES
+-- CONFIGURATION VARIABLES
 -----------------------------------------------------
-local bombPassDistance = 10  
-local AutoPassEnabled = false 
-local AntiSlipperyEnabled = false  
-local RemoveHitboxEnabled = false  
-local AI_AssistanceEnabled = false  
-local pathfindingSpeed = 16  
+local bombPassDistance = 10
+local AutoPassEnabled = false
+local AntiSlipperyEnabled = false
+local RemoveHitboxEnabled = false
+local AI_AssistanceEnabled = false
+local pathfindingSpeed = 16
 local lastAIMessageTime = 0
 local aiMessageCooldown = 5
 local raySpreadAngle = 10
 local numRaycasts = 5
-local customAntiSlipperyFriction = 0.7  
-local customHitboxSize = 0.1            
+local customAntiSlipperyFriction = 0.7
+local customHitboxSize = 0.1
 local HitboxESPEnabled = false
 local BombTimerDisplayEnabled = false
 local bombAcquiredTime = nil
-local bombDefaultDuration = 30  -- Default duration if no timer is found
+local bombDefaultDuration = 30
 
 -----------------------------------------------------
--- BOMB TIMER UI SETUP & AI TIMER CALCULATION
+-- BOMB TIMER UI & AI TIMER CALCULATION
 -----------------------------------------------------
-local bombTimerGui = nil
-local bombTimerLabel = nil
+local bombTimerGui, bombTimerLabel = nil, nil
 local function createBombTimerUI()
     bombTimerGui = Instance.new("ScreenGui")
     bombTimerGui.Name = "BombTimerGui"
     bombTimerGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     bombTimerLabel = Instance.new("TextLabel")
-    bombTimerLabel.Size = UDim2.new(0, 200, 0, 50)
-    bombTimerLabel.Position = UDim2.new(0, 10, 0, 10)
+    bombTimerLabel.Size = UDim2.new(0,200,0,50)
+    bombTimerLabel.Position = UDim2.new(0,10,0,10)
     bombTimerLabel.BackgroundTransparency = 0.5
-    bombTimerLabel.BackgroundColor3 = Color3.new(0, 0, 0)
-    bombTimerLabel.TextColor3 = Color3.new(1, 1, 1)
+    bombTimerLabel.BackgroundColor3 = Color3.new(0,0,0)
+    bombTimerLabel.TextColor3 = Color3.new(1,1,1)
     bombTimerLabel.Font = Enum.Font.SourceSansBold
     bombTimerLabel.TextScaled = true
     bombTimerLabel.Text = ""
@@ -243,8 +224,8 @@ local function getBombTimerFromObject()
     if not char then return nil end
     local bomb = char:FindFirstChild("Bomb")
     if not bomb then
-         bombAcquiredTime = nil
-         return nil
+        bombAcquiredTime = nil
+        return nil
     end
     print("Bomb children:")
     for _, child in pairs(bomb:GetChildren()) do
@@ -253,10 +234,7 @@ local function getBombTimerFromObject()
         end
     end
     local attrTimer = bomb:GetAttribute("Timer")
-    if attrTimer then
-         bombAcquiredTime = nil
-         return attrTimer
-    end
+    if attrTimer then bombAcquiredTime = nil return attrTimer end
     for _, child in pairs(bomb:GetChildren()) do
         if child:IsA("NumberValue") or child:IsA("IntValue") then
             if child.Value > 0 and child.Value < 100 then
@@ -269,8 +247,8 @@ local function getBombTimerFromObject()
         end
     end
     if not bombAcquiredTime then
-         bombAcquiredTime = tick()
-         print("Bomb acquired time set to: " .. bombAcquiredTime)
+        bombAcquiredTime = tick()
+        print("Bomb acquired time set to: " .. bombAcquiredTime)
     end
     local estimatedTimeLeft = bombDefaultDuration - (tick() - bombAcquiredTime)
     print("Estimated bomb timer: " .. estimatedTimeLeft)
@@ -278,21 +256,20 @@ local function getBombTimerFromObject()
 end
 RunService.Stepped:Connect(function()
     if bombTimerLabel then
-         local timeLeft = getBombTimerFromObject()
-         if timeLeft then
-              bombTimerLabel.Text = "⏳ Bomb Timer: " .. math.floor(timeLeft) .. " seconds left!"
-              print("Bomb Timer updated: " .. math.floor(timeLeft))
-         else
-              bombTimerLabel.Text = "Bomb Timer: N/A"
-         end
+        local timeLeft = getBombTimerFromObject()
+        if timeLeft then
+            bombTimerLabel.Text = "⏳ Bomb Timer: " .. math.floor(timeLeft) .. " seconds left!"
+            print("Bomb Timer updated: " .. math.floor(timeLeft))
+        else
+            bombTimerLabel.Text = "Bomb Timer: N/A"
+        end
     end
 end)
 
 -----------------------------------------------------
 -- VISUAL TARGET MARKER
 -----------------------------------------------------
-local currentTargetMarker = nil
-local currentTargetPlayer = nil
+local currentTargetMarker, currentTargetPlayer = nil, nil
 local function createOrUpdateTargetMarker(player, distance)
     if not player or not player.Character then return end
     local body = player.Character:FindFirstChild("HumanoidRootPart")
@@ -301,36 +278,25 @@ local function createOrUpdateTargetMarker(player, distance)
         currentTargetMarker:FindFirstChildOfClass("TextLabel").Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
         return
     end
-    if currentTargetMarker then
-        currentTargetMarker:Destroy()
-        currentTargetMarker = nil
-        currentTargetPlayer = nil
-    end
+    if currentTargetMarker then currentTargetMarker:Destroy() currentTargetMarker, currentTargetPlayer = nil, nil end
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
     marker.Adornee = body
-    marker.Size = UDim2.new(0, 80, 0, 80)
-    marker.StudsOffset = Vector3.new(0, 2, 0)
+    marker.Size = UDim2.new(0,80,0,80)
+    marker.StudsOffset = Vector3.new(0,2,0)
     marker.AlwaysOnTop = true
     marker.Parent = body
     local label = Instance.new("TextLabel", marker)
-    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Size = UDim2.new(1,0,1,0)
     label.BackgroundTransparency = 1
     label.Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
     label.TextScaled = true
-    label.TextColor3 = Color3.new(1, 0, 0)
+    label.TextColor3 = Color3.new(1,0,0)
     label.Font = Enum.Font.SourceSansBold
-    currentTargetMarker = marker
-    currentTargetPlayer = player
+    currentTargetMarker, currentTargetPlayer = marker, player
     VisualModule.animateMarker(marker)
 end
-local function removeTargetMarker()
-    if currentTargetMarker then
-        currentTargetMarker:Destroy()
-        currentTargetMarker = nil
-        currentTargetPlayer = nil
-    end
-end
+local function removeTargetMarker() if currentTargetMarker then currentTargetMarker:Destroy() currentTargetMarker, currentTargetPlayer = nil, nil end end
 
 -----------------------------------------------------
 -- MULTIPLE RAYCASTS
@@ -341,13 +307,9 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local distance = (endPos - startPos).Magnitude
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-    if LocalPlayer.Character then
-        rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
-    end
+    if LocalPlayer.Character then rayParams.FilterDescendantsInstances = {LocalPlayer.Character} end
     local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
-    if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
-        return false
-    end
+    if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
     local raysEachSide = math.floor((numRaycasts - 1) / 2)
     for i = 1, raysEachSide do
         local angleOffset = spreadRad * i / raysEachSide
@@ -368,32 +330,22 @@ local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
     LoggingModule.safeCall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
-        if not bomb then
-            removeTargetMarker()
-            return
-        end
+        if not bomb then removeTargetMarker() return end
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
-        local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
-            or TargetingModule.getClosestPlayer(bombPassDistance)
+        local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed) or TargetingModule.getClosestPlayer(bombPassDistance)
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            if targetPlayer.Character:FindFirstChild("Bomb") then
-                removeTargetMarker()
-                return
-            end
+            if targetPlayer.Character:FindFirstChild("Bomb") then removeTargetMarker() return end
             local targetPos = targetPlayer.Character.HumanoidRootPart.Position
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance > bombPassDistance then
-                print("Target out of range. Pass aborted.")
-                removeTargetMarker()
-                return
+                print("Target out of range. Pass aborted.") removeTargetMarker() return
             end
             local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart") or targetPlayer.Character.HumanoidRootPart
             if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
                 print("Line of sight blocked. Bomb pass aborted.")
                 AINotificationsModule.sendNotification("AI Alert", "Line-of-sight blocked! Adjust your position.")
-                removeTargetMarker()
-                return
+                removeTargetMarker() return
             end
             createOrUpdateTargetMarker(targetPlayer, distance)
             VisualModule.playPassVFX(targetPlayer)
@@ -417,7 +369,7 @@ local function autoPassBombEnhanced()
 end
 
 -----------------------------------------------------
--- ORIONLIB MENU SETUP
+-- ORIONLIB MENU CREATION
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
@@ -425,34 +377,19 @@ local Window = OrionLib:MakeWindow({
     HidePremium = false,
     SaveConfig = true,
     ConfigFolder = "YonMenu_Advanced",
-    ShowIcon = true  
+    ShowIcon = true
 })
 
--- Create three tabs
-local AutomatedTab = Window:MakeTab({
-    Name = "Automated Settings",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-print("Automated Settings tab created.")
+-- Create Tabs
+local AutomatedTab = Window:MakeTab({ Name = "Automated Settings", Icon = "rbxassetid://4483345998", PremiumOnly = false })
+local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://7072720870", PremiumOnly = false })
+local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 
-local AITab = Window:MakeTab({
-    Name = "AI Based Settings",
-    Icon = "rbxassetid://7072720870",
-    PremiumOnly = false
-})
-print("AI Based Settings tab created.")
+print("Tabs created: Automated, AI Based, UI Elements.")
 
-local UITab = Window:MakeTab({
-    Name = "UI Elements",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-print("UI Elements tab created.")
-
--- Automated Settings Tab Toggles
+-- Automated Tab: Bomb Passing & Character Settings
 AutomatedTab:AddLabel("== Bomb Passing ==", 15)
-local orionAutoPassToggle = AutomatedTab:AddToggle({
+AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
     Flag = "AutoPassBomb",
@@ -464,10 +401,7 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
                 autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
             end
         else
-            if autoPassConnection then
-                autoPassConnection:Disconnect()
-                autoPassConnection = nil
-            end
+            if autoPassConnection then autoPassConnection:Disconnect() autoPassConnection = nil end
             removeTargetMarker()
         end
     end
@@ -550,7 +484,7 @@ AutomatedTab:AddToggle({
     end
 })
 
--- AI Based Settings Tab Toggles
+-- AI Based Tab: Targeting & Rotation Settings
 AITab:AddLabel("== Targeting Settings ==", 15)
 AITab:AddToggle({
     Name = "AI Assistance",
@@ -646,7 +580,7 @@ local orionSmoothRotationToggle = AITab:AddToggle({
     end
 })
 
--- UI Elements Tab
+-- UI Elements Tab: Menu Color
 UITab:AddColorpicker({
     Name = "Menu Main Color",
     Default = Color3.fromRGB(255, 0, 0),
@@ -662,7 +596,7 @@ UITab:AddColorpicker({
 -- INITIALIZE ORIONLIB
 -----------------------------------------------------
 OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, all toggles present, shiftlock included.")
+print("Yon Menu Script Loaded with all toggles present, shiftlock and mobile toggle will load next.")
 
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS
@@ -673,50 +607,45 @@ local function createMobileToggle()
     mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     local autoPassMobileToggle = Instance.new("TextButton")
     autoPassMobileToggle.Name = "AutoPassMobileToggle"
-    autoPassMobileToggle.Size = UDim2.new(0, 50, 0, 50)
-    autoPassMobileToggle.Position = UDim2.new(1, -70, 1, -110)
-    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    autoPassMobileToggle.Size = UDim2.new(0,50,0,50)
+    autoPassMobileToggle.Position = UDim2.new(1,-70,1,-110)
+    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255,0,0)
     autoPassMobileToggle.Text = "OFF"
     autoPassMobileToggle.TextScaled = true
     autoPassMobileToggle.Font = Enum.Font.SourceSansBold
     autoPassMobileToggle.ZIndex = 100
     autoPassMobileToggle.Parent = mobileGui
     local uicorner = Instance.new("UICorner")
-    uicorner.CornerRadius = UDim.new(1, 0)
+    uicorner.CornerRadius = UDim.new(1,0)
     uicorner.Parent = autoPassMobileToggle
     local uistroke = Instance.new("UIStroke")
     uistroke.Thickness = 2
-    uistroke.Color = Color3.fromRGB(0, 0, 0)
+    uistroke.Color = Color3.fromRGB(0,0,0)
     uistroke.Parent = autoPassMobileToggle
     autoPassMobileToggle.MouseEnter:Connect(function()
-        TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play()
+        TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play()
     end)
     autoPassMobileToggle.MouseLeave:Connect(function()
         if AutoPassEnabled then
-            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 255, 0)}):Play()
+            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play()
         else
-            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 0, 0)}):Play()
+            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play()
         end
     end)
     autoPassMobileToggle.MouseButton1Click:Connect(function()
         AutoPassEnabled = not AutoPassEnabled
         if AutoPassEnabled then
-            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0,255,0)
             autoPassMobileToggle.Text = "ON"
-            if orionAutoPassToggle and orionAutoPassToggle.Set then
-                orionAutoPassToggle:Set(true)
-            end
+            if orionAutoPassToggle and orionAutoPassToggle.Set then orionAutoPassToggle:Set(true) end
         else
-            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255,0,0)
             autoPassMobileToggle.Text = "OFF"
-            if orionAutoPassToggle and orionAutoPassToggle.Set then
-                orionAutoPassToggle:Set(false)
-            end
+            if orionAutoPassToggle and orionAutoPassToggle.Set then orionAutoPassToggle:Set(false) end
         end
     end)
     return mobileGui, autoPassMobileToggle
 end
-
 local mobileGui, autoPassMobileToggle = createMobileToggle()
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
     if child.Name == "MobileToggleGui" then
@@ -729,55 +658,48 @@ LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
 end)
 
 -----------------------------------------------------
--- SHIFTLOCK CODE (CoreGui-based)
+-- SHIFTLOCK CODE
 -----------------------------------------------------
 local ShiftLockScreenGui = Instance.new("ScreenGui")
-local ShiftLockButton = Instance.new("ImageButton")
-local ShiftlockCursor = Instance.new("ImageLabel")
-local CoreGui = game:GetService("CoreGui")
-local ShiftStates = {
-    Off = "rbxasset://textures/ui/mouseLock_off@2x.png",
-    On = "rbxasset://textures/ui/mouseLock_on@2x.png",
-    Lock = "rbxasset://textures/MouseLockedCursor.png",
-    Lock2 = "rbxasset://SystemCursors/Cross"
-}
-local SL_MaxLength = 900000
-local SL_EnabledOffset = CFrame.new(1.7, 0, 0)
-local SL_DisabledOffset = CFrame.new(-1.7, 0, 0)
-local SL_Active
-
 ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
-ShiftLockScreenGui.Parent = CoreGui
+ShiftLockScreenGui.Parent = game:GetService("CoreGui")
 ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ShiftLockScreenGui.ResetOnSpawn = false
 
+local ShiftLockButton = Instance.new("ImageButton")
 ShiftLockButton.Parent = ShiftLockScreenGui
-ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
 ShiftLockButton.BackgroundTransparency = 1
-ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0)
-ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
+ShiftLockButton.Position = UDim2.new(0.7,0,0.75,0)
+ShiftLockButton.Size = UDim2.new(0.0636,0,0.0661,0)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
-ShiftLockButton.Image = ShiftStates.Off
+ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
 
 local shiftLockUICorner = Instance.new("UICorner")
-shiftLockUICorner.CornerRadius = UDim.new(0.2, 0)
+shiftLockUICorner.CornerRadius = UDim.new(0.2,0)
 shiftLockUICorner.Parent = ShiftLockButton
 
 local shiftLockUIStroke = Instance.new("UIStroke")
 shiftLockUIStroke.Thickness = 2
-shiftLockUIStroke.Color = Color3.fromRGB(0, 0, 0)
+shiftLockUIStroke.Color = Color3.fromRGB(0,0,0)
 shiftLockUIStroke.Parent = ShiftLockButton
 
+local ShiftlockCursor = Instance.new("ImageLabel")
 ShiftlockCursor.Name = "Shiftlock Cursor"
 ShiftlockCursor.Parent = ShiftLockScreenGui
-ShiftlockCursor.Image = ShiftStates.Lock
-ShiftlockCursor.Size = UDim2.new(0.03, 0, 0.03, 0)
-ShiftlockCursor.Position = UDim2.new(0.5, 0, 0.5, 0)
-ShiftlockCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+ShiftlockCursor.Image = "rbxasset://textures/MouseLockedCursor.png"
+ShiftlockCursor.Size = UDim2.new(0.03,0,0.03,0)
+ShiftlockCursor.Position = UDim2.new(0.5,0,0.5,0)
+ShiftlockCursor.AnchorPoint = Vector2.new(0.5,0.5)
 ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftlockCursor.BackgroundTransparency = 1
-ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255,0,0)
 ShiftlockCursor.Visible = false
+
+local SL_MaxLength = 900000
+local SL_EnabledOffset = CFrame.new(1.7,0,0)
+local SL_DisabledOffset = CFrame.new(-1.7,0,0)
+local SL_Active = nil
 
 ShiftLockButton.MouseButton1Click:Connect(function()
     if not SL_Active then
@@ -787,32 +709,25 @@ ShiftLockButton.MouseButton1Click:Connect(function()
             local root = char and char:FindFirstChild("HumanoidRootPart")
             if hum and root then
                 hum.AutoRotate = false
-                ShiftLockButton.Image = ShiftStates.On
+                ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_on@2x.png"
                 ShiftlockCursor.Visible = true
-                root.CFrame = CFrame.new(
-                    root.Position,
-                    Vector3.new(
-                        Workspace.CurrentCamera.CFrame.LookVector.X * SL_MaxLength,
-                        root.Position.Y,
-                        Workspace.CurrentCamera.CFrame.LookVector.Z * SL_MaxLength
-                    )
-                )
+                root.CFrame = CFrame.new(root.Position, Vector3.new(
+                    Workspace.CurrentCamera.CFrame.LookVector.X * SL_MaxLength,
+                    root.Position.Y,
+                    Workspace.CurrentCamera.CFrame.LookVector.Z * SL_MaxLength))
                 Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_EnabledOffset
-                Workspace.CurrentCamera.Focus = CFrame.fromMatrix(
-                    Workspace.CurrentCamera.Focus.Position,
-                    Workspace.CurrentCamera.CFrame.RightVector,
-                    Workspace.CurrentCamera.CFrame.UpVector
-                ) * SL_EnabledOffset
+                Workspace.CurrentCamera.Focus = CFrame.fromMatrix(Workspace.CurrentCamera.Focus.Position,
+                    Workspace.CurrentCamera.CFrame.RightVector, Workspace.CurrentCamera.CFrame.UpVector) * SL_EnabledOffset
             end
         end)
     else
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChild("Humanoid")
         if hum then hum.AutoRotate = true end
-        ShiftLockButton.Image = ShiftStates.Off
+        ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
         Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
         ShiftlockCursor.Visible = false
-        pcall(function() SL_Active:Disconnect() SL_Active = nil end)
+        if SL_Active then pcall(function() SL_Active:Disconnect() SL_Active = nil end) end
     end
 end)
 
@@ -820,31 +735,7 @@ local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a
     if inputState == Enum.UserInputState.Begin then ShiftLockButton.MouseButton1Click:Fire() end
     return Enum.ContextActionResult.Sink
 end, false, Enum.KeyCode.ButtonR2)
-ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
+ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8,0,0.8,0))
 
-print("Final Ultra-Advanced Bomb AI loaded. All tabs and toggles are now present, along with shiftlock and mobile toggle.")
-
-------------------------------------------------------------------------------
--- KEY FIX: Force tab scrolling containers to auto-size and show scrollbar
-------------------------------------------------------------------------------
-task.spawn(function()
-    wait(0.5)
-    local autoTab = OrionLib.Elements["Automated Settings"]
-    if autoTab and autoTab.ItemContainer then
-        autoTab.ItemContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
-        autoTab.ItemContainer.ScrollBarImageTransparency = 0
-        autoTab.ItemContainer.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
-    else
-        print("Automated Settings container not found.")
-    end
-    local aiTab = OrionLib.Elements["AI Based Settings"]
-    if aiTab and aiTab.ItemContainer then
-        aiTab.ItemContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
-        aiTab.ItemContainer.ScrollBarImageTransparency = 0
-        aiTab.ItemContainer.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
-    else
-        print("AI Based Settings container not found.")
-    end
-end)
-
+print("Final Ultra-Advanced Bomb AI loaded. All tabs and toggles recreated, shiftlock and mobile toggle loaded.")
 return {}
