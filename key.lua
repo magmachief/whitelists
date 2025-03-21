@@ -1,6 +1,6 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
--- Final version with fallback to closest player, toggles in the menu, shiftlock included.
+-- Final version with fallback to closest player, toggles in the menu (including ESP and Bomb Timer), shiftlock included.
 -- Note: Friction remains normal (0.5) unless Anti‑Slippery is toggled on (custom value set via menu).
 -----------------------------------------------------
 
@@ -12,7 +12,6 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
-
 local LocalPlayer = Players.LocalPlayer
 
 -----------------------------------------------------
@@ -52,7 +51,6 @@ function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- skip if they have a bomb
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
@@ -79,7 +77,6 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- skip if they have a bomb
             if player.Character:FindFirstChild("Bomb") then
                 continue
             end
@@ -94,7 +91,6 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     return closestPlayer
 end
 
--- Modified rotation function that checks the toggles:
 function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     local character = LocalPlayer.Character
     if not character then return end
@@ -102,16 +98,13 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     if not hrp then return end
     local adjustedTargetPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
     if useFlickRotation then
-        -- Instant snap ("flick")
         hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
     elseif useSmoothRotation then
-        -- Smooth tween rotation
         local targetCFrame = CFrame.new(hrp.Position, adjustedTargetPos)
         local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
         tween:Play()
         return tween
     else
-        -- fallback: instant rotation
         hrp.CFrame = CFrame.new(hrp.Position, adjustedTargetPos)
     end
 end
@@ -156,10 +149,6 @@ end
 
 local FrictionModule = {}
 
--- Adjusted Anti‑Slippery logic:
--- Friction is updated only when toggled (or on respawn) and not continuously.
--- If Anti‑Slippery is enabled and the character is NOT holding the bomb, friction is set to customAntiSlipperyFriction;
--- otherwise, friction remains at 0.5.
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
@@ -190,9 +179,9 @@ local function createHitboxESP()
         if HitboxESPEnabled then
             local espBox = Instance.new("BoxHandleAdornment")
             espBox.Name = "HitboxESP"
-            espBox.Size = hitbox.Size + Vector3.new(0.1, 0.1, 0.1)  -- Reduced extra size for a smaller overlay
+            espBox.Size = hitbox.Size + Vector3.new(0.1, 0.1, 0.1)
             espBox.Adornee = hitbox
-            espBox.Color3 = Color3.fromRGB(0, 255, 0)  -- Bright green for visibility
+            espBox.Color3 = Color3.fromRGB(0, 255, 0)
             espBox.AlwaysOnTop = true
             espBox.ZIndex = 10
             espBox.Transparency = 0.3
@@ -244,9 +233,70 @@ local aiMessageCooldown = 5
 local raySpreadAngle = 10
 local numRaycasts = 5
 
--- New custom variables:
-local customAntiSlipperyFriction = 0.7  -- Default custom friction value when Anti‑Slippery is enabled
-local customHitboxSize = 0.1            -- Default custom hitbox size when Remove Hitbox is enabled
+local customAntiSlipperyFriction = 0.7  
+local customHitboxSize = 0.1            
+
+-- New toggles / flags
+local HitboxESPEnabled = false
+local BombTimerDisplayEnabled = false
+
+-----------------------------------------------------
+-- BOMB TIMER UI SETUP
+-----------------------------------------------------
+local bombTimerGui = nil
+local bombTimerLabel = nil
+
+local function createBombTimerUI()
+    bombTimerGui = Instance.new("ScreenGui")
+    bombTimerGui.Name = "BombTimerGui"
+    bombTimerGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    
+    bombTimerLabel = Instance.new("TextLabel")
+    bombTimerLabel.Size = UDim2.new(0, 200, 0, 50)
+    bombTimerLabel.Position = UDim2.new(0, 10, 0, 10)
+    bombTimerLabel.BackgroundTransparency = 0.5
+    bombTimerLabel.BackgroundColor3 = Color3.new(0, 0, 0)
+    bombTimerLabel.TextColor3 = Color3.new(1, 1, 1)
+    bombTimerLabel.Font = Enum.Font.SourceSansBold
+    bombTimerLabel.TextScaled = true
+    bombTimerLabel.Text = ""
+    bombTimerLabel.Parent = bombTimerGui
+end
+
+local function getBombTimerFromObject()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+
+    local bomb = char:FindFirstChild("Bomb")
+    if not bomb then return nil end
+
+    local attrTimer = bomb:GetAttribute("Timer")
+    if attrTimer then
+         return attrTimer
+    end
+
+    for _, child in pairs(bomb:GetChildren()) do
+        if child:IsA("NumberValue") or child:IsA("IntValue") then
+            if child.Value > 0 and child.Value < 100 then
+                return child.Value
+            end
+        elseif child:IsA("StringValue") and string.match(child.Value, "%d+") then
+            return tonumber(child.Value)
+        end
+    end
+    return nil
+end
+
+RunService.Stepped:Connect(function()
+    if bombTimerLabel then
+         local timeLeft = getBombTimerFromObject()
+         if timeLeft then
+              bombTimerLabel.Text = "⏳ Bomb Timer: " .. timeLeft .. " seconds left!"
+         else
+              bombTimerLabel.Text = "Bomb Timer: N/A"
+         end
+    end
+end)
 
 -----------------------------------------------------
 -- VISUAL TARGET MARKER
@@ -340,7 +390,7 @@ end
 -- AUTO PASS FUNCTION
 -----------------------------------------------------
 local function autoPassBombEnhanced()
-    if not AutoPassEnabled then return end  -- Only run if toggle is on
+    if not AutoPassEnabled then return end
 
     LoggingModule.safeCall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
@@ -350,7 +400,6 @@ local function autoPassBombEnhanced()
         end
 
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
-        -- fallback: best target or closest
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
             or TargetingModule.getClosestPlayer(bombPassDistance)
 
@@ -387,7 +436,6 @@ local function autoPassBombEnhanced()
                 lastAIMessageTime = tick()
             end
 
-            -- Attempt the pass
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
@@ -409,7 +457,11 @@ local function getBombTimerFromObject()
     local bomb = char:FindFirstChild("Bomb")
     if not bomb then return nil end
 
-    -- Check for a NumberValue or StringValue that represents the timer
+    local attrTimer = bomb:GetAttribute("Timer")
+    if attrTimer then
+         return attrTimer
+    end
+
     for _, child in pairs(bomb:GetChildren()) do
         if child:IsA("NumberValue") or child:IsA("IntValue") then
             if child.Value > 0 and child.Value < 100 then
@@ -422,10 +474,14 @@ local function getBombTimerFromObject()
     return nil
 end
 
-game:GetService("RunService").Stepped:Connect(function()
-    local timeLeft = getBombTimerFromObject()
-    if timeLeft then
-        print("⏳ Bomb Timer: " .. timeLeft .. " seconds left!")
+RunService.Stepped:Connect(function()
+    if bombTimerLabel then
+         local timeLeft = getBombTimerFromObject()
+         if timeLeft then
+              bombTimerLabel.Text = "⏳ Bomb Timer: " .. timeLeft .. " seconds left!"
+         else
+              bombTimerLabel.Text = "Bomb Timer: N/A"
+         end
     end
 end)
 
@@ -440,24 +496,23 @@ local function applyRemoveHitbox(enable)
             if enable then
                 part.Transparency = 1
                 part.CanCollide = false
-                part.Size = Vector3.new(customHitboxSize, customHitboxSize, customHitboxSize) -- Use custom hitbox size
+                part.Size = Vector3.new(customHitboxSize, customHitboxSize, customHitboxSize)
             else
                 part.Transparency = 0
                 part.CanCollide = true
-                part.Size = Vector3.new(1, 1, 1) -- Default size (adjust if necessary)
+                part.Size = Vector3.new(1, 1, 1)
             end
         end
     end
 end
 
 LocalPlayer.CharacterAdded:Connect(function(char)
-    -- On respawn, apply friction only if toggled in the menu.
     FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     applyRemoveHitbox(RemoveHitboxEnabled)
 end)
 
 -----------------------------------------------------
--- ORIONLIB MENU
+-- ORIONLIB MENU (Restructured for Neater Organization)
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
@@ -468,19 +523,15 @@ local Window = OrionLib:MakeWindow({
     ShowIcon = true  
 })
 
--- Create two tabs: Automated and AI-Based
+-- Automated Settings Tab
 local AutomatedTab = Window:MakeTab({
-    Name = "Automated",
+    Name = "Automated Settings",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
-local AITab = Window:MakeTab({
-    Name = "AI Based",
-    Icon = "rbxassetid://7072720870",
-    PremiumOnly = false
-})
 
--- Toggle for Auto Pass Bomb Enhanced
+-- Section: Bomb Passing
+AutomatedTab:AddSection("Bomb Passing")
 local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
@@ -499,9 +550,9 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
         end
     end
 })
-local autoPassConnection
 
--- Toggle for Smart Anti‑Slippery (applies friction only on toggle and on respawn)
+-- Section: Character Settings
+AutomatedTab:AddSection("Character Settings")
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
@@ -510,8 +561,6 @@ AutomatedTab:AddToggle({
         FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 })
-
--- Slider for custom Anti‑Slippery Friction value
 AutomatedTab:AddSlider({
     Name = "Custom Anti‑Slippery Friction",
     Min = 0.5,
@@ -525,8 +574,6 @@ AutomatedTab:AddSlider({
         end
     end
 })
-
--- Toggle for Remove Hitbox
 AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
     Default = RemoveHitboxEnabled,
@@ -535,8 +582,6 @@ AutomatedTab:AddToggle({
         applyRemoveHitbox(value)
     end
 })
-
--- Slider for Custom Hitbox Size
 AutomatedTab:AddSlider({
     Name = "Custom Hitbox Size",
     Min = 0.1,
@@ -551,7 +596,43 @@ AutomatedTab:AddSlider({
     end
 })
 
--- AI Assistance Toggle
+-- Section: Display Options
+AutomatedTab:AddSection("Display Options")
+AutomatedTab:AddToggle({
+    Name = "Hitbox ESP",
+    Default = HitboxESPEnabled,
+    Callback = function(value)
+         toggleHitboxESP(value)
+    end
+})
+AutomatedTab:AddToggle({
+    Name = "Display Bomb Timer",
+    Default = BombTimerDisplayEnabled,
+    Callback = function(value)
+         BombTimerDisplayEnabled = value
+         if value then
+              if not bombTimerGui then
+                   createBombTimerUI()
+              end
+         else
+              if bombTimerGui then
+                   bombTimerGui:Destroy()
+                   bombTimerGui = nil
+                   bombTimerLabel = nil
+              end
+         end
+    end
+})
+
+-- AI Based Settings Tab
+local AITab = Window:MakeTab({
+    Name = "AI Based Settings",
+    Icon = "rbxassetid://7072720870",
+    PremiumOnly = false
+})
+
+-- Section: Targeting Settings
+AITab:AddSection("Targeting Settings")
 AITab:AddToggle({
     Name = "AI Assistance",
     Default = false,
@@ -560,8 +641,6 @@ AITab:AddToggle({
         print("AI Assistance " .. (AI_AssistanceEnabled and "enabled." or "disabled."))
     end
 })
-
--- Sliders for various settings
 AITab:AddSlider({
     Name = "Bomb Pass Distance",
     Min = 5,
@@ -572,7 +651,6 @@ AITab:AddSlider({
         bombPassDistance = value
     end
 })
-
 AITab:AddSlider({
     Name = "Ray Spread Angle",
     Min = 5,
@@ -583,7 +661,6 @@ AITab:AddSlider({
         raySpreadAngle = value
     end
 })
-
 AITab:AddSlider({
     Name = "Number of Raycasts",
     Min = 1,
@@ -595,10 +672,9 @@ AITab:AddSlider({
     end
 })
 
--- New toggles for rotation method
+-- Section: Rotation Settings
+AITab:AddSection("Rotation Settings")
 local orionFlickRotationToggle
-local orionSmoothRotationToggle
-
 orionFlickRotationToggle = AITab:AddToggle({
     Name = "Flick Rotation",
     Default = false,
@@ -619,7 +695,7 @@ orionFlickRotationToggle = AITab:AddToggle({
         end
     end
 })
-
+local orionSmoothRotationToggle
 orionSmoothRotationToggle = AITab:AddToggle({
     Name = "Smooth Rotation",
     Default = true,
@@ -641,9 +717,7 @@ orionSmoothRotationToggle = AITab:AddToggle({
     end
 })
 
------------------------------------------------------
--- UI ELEMENT: Colorpicker for Menu Main Color
------------------------------------------------------
+-- UI Elements Tab
 local UITab = Window:MakeTab({
     Name = "UI Elements",
     Icon = "rbxassetid://4483345998",
@@ -664,7 +738,7 @@ UITab:AddColorpicker({
 -- INITIALIZE ORIONLIB
 -----------------------------------------------------
 OrionLib:Init()
-print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, ShiftLock, Mobile Toggle")
+print("Yon Menu Script Loaded with Enhanced AI Smart Auto Pass Bomb, fallback to closest player, ESP and Bomb Timer toggles, shiftlock included.")
 
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS
@@ -689,13 +763,11 @@ local function createMobileToggle()
     uicorner.CornerRadius = UDim.new(1, 0)
     uicorner.Parent = autoPassMobileToggle
 
-    -- Add a UIStroke for a border
     local uistroke = Instance.new("UIStroke")
     uistroke.Thickness = 2
     uistroke.Color = Color3.fromRGB(0, 0, 0)
     uistroke.Parent = autoPassMobileToggle
 
-    -- Enhance hover appearance
     autoPassMobileToggle.MouseEnter:Connect(function()
         TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play()
     end)
@@ -769,7 +841,6 @@ ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftLockButton.Image = ShiftStates.Off
 
--- Enhance ShiftLock button appearance:
 local shiftLockUICorner = Instance.new("UICorner")
 shiftLockUICorner.CornerRadius = UDim.new(0.2, 0)
 shiftLockUICorner.Parent = ShiftLockButton
@@ -840,5 +911,5 @@ local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a
 end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
 
-print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fallback to closest player, shiftlock included.")
-return {}
+print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fallback to closest player, ESP and Bomb Timer toggles, shiftlock included.")
+return {} 
