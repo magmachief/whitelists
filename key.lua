@@ -899,4 +899,30 @@ end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
 
 print("Final Ultra-Advanced Bomb AI loaded. Autopass toggles shown in menu, fallback to closest player, ESP and Bomb Timer toggles, shiftlock included.")
+
+------------------------------------------------------------------------------
+-- *** KEY FIX: Force the tab's scrolling container to auto-size and show the scrollbar
+------------------------------------------------------------------------------
+
+-- Wait a moment for OrionLib to finish building the tab containers
+task.spawn(function()
+    wait(0.5)
+    -- If the library references the container for "Automated Settings" as an internal property,
+    -- we can do something like:
+    local autoTab = OrionLib.Elements["Automated Settings"]
+    if autoTab and autoTab.ItemContainer then
+        autoTab.ItemContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        autoTab.ItemContainer.ScrollBarImageTransparency = 0
+        autoTab.ItemContainer.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
+    end
+
+    -- If you'd like to do the same for other tabs, just repeat for each:
+    local aiTab = OrionLib.Elements["AI Based Settings"]
+    if aiTab and aiTab.ItemContainer then
+        aiTab.ItemContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        aiTab.ItemContainer.ScrollBarImageTransparency = 0
+        aiTab.ItemContainer.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
+    end
+end)
+
 return {}
