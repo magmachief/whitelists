@@ -2,12 +2,12 @@
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
 -- Client-Only Version (Local Stats, No DataStore)
 -- Features:
--- • Auto Pass Bomb (Enhanced)
--- • Anti‑Slippery with custom friction applied immediately
--- • Remove Hitbox with custom hitbox size applied immediately
+-- • Auto Pass Bomb (Enhanced) with synchronized mobile & menu toggles
+-- • Anti‑Slippery with custom friction (applied immediately)
+-- • Remove Hitbox with custom hitbox size (applied immediately)
 -- • Local Stats: Only your (LocalPlayer’s) average hold time is displayed via a BillboardGui
 -- • OrionLib menu with three tabs (Automated, AI Based, UI Elements)
--- • Shiftlock and mobile toggle for Auto Pass Bomb
+-- • Shiftlock functionality
 -----------------------------------------------------
 
 -- SERVICES
@@ -183,7 +183,7 @@ local raySpreadAngle = 10
 local numRaycasts = 5
 local customAntiSlipperyFriction = 0.7
 local customHitboxSize = 0.1
--- Bomb timer functionality is currently commented out
+-- Bomb timer functionality is commented out in this version
 -- local BombTimerDisplayEnabled = false
 -- local bombAcquiredTime = nil
 -- local bombDefaultDuration = 20
@@ -235,7 +235,6 @@ local function getBombTimerFromObject()
     end
     if not bombAcquiredTime then
         bombAcquiredTime = tick()
-        local avg = 0
         bombInitialValue = bombDefaultDuration
     end
     local estimatedTimeLeft = bombInitialValue - (tick() - bombAcquiredTime)
@@ -255,12 +254,12 @@ end)
 --]]
 
 -----------------------------------------------------
--- CLIENT-SIDE BOMB STATS (Local Only for LocalPlayer)
+-- CLIENT-SIDE BOMB STATS (LocalPlayer Only)
 -----------------------------------------------------
 local PlayerData = {}
 
 local function createBillboardGui(player)
-    if player ~= LocalPlayer then return end  -- Only create for local player
+    if player ~= LocalPlayer then return end  -- Only for local player
     local character = player.Character
     if not character then return end
     local head = character:FindFirstChild("Head")
@@ -290,7 +289,7 @@ local function createBillboardGui(player)
 end
 
 local function updateBillboardGui(player)
-    if player ~= LocalPlayer then return end  -- Only update local player's billboard
+    if player ~= LocalPlayer then return end  -- Only update for local player
     local data = PlayerData[player]
     if not data then return end
     local avgHold = data.average or 0
@@ -337,7 +336,7 @@ local function onBombLost(player)
 end
 
 local function monitorPlayer(player)
-    if player ~= LocalPlayer then return end  -- Only monitor LocalPlayer for stats
+    if player ~= LocalPlayer then return end  -- Only monitor local player
     local function onCharacterAdded(character)
         character:WaitForChild("Head", 5)
         createBillboardGui(player)
@@ -374,17 +373,6 @@ local function monitorPlayer(player)
     player.CharacterAdded:Connect(onCharacterAdded)
 end
 
-Players.PlayerAdded:Connect(function(player)
-    if player == LocalPlayer then
-        PlayerData[player] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
-        monitorPlayer(player)
-    end
-end)
-Players.PlayerRemoving:Connect(function(player)
-    if player == LocalPlayer then
-        PlayerData[player] = nil
-    end
-end)
 if LocalPlayer then
     PlayerData[LocalPlayer] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
     monitorPlayer(LocalPlayer)
@@ -437,7 +425,7 @@ local function removeTargetMarker()
 end
 
 -----------------------------------------------------
--- MULTIPLE RAYCASTS (Line-of-Sight)
+-- MULTIPLE RAYCASTS (Line-of-Sight Checks)
 -----------------------------------------------------
 local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
@@ -554,13 +542,13 @@ local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://448334
 
 -- Automated Settings Tab
 AutomatedTab:AddLabel("== Bomb Passing ==", 15)
-AutomatedTab:AddToggle({
+local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
     Flag = "AutoPassBomb",
     Callback = function(value)
         AutoPassEnabled = value
-        if AutoPassEnabled then
+        if value then
             if not autoPassConnection then
                 autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
             end
@@ -570,6 +558,10 @@ AutomatedTab:AddToggle({
                 autoPassConnection = nil
             end
             removeTargetMarker()
+        end
+        -- Sync with mobile toggle if it exists
+        if autoPassMobileToggle and autoPassMobileToggle.Set then
+            autoPassMobileToggle:Set(value)
         end
     end
 })
@@ -730,7 +722,7 @@ local orionSmoothRotationToggle = AITab:AddToggle({
 -- UI Elements Tab
 UITab:AddColorpicker({
     Name = "Menu Main Color",
-    Default = Color3.fromRGB(255,0,0),
+    Default = Color3.fromRGB(255, 0, 0),
     Flag = "MenuMainColor",
     Save = true,
     Callback = function(color)
@@ -744,56 +736,63 @@ UITab:AddColorpicker({
 OrionLib:Init()
 
 -----------------------------------------------------
--- MOBILE TOGGLE BUTTON FOR AUTO PASS
+-- MOBILE TOGGLE BUTTON FOR AUTO PASS (Synchronized with menu)
 -----------------------------------------------------
+local autoPassMobileToggle = nil  -- we'll store this reference
+
 local function createMobileToggle()
     local mobileGui = Instance.new("ScreenGui")
     mobileGui.Name = "MobileToggleGui"
     mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     
-    local autoPassMobileToggle = Instance.new("TextButton")
-    autoPassMobileToggle.Name = "AutoPassMobileToggle"
-    autoPassMobileToggle.Size = UDim2.new(0,50,0,50)
-    autoPassMobileToggle.Position = UDim2.new(1,-70,1,-110)
-    autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255,0,0)
-    autoPassMobileToggle.Text = "OFF"
-    autoPassMobileToggle.TextScaled = true
-    autoPassMobileToggle.Font = Enum.Font.SourceSansBold
-    autoPassMobileToggle.ZIndex = 100
-    autoPassMobileToggle.Parent = mobileGui
+    local button = Instance.new("TextButton")
+    button.Name = "AutoPassMobileToggle"
+    button.Size = UDim2.new(0,50,0,50)
+    button.Position = UDim2.new(1,-70,1,-110)
+    button.BackgroundColor3 = Color3.fromRGB(255,0,0)
+    button.Text = "OFF"
+    button.TextScaled = true
+    button.Font = Enum.Font.SourceSansBold
+    button.ZIndex = 100
+    button.Parent = mobileGui
     
     local uicorner = Instance.new("UICorner")
     uicorner.CornerRadius = UDim.new(1,0)
-    uicorner.Parent = autoPassMobileToggle
+    uicorner.Parent = button
     
     local uistroke = Instance.new("UIStroke")
     uistroke.Thickness = 2
     uistroke.Color = Color3.fromRGB(0,0,0)
-    uistroke.Parent = autoPassMobileToggle
+    uistroke.Parent = button
     
-    autoPassMobileToggle.MouseEnter:Connect(function()
-        TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play()
+    button.MouseEnter:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play()
     end)
-    
-    autoPassMobileToggle.MouseLeave:Connect(function()
+    button.MouseLeave:Connect(function()
         if AutoPassEnabled then
-            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play()
+            TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play()
         else
-            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play()
+            TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play()
         end
     end)
     
-    autoPassMobileToggle.MouseButton1Click:Connect(function()
+    button.MouseButton1Click:Connect(function()
         AutoPassEnabled = not AutoPassEnabled
         if AutoPassEnabled then
-            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0,255,0)
-            autoPassMobileToggle.Text = "ON"
+            button.BackgroundColor3 = Color3.fromRGB(0,255,0)
+            button.Text = "ON"
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(true)
+            end
             if not autoPassConnection then
                 autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
             end
         else
-            autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255,0,0)
-            autoPassMobileToggle.Text = "OFF"
+            button.BackgroundColor3 = Color3.fromRGB(255,0,0)
+            button.Text = "OFF"
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(false)
+            end
             if autoPassConnection then
                 autoPassConnection:Disconnect()
                 autoPassConnection = nil
@@ -801,15 +800,18 @@ local function createMobileToggle()
         end
     end)
     
-    return mobileGui, autoPassMobileToggle
+    return mobileGui, button
 end
 
-local mobileGui, autoPassMobileToggle = createMobileToggle()
+local mobileGui, mobileToggle = createMobileToggle()
+autoPassMobileToggle = mobileToggle
+
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
     if child.Name == "MobileToggleGui" then
         wait(1)
         if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
-            mobileGui, autoPassMobileToggle = createMobileToggle()
+            mobileGui, mobileToggle = createMobileToggle()
+            autoPassMobileToggle = mobileToggle
         end
     end
 end)
@@ -902,5 +904,5 @@ local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a
 end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8,0,0.8,0))
 
-print("Final Ultra-Advanced Bomb AI loaded. Menu, toggles, shiftlock, friction updates, and mobile toggle are active.")
+print("Final Ultra-Advanced Bomb AI loaded. Menu, toggles (synchronized), shiftlock, friction updates, and mobile toggle are active.")
 return {}
