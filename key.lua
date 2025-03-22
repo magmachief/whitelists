@@ -1,6 +1,6 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
--- Neater Final Version (No extra debug additions)
+-- Neater Final Version (No extra debug additions) with Bomb Stats Tracking added
 -----------------------------------------------------
 
 -- SERVICES
@@ -11,6 +11,8 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
+local DataStoreService = game:GetService("DataStoreService")  -- For bomb stats
+
 local LocalPlayer = Players.LocalPlayer
 
 -----------------------------------------------------
@@ -29,9 +31,7 @@ function LoggingModule.logError(err, context)
 end
 function LoggingModule.safeCall(func, context)
     local success, result = pcall(func)
-    if not success then
-        LoggingModule.logError(result, context)
-    end
+    if not success then LoggingModule.logError(result, context) end
     return success, result
 end
 
@@ -143,8 +143,25 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 end
 
 -----------------------------------------------------
--- (ESP code removed)
+-- REMOVE HITBOX FUNCTIONALITY
 -----------------------------------------------------
+local function applyRemoveHitbox(enable)
+    local char = LocalPlayer.Character
+    if not char then return end
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name == "Hitbox" then
+            if enable then
+                part.Transparency = 1
+                part.CanCollide = false
+                part.Size = Vector3.new(customHitboxSize, customHitboxSize, customHitboxSize)
+            else
+                part.Transparency = 0
+                part.CanCollide = true
+                part.Size = Vector3.new(1,1,1)
+            end
+        end
+    end
+end
 
 -----------------------------------------------------
 -- CONFIGURATION VARIABLES
@@ -181,7 +198,7 @@ local function createBombTimerUI()
     bombTimerLabel.TextColor3 = Color3.new(1,1,1)
     bombTimerLabel.Font = Enum.Font.SourceSansBold
     bombTimerLabel.TextScaled = true
-    bombTimerLabel.Text = ""
+    bombTimerLabel.Text = "Bomb Timer: N/A"
     bombTimerLabel.Parent = bombTimerGui
 end
 local function getBombTimerFromObject()
@@ -222,6 +239,139 @@ RunService.Stepped:Connect(function()
         end
     end
 end)
+
+-----------------------------------------------------
+-- BOMB STATS TRACKING
+-----------------------------------------------------
+-- DataStore for player stats
+local playerStatsDataStore = DataStoreService:GetDataStore("PlayerStats")
+local PlayerData = {}  -- Will store stats per player
+
+local function createBillboardGui(player)
+    local character = player.Character
+    if not character then return end
+    local head = character:FindFirstChild("Head")
+    if not head then return end
+    if head:FindFirstChild("StatsDisplay") then return end
+    local billboardGui = Instance.new("BillboardGui")
+    billboardGui.Name = "StatsDisplay"
+    billboardGui.Adornee = head
+    billboardGui.Size = UDim2.new(0,100,0,50)
+    billboardGui.StudsOffset = Vector3.new(0,2,0)
+    billboardGui.AlwaysOnTop = true
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1,0,1,0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.TextColor3 = Color3.new(1,0,0)
+    textLabel.TextScaled = true
+    textLabel.Font = Enum.Font.SourceSansBold
+    textLabel.Parent = billboardGui
+    billboardGui.Parent = head
+end
+
+local function updateBillboardGui(player)
+    local data = PlayerData[player]
+    if not data then return end
+    local avgHold = data.average or 0
+    local character = player.Character
+    if not character then return end
+    local head = character:FindFirstChild("Head")
+    if not head then return end
+    local billboardGui = head:FindFirstChild("StatsDisplay")
+    if billboardGui then
+        local textLabel = billboardGui:FindFirstChildOfClass("TextLabel")
+        if textLabel then
+            textLabel.Text = string.format("Avg Hold: %.2f s", avgHold)
+        end
+    end
+end
+
+local function savePlayerData(player)
+    local data = PlayerData[player]
+    if not data then return end
+    pcall(function()
+        playerStatsDataStore:SetAsync(player.UserId, {
+            totalTime = data.totalTime,
+            numHolds = data.numHolds,
+        })
+    end)
+end
+
+local function loadPlayerData(player)
+    local success, data = pcall(function()
+        return playerStatsDataStore:GetAsync(player.UserId)
+    end)
+    if success and data then
+        PlayerData[player] = {
+            totalTime = data.totalTime or 0,
+            numHolds = data.numHolds or 0,
+            average = (data.numHolds > 0) and (data.totalTime / data.numHolds) or 0,
+            rounds = {},
+        }
+    else
+        PlayerData[player] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
+    end
+end
+
+local function recordPlayerDuration(player, duration)
+    if not PlayerData[player] then
+        PlayerData[player] = { rounds = {}, totalTime = 0, numHolds = 0, average = 0 }
+    end
+    local d = PlayerData[player]
+    table.insert(d.rounds, {duration = duration})
+    d.totalTime = d.totalTime + duration
+    d.numHolds = d.numHolds + 1
+    d.average = d.totalTime / d.numHolds
+    updateBillboardGui(player)
+end
+
+local function onBombAcquired(player)
+    currentBombHolder = player
+    bombStartTime = tick()
+end
+
+local function onBombLost(player)
+    if currentBombHolder == player and bombStartTime then
+        local heldTime = tick() - bombStartTime
+        recordPlayerDuration(player, heldTime)
+        currentBombHolder = nil
+        bombStartTime = nil
+    end
+end
+
+local function monitorPlayer(player)
+    local function onCharacterAdded(character)
+        character:WaitForChild("Head", 5)
+        createBillboardGui(player)
+        updateBillboardGui(player)
+        character.ChildAdded:Connect(function(child)
+            if child.Name == "Bomb" then
+                onBombAcquired(player)
+            end
+        end)
+        character.ChildRemoved:Connect(function(child)
+            if child.Name == "Bomb" then
+                onBombLost(player)
+            end
+        end)
+    end
+    if player.Character then onCharacterAdded(player.Character) end
+    player.CharacterAdded:Connect(onCharacterAdded)
+end
+
+local function onPlayerAdded(player)
+    loadPlayerData(player)
+    monitorPlayer(player)
+end
+
+local function onPlayerRemoving(player)
+    savePlayerData(player)
+    PlayerData[player] = nil
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)
+for _, p in ipairs(Players:GetPlayers()) do onPlayerAdded(p) end
 
 -----------------------------------------------------
 -- VISUAL TARGET MARKER
@@ -284,10 +434,14 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
         local angleOffset = spreadRad * i / raysEachSide
         local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), angleOffset) * CFrame.new(direction)).p
         local leftResult = Workspace:Raycast(startPos, leftDirection * distance, rayParams)
-        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
+        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
+            return false
+        end
         local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
         local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
-        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
+        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
+            return false
+        end
     end
     return true
 end
@@ -389,7 +543,7 @@ AutomatedTab:AddToggle({
 AutomatedTab:AddTextbox({
     Name = "Custom Anti‑Slippery Friction",
     Default = tostring(customAntiSlipperyFriction),
-    Flag = "CustomAntiSlipperyFriction",
+    Flag = "CustomAntiSlipperyFrict",
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
@@ -402,7 +556,7 @@ AutomatedTab:AddToggle({
     Flag = "RemoveHitbox",
     Callback = function(value)
         RemoveHitboxEnabled = value
-        -- (Hitbox removal functionality here if needed)
+        applyRemoveHitbox(value)
     end
 })
 AutomatedTab:AddTextbox({
@@ -412,7 +566,7 @@ AutomatedTab:AddTextbox({
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
-        if num then customHitboxSize = num; end
+        if num then customHitboxSize = num end
     end
 })
 AutomatedTab:AddLabel("== Display Options ==", 15)
