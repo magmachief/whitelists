@@ -1,7 +1,9 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
 -- Client-Only Version (Local Stats, No DataStore)
--- "Avg Hold" Billboard cleaned up: 2 decimals, black stroke, smaller billboard, updated after losing bomb
+-- "Avg Hold" Billboard cleaned up: 2 decimals, black stroke, smaller billboard.
+-- The bomb timer falls back to using the local average hold time (or a default of 20 seconds).
+-- Additionally, bomb hold time is recorded even if the player dies while holding the bomb.
 -----------------------------------------------------
 
 -- SERVICES
@@ -30,9 +32,7 @@ function LoggingModule.logError(err, context)
 end
 function LoggingModule.safeCall(func, context)
     local success, result = pcall(func)
-    if not success then
-        LoggingModule.logError(result, context)
-    end
+    if not success then LoggingModule.logError(result, context) end
     return success, result
 end
 
@@ -48,10 +48,7 @@ function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- Skip if they have the bomb
-            if player.Character:FindFirstChild("Bomb") then
-                continue
-            end
+            if player.Character:FindFirstChild("Bomb") then continue end
             local targetPos = player.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance <= bombPassDistance then
@@ -74,9 +71,7 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if player.Character:FindFirstChild("Bomb") then
-                continue
-            end
+            if player.Character:FindFirstChild("Bomb") then continue end
             local distance = (player.Character.HumanoidRootPart.Position - myPos).Magnitude
             if distance < shortestDistance then
                 shortestDistance = distance
@@ -190,9 +185,15 @@ local raySpreadAngle = 10
 local numRaycasts = 5
 local customAntiSlipperyFriction = 0.7
 local customHitboxSize = 0.1
+
+-- Set bombDefaultDuration to 20 seconds
+local bombDefaultDuration = 20
 local BombTimerDisplayEnabled = false
 local bombAcquiredTime = nil
-local bombDefaultDuration = 30
+local bombInitialValue = nil  -- fallback initial timer value
+
+-- For local stats tracking
+local PlayerData = {}
 
 -----------------------------------------------------
 -- BOMB TIMER UI & TIMER CALCULATION
@@ -215,6 +216,11 @@ local function createBombTimerUI()
     bombTimerLabel.Parent = bombTimerGui
 end
 
+local function getLocalAverageHold()
+    local data = PlayerData[LocalPlayer]
+    return (data and data.average) or 0
+end
+
 local function getBombTimerFromObject()
     local char = LocalPlayer.Character
     if not char then return nil end
@@ -222,33 +228,42 @@ local function getBombTimerFromObject()
     local bomb = char:FindFirstChild("Bomb")
     if not bomb then
         bombAcquiredTime = nil
+        bombInitialValue = nil
         return nil
     end
 
-    -- If bomb has a "Timer" attribute, we use that
     local attrTimer = bomb:GetAttribute("Timer")
     if attrTimer then
         bombAcquiredTime = nil
+        bombInitialValue = nil
         return attrTimer
     end
 
-    -- Check children for a numeric value < 100
     for _, child in pairs(bomb:GetChildren()) do
         if (child:IsA("NumberValue") or child:IsA("IntValue")) and child.Value > 0 and child.Value < 100 then
             bombAcquiredTime = nil
+            bombInitialValue = nil
             return child.Value
         elseif child:IsA("StringValue") and string.match(child.Value, "%d+") then
             bombAcquiredTime = nil
+            bombInitialValue = nil
             return tonumber(child.Value)
         end
     end
 
-    -- Fallback: default bomb duration
     if not bombAcquiredTime then
         bombAcquiredTime = tick()
+        -- Use local average if available; otherwise use bombDefaultDuration
+        local avg = getLocalAverageHold()
+        if avg > 0 then
+            bombInitialValue = avg
+        else
+            bombInitialValue = bombDefaultDuration
+        end
     end
-    local estimatedTimeLeft = bombDefaultDuration - (tick() - bombAcquiredTime)
-    return estimatedTimeLeft > 0 and estimatedTimeLeft or nil
+
+    local estimatedTimeLeft = bombInitialValue - (tick() - bombAcquiredTime)
+    return (estimatedTimeLeft > 0) and estimatedTimeLeft or nil
 end
 
 RunService.Stepped:Connect(function()
@@ -260,25 +275,25 @@ RunService.Stepped:Connect(function()
             bombTimerLabel.Text = "Bomb Timer: N/A"
         end
     end
+
+    -- Update friction every step (optional)
+    FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
 end)
 
 -----------------------------------------------------
 -- CLIENT-SIDE BOMB STATS
 -----------------------------------------------------
-local PlayerData = {}
 local function createBillboardGui(player)
     local character = player.Character
     if not character then return end
     local head = character:FindFirstChild("Head")
     if not head then return end
-
-    -- If BillboardGui already exists, skip
     if head:FindFirstChild("StatsDisplay") then return end
 
     local billboardGui = Instance.new("BillboardGui")
     billboardGui.Name = "StatsDisplay"
     billboardGui.Adornee = head
-    billboardGui.Size = UDim2.new(0,120,0,25)  -- smaller
+    billboardGui.Size = UDim2.new(0,120,0,25)
     billboardGui.StudsOffset = Vector3.new(0,3,0)
     billboardGui.AlwaysOnTop = true
 
@@ -289,7 +304,7 @@ local function createBillboardGui(player)
     textLabel.TextScaled = false
     textLabel.TextSize = 16
     textLabel.Font = Enum.Font.SourceSansBold
-    textLabel.TextStrokeTransparency = 0  -- black stroke
+    textLabel.TextStrokeTransparency = 0
     textLabel.TextStrokeColor3 = Color3.new(0,0,0)
     textLabel.Text = "Avg Hold: 0.00 s"
     textLabel.Parent = billboardGui
@@ -300,19 +315,15 @@ end
 local function updateBillboardGui(player)
     local data = PlayerData[player]
     if not data then return end
-
     local avgHold = data.average or 0
     local character = player.Character
     if not character then return end
-
     local head = character:FindFirstChild("Head")
     if not head then return end
-
     local billboardGui = head:FindFirstChild("StatsDisplay")
     if billboardGui then
         local textLabel = billboardGui:FindFirstChildOfClass("TextLabel")
         if textLabel then
-            -- Format with two decimals
             textLabel.Text = "Avg Hold: " .. string.format("%.2f", avgHold) .. " s"
         end
     end
@@ -323,20 +334,13 @@ local bombStartTime = nil
 
 local function recordPlayerDuration(player, duration)
     if not PlayerData[player] then
-        PlayerData[player] = {
-            rounds = {},
-            totalTime = 0,
-            numHolds = 0,
-            average = 0
-        }
+        PlayerData[player] = { rounds = {}, totalTime = 0, numHolds = 0, average = 0 }
     end
     local d = PlayerData[player]
-    table.insert(d.rounds, {duration = duration})
-    d.totalTime += duration
-    d.numHolds += 1
+    table.insert(d.rounds, { duration = duration })
+    d.totalTime = d.totalTime + duration
+    d.numHolds = d.numHolds + 1
     d.average = d.totalTime / d.numHolds
-
-    -- Update the billboard
     updateBillboardGui(player)
 end
 
@@ -371,6 +375,19 @@ local function monitorPlayer(player)
                 onBombLost(player)
             end
         end)
+        
+        -- Added: Ensure if the player dies while holding the bomb, we record the time.
+        local hum = character:FindFirstChild("Humanoid")
+        if hum then
+            hum.Died:Connect(function()
+                if player == LocalPlayer and currentBombHolder == player and bombStartTime then
+                    local heldTime = tick() - bombStartTime
+                    recordPlayerDuration(player, heldTime)
+                    currentBombHolder = nil
+                    bombStartTime = nil
+                end
+            end)
+        end
     end
 
     if player.Character then
@@ -379,24 +396,20 @@ local function monitorPlayer(player)
     player.CharacterAdded:Connect(onCharacterAdded)
 end
 
-local function onPlayerAdded(player)
-    PlayerData[player] = {
-        totalTime = 0,
-        numHolds = 0,
-        average = 0,
-        rounds = {},
-    }
+Players.PlayerAdded:Connect(function(player)
+    PlayerData[player] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
     monitorPlayer(player)
-end
+end)
 
-local function onPlayerRemoving(player)
+Players.PlayerRemoving:Connect(function(player)
     PlayerData[player] = nil
-end
+end)
 
-Players.PlayerAdded:Connect(onPlayerAdded)
-Players.PlayerRemoving:Connect(onPlayerRemoving)
 for _, p in ipairs(Players:GetPlayers()) do
-    onPlayerAdded(p)
+    if not PlayerData[p] then
+        PlayerData[p] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
+    end
+    monitorPlayer(p)
 end
 
 -----------------------------------------------------
@@ -409,7 +422,8 @@ local function createOrUpdateTargetMarker(player, distance)
     if not body then return end
 
     if currentTargetMarker and currentTargetPlayer == player then
-        currentTargetMarker:FindFirstChildOfClass("TextLabel").Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
+        currentTargetMarker:FindFirstChildOfClass("TextLabel").Text =
+            player.Name .. "\n" .. math.floor(distance) .. " studs"
         return
     end
 
@@ -446,7 +460,7 @@ local function removeTargetMarker()
 end
 
 -----------------------------------------------------
--- MULTIPLE RAYCASTS
+-- MULTIPLE RAYCASTS (for line-of-sight)
 -----------------------------------------------------
 local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
@@ -469,14 +483,11 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
         local angleOffset = spreadRad * i / raysEachSide
         local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), angleOffset) * CFrame.new(direction)).p
         local leftResult = Workspace:Raycast(startPos, leftDirection * distance, rayParams)
-        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return false
-        end
+        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
+
         local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
         local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
-        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return false
-        end
+        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
     end
     return true
 end
@@ -496,7 +507,7 @@ local function autoPassBombEnhanced()
 
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
-            or TargetingModule.getClosestPlayer(bombPassDistance)
+                            or TargetingModule.getClosestPlayer(bombPassDistance)
 
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if targetPlayer.Character:FindFirstChild("Bomb") then
@@ -513,7 +524,8 @@ local function autoPassBombEnhanced()
                 return
             end
 
-            local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart") or targetPlayer.Character.HumanoidRootPart
+            local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart")
+                                  or targetPlayer.Character.HumanoidRootPart
             if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
                 AINotificationsModule.sendNotification("AI Alert", "Line-of-sight blocked! Adjust your position.")
                 removeTargetMarker()
@@ -533,7 +545,6 @@ local function autoPassBombEnhanced()
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
-                -- Fallback: directly re-parent bomb
                 bomb.Parent = targetPlayer.Character
             end
 
@@ -557,25 +568,13 @@ local Window = OrionLib:MakeWindow({
 })
 
 -- Create Tabs
-local AutomatedTab = Window:MakeTab({
-    Name = "Automated Settings",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-local AITab = Window:MakeTab({
-    Name = "AI Based Settings",
-    Icon = "rbxassetid://7072720870",
-    PremiumOnly = false
-})
-local UITab = Window:MakeTab({
-    Name = "UI Elements",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
+local AutomatedTab = Window:MakeTab({ Name = "Automated Settings", Icon = "rbxassetid://4483345998", PremiumOnly = false })
+local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://7072720870", PremiumOnly = false })
+local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 
 -- Automated Settings Tab
 AutomatedTab:AddLabel("== Bomb Passing ==", 15)
-local orionAutoPassToggle = AutomatedTab:AddToggle({
+AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
     Flag = "AutoPassBomb",
@@ -639,7 +638,6 @@ AutomatedTab:AddTextbox({
         end
     end
 })
-
 AutomatedTab:AddLabel("== Display Options ==", 15)
 AutomatedTab:AddToggle({
     Name = "Display Bomb Timer",
@@ -648,9 +646,7 @@ AutomatedTab:AddToggle({
     Callback = function(value)
         BombTimerDisplayEnabled = value
         if value then
-            if not bombTimerGui then
-                createBombTimerUI()
-            end
+            if not bombTimerGui then createBombTimerUI() end
         else
             if bombTimerGui then
                 bombTimerGui:Destroy()
@@ -707,10 +703,8 @@ AITab:AddTextbox({
         end
     end
 })
-
 AITab:AddLabel("== Rotation Settings ==", 15)
-local orionFlickRotationToggle
-orionFlickRotationToggle = AITab:AddToggle({
+AITab:AddToggle({
     Name = "Flick Rotation",
     Default = false,
     Flag = "FlickRotation",
@@ -731,9 +725,7 @@ orionFlickRotationToggle = AITab:AddToggle({
         end
     end
 })
-
-local orionSmoothRotationToggle
-orionSmoothRotationToggle = AITab:AddToggle({
+AITab:AddToggle({
     Name = "Smooth Rotation",
     Default = true,
     Flag = "SmoothRotation",
@@ -758,7 +750,7 @@ orionSmoothRotationToggle = AITab:AddToggle({
 -- UI Elements Tab
 UITab:AddColorpicker({
     Name = "Menu Main Color",
-    Default = Color3.fromRGB(255, 0, 0),
+    Default = Color3.fromRGB(255,0,0),
     Flag = "MenuMainColor",
     Save = true,
     Callback = function(color)
@@ -800,20 +792,14 @@ local function createMobileToggle()
     uistroke.Parent = autoPassMobileToggle
 
     autoPassMobileToggle.MouseEnter:Connect(function()
-        TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {
-            BackgroundColor3 = Color3.fromRGB(255,100,100)
-        }):Play()
+        TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play()
     end)
 
     autoPassMobileToggle.MouseLeave:Connect(function()
         if AutoPassEnabled then
-            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {
-                BackgroundColor3 = Color3.fromRGB(0,255,0)
-            }):Play()
+            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play()
         else
-            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {
-                BackgroundColor3 = Color3.fromRGB(255,0,0)
-            }):Play()
+            TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play()
         end
     end)
 
@@ -900,11 +886,8 @@ ShiftLockButton.MouseButton1Click:Connect(function()
                     root.Position.Y,
                     Workspace.CurrentCamera.CFrame.LookVector.Z * SL_MaxLength))
                 Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_EnabledOffset
-                Workspace.CurrentCamera.Focus = CFrame.fromMatrix(
-                    Workspace.CurrentCamera.Focus.Position,
-                    Workspace.CurrentCamera.CFrame.RightVector,
-                    Workspace.CurrentCamera.CFrame.UpVector
-                ) * SL_EnabledOffset
+                Workspace.CurrentCamera.Focus = CFrame.fromMatrix(Workspace.CurrentCamera.Focus.Position,
+                    Workspace.CurrentCamera.CFrame.RightVector, Workspace.CurrentCamera.CFrame.UpVector) * SL_EnabledOffset
             end
         end)
     else
@@ -914,12 +897,7 @@ ShiftLockButton.MouseButton1Click:Connect(function()
         ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
         Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
         ShiftlockCursor.Visible = false
-        pcall(function()
-            if SL_Active then
-                SL_Active:Disconnect()
-                SL_Active = nil
-            end
-        end)
+        if SL_Active then pcall(function() SL_Active:Disconnect() SL_Active = nil end) end
     end
 end)
 
@@ -929,8 +907,7 @@ local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a
     end
     return Enum.ContextActionResult.Sink
 end, false, Enum.KeyCode.ButtonR2)
-
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8,0,0.8,0))
 
-print("Final Ultra-Advanced Bomb AI loaded. Menu, toggles, shiftlock, mobile toggle, and local stats tracking are active.")
+print("Final Ultra-Advanced Bomb AI loaded. All toggles, shiftlock, friction updates, local stats (with average hold preserved on death), and mobile toggle are active.")
 return {}
