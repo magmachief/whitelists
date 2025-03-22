@@ -1,6 +1,7 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
--- Neater Final Version (No extra debug additions) with Bomb Stats Tracking added
+-- Neater Final Version (No extra debug additions) – Starting Point
+-- (Bomb stats tracking now uses RemoteEvents for DataStore access)
 -----------------------------------------------------
 
 -- SERVICES
@@ -11,8 +12,7 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
-local DataStoreService = game:GetService("DataStoreService")  -- For bomb stats
-
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 -----------------------------------------------------
@@ -41,9 +41,7 @@ local useSmoothRotation = true
 
 function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local bestPlayer, bestTravelTime = nil, math.huge
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -64,9 +62,7 @@ end
 
 function TargetingModule.getClosestPlayer(bombPassDistance)
     local closestPlayer, shortestDistance = nil, bombPassDistance
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -240,12 +236,26 @@ RunService.Stepped:Connect(function()
     end
 end)
 
------------------------------------------------------
--- BOMB STATS TRACKING
------------------------------------------------------
--- DataStore for player stats
-local playerStatsDataStore = DataStoreService:GetDataStore("PlayerStats")
-local PlayerData = {}  -- Will store stats per player
+-- Bomb Stats Tracking using RemoteEvents
+local BombStatsEvent = ReplicatedStorage:WaitForChild("BombStatsEvent")  -- Created on the server
+
+local function recordPlayerDuration(player, duration)
+    -- Locally update our stats
+    if not PlayerData[player] then
+        PlayerData[player] = { rounds = {}, totalTime = 0, numHolds = 0, average = 0 }
+    end
+    local d = PlayerData[player]
+    table.insert(d.rounds, {duration = duration})
+    d.totalTime = d.totalTime + duration
+    d.numHolds = d.numHolds + 1
+    d.average = d.totalTime / d.numHolds
+    updateBillboardGui(player)
+    -- Send data to the server to save
+    BombStatsEvent:FireServer("Record", { duration = duration })
+end
+
+-- Player Stats Data (client-side cache)
+local PlayerData = {}
 
 local function createBillboardGui(player)
     local character = player.Character
@@ -286,43 +296,10 @@ local function updateBillboardGui(player)
     end
 end
 
-local function savePlayerData(player)
-    local data = PlayerData[player]
-    if not data then return end
-    pcall(function()
-        playerStatsDataStore:SetAsync(player.UserId, {
-            totalTime = data.totalTime,
-            numHolds = data.numHolds,
-        })
-    end)
-end
-
 local function loadPlayerData(player)
-    local success, data = pcall(function()
-        return playerStatsDataStore:GetAsync(player.UserId)
-    end)
-    if success and data then
-        PlayerData[player] = {
-            totalTime = data.totalTime or 0,
-            numHolds = data.numHolds or 0,
-            average = (data.numHolds > 0) and (data.totalTime / data.numHolds) or 0,
-            rounds = {},
-        }
-    else
-        PlayerData[player] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
-    end
-end
-
-local function recordPlayerDuration(player, duration)
-    if not PlayerData[player] then
-        PlayerData[player] = { rounds = {}, totalTime = 0, numHolds = 0, average = 0 }
-    end
-    local d = PlayerData[player]
-    table.insert(d.rounds, {duration = duration})
-    d.totalTime = d.totalTime + duration
-    d.numHolds = d.numHolds + 1
-    d.average = d.totalTime / d.numHolds
-    updateBillboardGui(player)
+    -- Optionally, you can use the remote function BombStatsFunction from the server to load stats.
+    -- For now, we initialize with zero.
+    PlayerData[player] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
 end
 
 local function onBombAcquired(player)
@@ -355,7 +332,9 @@ local function monitorPlayer(player)
             end
         end)
     end
-    if player.Character then onCharacterAdded(player.Character) end
+    if player.Character then
+        onCharacterAdded(player.Character)
+    end
     player.CharacterAdded:Connect(onCharacterAdded)
 end
 
@@ -365,13 +344,15 @@ local function onPlayerAdded(player)
 end
 
 local function onPlayerRemoving(player)
-    savePlayerData(player)
+    BombStatsEvent:FireServer("Save", PlayerData[player] or {})
     PlayerData[player] = nil
 end
 
 Players.PlayerAdded:Connect(onPlayerAdded)
 Players.PlayerRemoving:Connect(onPlayerRemoving)
-for _, p in ipairs(Players:GetPlayers()) do onPlayerAdded(p) end
+for _, p in ipairs(Players:GetPlayers()) do
+    onPlayerAdded(p)
+end
 
 -----------------------------------------------------
 -- VISUAL TARGET MARKER
@@ -434,14 +415,10 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
         local angleOffset = spreadRad * i / raysEachSide
         local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), angleOffset) * CFrame.new(direction)).p
         local leftResult = Workspace:Raycast(startPos, leftDirection * distance, rayParams)
-        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return false
-        end
+        if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
         local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
         local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
-        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return false
-        end
+        if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
     end
     return true
 end
@@ -635,11 +612,7 @@ AITab:AddToggle({
     Flag = "FlickRotation",
     Callback = function(value)
         useFlickRotation = value
-        if value then
-            useSmoothRotation = false
-        else
-            if not useSmoothRotation then useSmoothRotation = true end
-        end
+        if value then useSmoothRotation = false else if not useSmoothRotation then useSmoothRotation = true end end
     end
 })
 AITab:AddToggle({
@@ -648,11 +621,7 @@ AITab:AddToggle({
     Flag = "SmoothRotation",
     Callback = function(value)
         useSmoothRotation = value
-        if value then
-            useFlickRotation = false
-        else
-            if not useFlickRotation then useFlickRotation = true end
-        end
+        if value then useFlickRotation = false else if not useFlickRotation then useFlickRotation = true end end
     end
 })
 
