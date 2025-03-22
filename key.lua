@@ -1,7 +1,13 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
 -- Client-Only Version (Local Stats, No DataStore)
--- This version has the Bomb Timer functionality commented out.
+-- Features:
+-- • Auto Pass Bomb (Enhanced)
+-- • Anti‑Slippery with custom friction applied immediately
+-- • Remove Hitbox with custom hitbox size applied immediately
+-- • Local Stats: Only your (LocalPlayer’s) average hold time is displayed via a BillboardGui
+-- • OrionLib menu with three tabs (Automated, AI Based, UI Elements)
+-- • Shiftlock and mobile toggle for Auto Pass Bomb
 -----------------------------------------------------
 
 -- SERVICES
@@ -177,17 +183,14 @@ local raySpreadAngle = 10
 local numRaycasts = 5
 local customAntiSlipperyFriction = 0.7
 local customHitboxSize = 0.1
-
--- Bomb timer functionality is commented out for now
---[[
-local BombTimerDisplayEnabled = false
-local bombAcquiredTime = nil
-local bombDefaultDuration = 20
-local bombInitialValue = nil
---]]
+-- Bomb timer functionality is currently commented out
+-- local BombTimerDisplayEnabled = false
+-- local bombAcquiredTime = nil
+-- local bombDefaultDuration = 20
+-- local bombInitialValue = nil
 
 -----------------------------------------------------
--- (BOMB TIMER UI & TIMER CALCULATION - Commented Out)
+-- (BOMB TIMER UI & CALCULATION SECTION - Commented Out)
 -----------------------------------------------------
 --[[
 local bombTimerGui, bombTimerLabel = nil, nil
@@ -216,13 +219,11 @@ local function getBombTimerFromObject()
         bombAcquiredTime = nil
         return nil
     end
-
     local attrTimer = bomb:GetAttribute("Timer")
     if attrTimer then
         bombAcquiredTime = nil
         return attrTimer
     end
-
     for _, child in pairs(bomb:GetChildren()) do
         if (child:IsA("NumberValue") or child:IsA("IntValue")) and child.Value > 0 and child.Value < 100 then
             bombAcquiredTime = nil
@@ -232,17 +233,11 @@ local function getBombTimerFromObject()
             return tonumber(child.Value)
         end
     end
-
     if not bombAcquiredTime then
         bombAcquiredTime = tick()
-        local avg = 0 -- Or use a fallback like getLocalAverageHold()
-        if avg > 0 then
-            bombInitialValue = avg
-        else
-            bombInitialValue = bombDefaultDuration
-        end
+        local avg = 0
+        bombInitialValue = bombDefaultDuration
     end
-
     local estimatedTimeLeft = bombInitialValue - (tick() - bombAcquiredTime)
     return (estimatedTimeLeft > 0) and estimatedTimeLeft or nil
 end
@@ -260,11 +255,12 @@ end)
 --]]
 
 -----------------------------------------------------
--- CLIENT-SIDE BOMB STATS (Local Only)
+-- CLIENT-SIDE BOMB STATS (Local Only for LocalPlayer)
 -----------------------------------------------------
 local PlayerData = {}
 
 local function createBillboardGui(player)
+    if player ~= LocalPlayer then return end  -- Only create for local player
     local character = player.Character
     if not character then return end
     local head = character:FindFirstChild("Head")
@@ -294,6 +290,7 @@ local function createBillboardGui(player)
 end
 
 local function updateBillboardGui(player)
+    if player ~= LocalPlayer then return end  -- Only update local player's billboard
     local data = PlayerData[player]
     if not data then return end
     local avgHold = data.average or 0
@@ -340,6 +337,7 @@ local function onBombLost(player)
 end
 
 local function monitorPlayer(player)
+    if player ~= LocalPlayer then return end  -- Only monitor LocalPlayer for stats
     local function onCharacterAdded(character)
         character:WaitForChild("Head", 5)
         createBillboardGui(player)
@@ -377,17 +375,19 @@ local function monitorPlayer(player)
 end
 
 Players.PlayerAdded:Connect(function(player)
-    PlayerData[player] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
-    monitorPlayer(player)
+    if player == LocalPlayer then
+        PlayerData[player] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
+        monitorPlayer(player)
+    end
 end)
 Players.PlayerRemoving:Connect(function(player)
-    PlayerData[player] = nil
-end)
-for _, p in ipairs(Players:GetPlayers()) do
-    if not PlayerData[p] then
-        PlayerData[p] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
+    if player == LocalPlayer then
+        PlayerData[player] = nil
     end
-    monitorPlayer(p)
+end)
+if LocalPlayer then
+    PlayerData[LocalPlayer] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
+    monitorPlayer(LocalPlayer)
 end
 
 -----------------------------------------------------
@@ -437,7 +437,7 @@ local function removeTargetMarker()
 end
 
 -----------------------------------------------------
--- MULTIPLE RAYCASTS (Line-of-Sight Checks)
+-- MULTIPLE RAYCASTS (Line-of-Sight)
 -----------------------------------------------------
 local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
@@ -463,6 +463,7 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
         if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
             return false
         end
+
         local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
         local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
         if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
@@ -616,13 +617,11 @@ AutomatedTab:AddTextbox({
         if num then
             customHitboxSize = num
             print("Custom Hitbox Size updated to: " .. num)
-            if RemoveHitboxEnabled then
-                applyRemoveHitbox(true)
-            end
+            if RemoveHitboxEnabled then applyRemoveHitbox(true) end
         end
     end
 })
--- Bomb Timer toggle is commented out
+-- Bomb Timer menu toggle is commented out
 --[[
 AutomatedTab:AddLabel("== Display Options ==", 15)
 AutomatedTab:AddToggle({
@@ -731,7 +730,7 @@ local orionSmoothRotationToggle = AITab:AddToggle({
 -- UI Elements Tab
 UITab:AddColorpicker({
     Name = "Menu Main Color",
-    Default = Color3.fromRGB(255, 0, 0),
+    Default = Color3.fromRGB(255,0,0),
     Flag = "MenuMainColor",
     Save = true,
     Callback = function(color)
@@ -775,6 +774,7 @@ local function createMobileToggle()
     autoPassMobileToggle.MouseEnter:Connect(function()
         TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play()
     end)
+    
     autoPassMobileToggle.MouseLeave:Connect(function()
         if AutoPassEnabled then
             TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play()
@@ -782,14 +782,22 @@ local function createMobileToggle()
             TweenService:Create(autoPassMobileToggle, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play()
         end
     end)
+    
     autoPassMobileToggle.MouseButton1Click:Connect(function()
         AutoPassEnabled = not AutoPassEnabled
         if AutoPassEnabled then
             autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(0,255,0)
             autoPassMobileToggle.Text = "ON"
+            if not autoPassConnection then
+                autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
+            end
         else
             autoPassMobileToggle.BackgroundColor3 = Color3.fromRGB(255,0,0)
             autoPassMobileToggle.Text = "OFF"
+            if autoPassConnection then
+                autoPassConnection:Disconnect()
+                autoPassConnection = nil
+            end
         end
     end)
     
