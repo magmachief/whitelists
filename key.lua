@@ -6,7 +6,7 @@
 -- • Anti‑Slippery with custom friction (applied immediately)
 -- • Remove Hitbox with custom hitbox size (applied immediately)
 -- • Local Stats: Only your (LocalPlayer’s) average hold time is displayed via a BillboardGui
--- • OrionLib menu with three tabs (Automated, AI Based, UI Elements)
+-- • OrionLib menu with four tabs (Automated, AI Based, UI Elements, and Console)
 -- • Shiftlock functionality
 -----------------------------------------------------
 
@@ -31,8 +31,11 @@ local HRP = CHAR:WaitForChild("HumanoidRootPart")
 -- MODULES & UTILITY FUNCTIONS
 -----------------------------------------------------
 local LoggingModule = {}
+-- Updated to also log to our console (see below)
 function LoggingModule.logError(err, context)
-    warn("[ERROR] Context: " .. tostring(context) .. " | Error: " .. tostring(err))
+    local message = "[ERROR] (" .. tostring(context) .. "): " .. tostring(err)
+    warn(message)
+    if logToConsole then logToConsole(message) end
 end
 function LoggingModule.safeCall(func, context)
     local success, result = pcall(func)
@@ -198,7 +201,6 @@ local function createBombTimerUI()
     bombTimerGui = Instance.new("ScreenGui")
     bombTimerGui.Name = "BombTimerGui"
     bombTimerGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
     bombTimerLabel = Instance.new("TextLabel")
     bombTimerLabel.Size = UDim2.new(0,200,0,50)
     bombTimerLabel.Position = UDim2.new(0,10,0,10)
@@ -210,7 +212,6 @@ local function createBombTimerUI()
     bombTimerLabel.Text = "Bomb Timer: N/A"
     bombTimerLabel.Parent = bombTimerGui
 end
-
 local function getBombTimerFromObject()
     local char = LocalPlayer.Character
     if not char then return nil end
@@ -240,7 +241,6 @@ local function getBombTimerFromObject()
     local estimatedTimeLeft = bombInitialValue - (tick() - bombAcquiredTime)
     return (estimatedTimeLeft > 0) and estimatedTimeLeft or nil
 end
-
 RunService.Stepped:Connect(function()
     if bombTimerLabel then
         local timeLeft = getBombTimerFromObject()
@@ -257,7 +257,6 @@ end)
 -- CLIENT-SIDE BOMB STATS (LocalPlayer Only)
 -----------------------------------------------------
 local PlayerData = {}
-
 local function createBillboardGui(player)
     if player ~= LocalPlayer then return end  -- Only for local player
     local character = player.Character
@@ -265,14 +264,12 @@ local function createBillboardGui(player)
     local head = character:FindFirstChild("Head")
     if not head then return end
     if head:FindFirstChild("StatsDisplay") then return end
-
     local billboardGui = Instance.new("BillboardGui")
     billboardGui.Name = "StatsDisplay"
     billboardGui.Adornee = head
     billboardGui.Size = UDim2.new(0,120,0,25)
     billboardGui.StudsOffset = Vector3.new(0,3,0)
     billboardGui.AlwaysOnTop = true
-
     local textLabel = Instance.new("TextLabel")
     textLabel.Size = UDim2.new(1,0,1,0)
     textLabel.BackgroundTransparency = 1
@@ -284,7 +281,6 @@ local function createBillboardGui(player)
     textLabel.TextStrokeColor3 = Color3.new(0,0,0)
     textLabel.Text = "Avg Hold: 0.00 s"
     textLabel.Parent = billboardGui
-
     billboardGui.Parent = head
 end
 
@@ -341,19 +337,16 @@ local function monitorPlayer(player)
         character:WaitForChild("Head", 5)
         createBillboardGui(player)
         updateBillboardGui(player)
-
         character.ChildAdded:Connect(function(child)
             if child.Name == "Bomb" then
                 onBombAcquired(player)
             end
         end)
-
         character.ChildRemoved:Connect(function(child)
             if child.Name == "Bomb" then
                 onBombLost(player)
             end
         end)
-        
         local hum = character:FindFirstChild("Humanoid")
         if hum then
             hum.Died:Connect(function()
@@ -366,7 +359,6 @@ local function monitorPlayer(player)
             end)
         end
     end
-
     if player.Character then
         onCharacterAdded(player.Character)
     end
@@ -386,17 +378,14 @@ local function createOrUpdateTargetMarker(player, distance)
     if not player or not player.Character then return end
     local body = player.Character:FindFirstChild("HumanoidRootPart")
     if not body then return end
-
     if currentTargetMarker and currentTargetPlayer == player then
         currentTargetMarker:FindFirstChildOfClass("TextLabel").Text = player.Name .. "\n" .. math.floor(distance) .. " studs"
         return
     end
-
     if currentTargetMarker then
         currentTargetMarker:Destroy()
         currentTargetMarker, currentTargetPlayer = nil, nil
     end
-
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
     marker.Adornee = body
@@ -404,7 +393,6 @@ local function createOrUpdateTargetMarker(player, distance)
     marker.StudsOffset = Vector3.new(0,2,0)
     marker.AlwaysOnTop = true
     marker.Parent = body
-
     local label = Instance.new("TextLabel", marker)
     label.Size = UDim2.new(1,0,1,0)
     label.BackgroundTransparency = 1
@@ -412,7 +400,6 @@ local function createOrUpdateTargetMarker(player, distance)
     label.TextScaled = true
     label.TextColor3 = Color3.new(1,0,0)
     label.Font = Enum.Font.SourceSansBold
-
     currentTargetMarker, currentTargetPlayer = marker, player
     VisualModule.animateMarker(marker)
 end
@@ -431,18 +418,15 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
     local direction = (endPos - startPos).Unit
     local distance = (endPos - startPos).Magnitude
-
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
     if LocalPlayer.Character then
         rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
     end
-
     local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
     if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
         return false
     end
-
     local raysEachSide = math.floor((numRaycasts - 1) / 2)
     for i = 1, raysEachSide do
         local angleOffset = spreadRad * i / raysEachSide
@@ -451,7 +435,6 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
         if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
             return false
         end
-
         local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
         local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
         if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
@@ -472,26 +455,21 @@ local function autoPassBombEnhanced()
             removeTargetMarker()
             return
         end
-
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
                            or TargetingModule.getClosestPlayer(bombPassDistance)
-
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if targetPlayer.Character:FindFirstChild("Bomb") then
                 removeTargetMarker()
                 return
             end
-
             local targetPos = targetPlayer.Character.HumanoidRootPart.Position
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
-
             if distance > bombPassDistance then
                 removeTargetMarker()
                 return
             end
-
             local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart")
                                   or targetPlayer.Character.HumanoidRootPart
             if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
@@ -499,23 +477,19 @@ local function autoPassBombEnhanced()
                 removeTargetMarker()
                 return
             end
-
             createOrUpdateTargetMarker(targetPlayer, distance)
             VisualModule.playPassVFX(targetPlayer)
             TargetingModule.rotateCharacterTowardsTarget(targetPos)
-
             if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance",
                     "Passing bomb to " .. targetPlayer.Name .. " (" .. math.floor(distance) .. " studs).")
                 lastAIMessageTime = tick()
             end
-
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
                 bomb.Parent = targetPlayer.Character
             end
-
             removeTargetMarker()
         else
             removeTargetMarker()
@@ -539,6 +513,7 @@ local Window = OrionLib:MakeWindow({
 local AutomatedTab = Window:MakeTab({ Name = "Automated Settings", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://7072720870", PremiumOnly = false })
 local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
+local ConsoleTab = Window:MakeTab({ Name = "Console", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 
 -- Automated Settings Tab
 AutomatedTab:AddLabel("== Bomb Passing ==", 15)
@@ -559,7 +534,6 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
             end
             removeTargetMarker()
         end
-        -- Sync with mobile toggle if it exists
         if autoPassMobileToggle and autoPassMobileToggle.Set then
             autoPassMobileToggle:Set(value)
         end
@@ -613,7 +587,7 @@ AutomatedTab:AddTextbox({
         end
     end
 })
--- Bomb Timer menu toggle is commented out
+-- Bomb Timer toggle is commented out
 --[[
 AutomatedTab:AddLabel("== Display Options ==", 15)
 AutomatedTab:AddToggle({
@@ -722,13 +696,60 @@ local orionSmoothRotationToggle = AITab:AddToggle({
 -- UI Elements Tab
 UITab:AddColorpicker({
     Name = "Menu Main Color",
-    Default = Color3.fromRGB(255, 0, 0),
+    Default = Color3.fromRGB(255,0,0),
     Flag = "MenuMainColor",
     Save = true,
     Callback = function(color)
         OrionLib.Themes[OrionLib.SelectedTheme].Main = color
     end
 })
+
+-----------------------------------------------------
+-- CONSOLE TAB (In-Menu Console)
+-----------------------------------------------------
+local ConsoleTab = Window:MakeTab({
+    Name = "Console",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+-- Create a scrolling frame for console logs
+local consoleFrame = Instance.new("ScrollingFrame")
+consoleFrame.Size = UDim2.new(1, -20, 1, -40)
+consoleFrame.Position = UDim2.new(0, 10, 0, 10)
+consoleFrame.BackgroundTransparency = 1
+consoleFrame.ScrollBarThickness = 4
+consoleFrame.Parent = ConsoleTab.Container
+
+local consoleText = Instance.new("TextLabel")
+consoleText.Size = UDim2.new(1,0,0,0)
+consoleText.BackgroundTransparency = 1
+consoleText.TextColor3 = Color3.new(1,1,1)
+consoleText.TextWrapped = true
+consoleText.TextXAlignment = Enum.TextXAlignment.Left
+consoleText.TextYAlignment = Enum.TextYAlignment.Top
+consoleText.Font = Enum.Font.SourceSans
+consoleText.TextSize = 16
+consoleText.Text = ""
+consoleText.Parent = consoleFrame
+
+local function logToConsole(message)
+    consoleText.Text = consoleText.Text .. "\n" .. message
+    consoleText.Size = UDim2.new(1,0,0,consoleText.TextBounds.Y)
+    consoleFrame.CanvasSize = UDim2.new(0,0,0,consoleText.TextBounds.Y + 20)
+end
+
+-- Optionally, add a "Clear" button to the console tab
+local clearButton = Instance.new("TextButton")
+clearButton.Size = UDim2.new(0,100,0,30)
+clearButton.Position = UDim2.new(1,-110,0,10)
+clearButton.Text = "Clear"
+clearButton.Parent = ConsoleTab.Container
+clearButton.MouseButton1Click:Connect(function()
+    consoleText.Text = ""
+    consoleText.Size = UDim2.new(1,0,0,0)
+    consoleFrame.CanvasSize = UDim2.new(0,0,0,0)
+    logToConsole("Console cleared.")
+end)
 
 -----------------------------------------------------
 -- INITIALIZE ORIONLIB
@@ -738,8 +759,7 @@ OrionLib:Init()
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS (Synchronized with menu)
 -----------------------------------------------------
-local autoPassMobileToggle = nil  -- we'll store this reference
-
+local autoPassMobileToggle = nil
 local function createMobileToggle()
     local mobileGui = Instance.new("ScreenGui")
     mobileGui.Name = "MobileToggleGui"
@@ -775,7 +795,6 @@ local function createMobileToggle()
             TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play()
         end
     end)
-    
     button.MouseButton1Click:Connect(function()
         AutoPassEnabled = not AutoPassEnabled
         if AutoPassEnabled then
