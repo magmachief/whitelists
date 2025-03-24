@@ -3,10 +3,10 @@
 -- Client-Only Version (Local Stats, No DataStore)
 -- Features:
 -- • Auto Pass Bomb (Enhanced) with synchronized mobile & menu toggles
--- • Anti‑Slippery with custom friction (applied immediately)
--- • Remove Hitbox with custom hitbox size (applied immediately)
+-- • Anti‑Slippery with custom friction applied (updated every 0.5 seconds)
+-- • Remove Hitbox with custom hitbox size applied immediately
 -- • Local Stats: Only your (LocalPlayer’s) average hold time is displayed via a BillboardGui
--- • OrionLib menu with four tabs (Automated, AI Based, UI Elements, and Console)
+-- • OrionLib menu with three tabs (Automated, AI Based, UI Elements)
 -- • Shiftlock functionality
 -----------------------------------------------------
 
@@ -31,11 +31,8 @@ local HRP = CHAR:WaitForChild("HumanoidRootPart")
 -- MODULES & UTILITY FUNCTIONS
 -----------------------------------------------------
 local LoggingModule = {}
--- Updated to also log to our console (see below)
 function LoggingModule.logError(err, context)
-    local message = "[ERROR] (" .. tostring(context) .. "): " .. tostring(err)
-    warn(message)
-    if logToConsole then logToConsole(message) end
+    warn("[ERROR] Context: " .. tostring(context) .. " | Error: " .. tostring(err))
 end
 function LoggingModule.safeCall(func, context)
     local success, result = pcall(func)
@@ -135,6 +132,7 @@ function AINotificationsModule.sendNotification(title, text, duration)
 end
 
 local FrictionModule = {}
+-- We now update friction properties every 0.5 seconds (see below)
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
@@ -187,71 +185,18 @@ local numRaycasts = 5
 local customAntiSlipperyFriction = 0.7
 local customHitboxSize = 0.1
 -- Bomb timer functionality is commented out in this version
--- local BombTimerDisplayEnabled = false
--- local bombAcquiredTime = nil
--- local bombDefaultDuration = 20
--- local bombInitialValue = nil
 
 -----------------------------------------------------
--- (BOMB TIMER UI & CALCULATION SECTION - Commented Out)
+-- Update Friction Every 0.5 Seconds
 -----------------------------------------------------
---[[
-local bombTimerGui, bombTimerLabel = nil, nil
-local function createBombTimerUI()
-    bombTimerGui = Instance.new("ScreenGui")
-    bombTimerGui.Name = "BombTimerGui"
-    bombTimerGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    bombTimerLabel = Instance.new("TextLabel")
-    bombTimerLabel.Size = UDim2.new(0,200,0,50)
-    bombTimerLabel.Position = UDim2.new(0,10,0,10)
-    bombTimerLabel.BackgroundTransparency = 0.5
-    bombTimerLabel.BackgroundColor3 = Color3.new(0,0,0)
-    bombTimerLabel.TextColor3 = Color3.new(1,1,1)
-    bombTimerLabel.Font = Enum.Font.SourceSansBold
-    bombTimerLabel.TextScaled = true
-    bombTimerLabel.Text = "Bomb Timer: N/A"
-    bombTimerLabel.Parent = bombTimerGui
-end
-local function getBombTimerFromObject()
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    local bomb = char:FindFirstChild("Bomb")
-    if not bomb then
-        bombAcquiredTime = nil
-        return nil
-    end
-    local attrTimer = bomb:GetAttribute("Timer")
-    if attrTimer then
-        bombAcquiredTime = nil
-        return attrTimer
-    end
-    for _, child in pairs(bomb:GetChildren()) do
-        if (child:IsA("NumberValue") or child:IsA("IntValue")) and child.Value > 0 and child.Value < 100 then
-            bombAcquiredTime = nil
-            return child.Value
-        elseif child:IsA("StringValue") and string.match(child.Value, "%d+") then
-            bombAcquiredTime = nil
-            return tonumber(child.Value)
+task.spawn(function()
+    while true do
+        if AntiSlipperyEnabled then
+            FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
         end
-    end
-    if not bombAcquiredTime then
-        bombAcquiredTime = tick()
-        bombInitialValue = bombDefaultDuration
-    end
-    local estimatedTimeLeft = bombInitialValue - (tick() - bombAcquiredTime)
-    return (estimatedTimeLeft > 0) and estimatedTimeLeft or nil
-end
-RunService.Stepped:Connect(function()
-    if bombTimerLabel then
-        local timeLeft = getBombTimerFromObject()
-        if timeLeft then
-            bombTimerLabel.Text = "⏳ Bomb Timer: " .. math.floor(timeLeft) .. " seconds left!"
-        else
-            bombTimerLabel.Text = "Bomb Timer: N/A"
-        end
+        wait(0.5)
     end
 end)
---]]
 
 -----------------------------------------------------
 -- CLIENT-SIDE BOMB STATS (LocalPlayer Only)
@@ -513,7 +458,6 @@ local Window = OrionLib:MakeWindow({
 local AutomatedTab = Window:MakeTab({ Name = "Automated Settings", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://7072720870", PremiumOnly = false })
 local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
-local ConsoleTab = Window:MakeTab({ Name = "Console", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 
 -- Automated Settings Tab
 AutomatedTab:AddLabel("== Bomb Passing ==", 15)
@@ -543,7 +487,7 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
 AutomatedTab:AddLabel("== Character Settings ==", 15)
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
-    Default = "5.0",  -- change default to 1.0 or higher
+    Default = AntiSlipperyEnabled,
     Flag = "AntiSlippery",
     Callback = function(value)
         AntiSlipperyEnabled = value
@@ -587,27 +531,6 @@ AutomatedTab:AddTextbox({
         end
     end
 })
--- Bomb Timer toggle is commented out
---[[
-AutomatedTab:AddLabel("== Display Options ==", 15)
-AutomatedTab:AddToggle({
-    Name = "Display Bomb Timer",
-    Default = BombTimerDisplayEnabled,
-    Flag = "BombTimerDisplay",
-    Callback = function(value)
-        BombTimerDisplayEnabled = value
-        if value then
-            if not bombTimerGui then createBombTimerUI() end
-        else
-            if bombTimerGui then
-                bombTimerGui:Destroy()
-                bombTimerGui = nil
-                bombTimerLabel = nil
-            end
-        end
-    end
-})
---]]
 
 -- AI Based Settings Tab
 AITab:AddLabel("== Targeting Settings ==", 15)
@@ -705,53 +628,6 @@ UITab:AddColorpicker({
 })
 
 -----------------------------------------------------
--- CONSOLE TAB (In-Menu Console)
------------------------------------------------------
-local ConsoleTab = Window:MakeTab({
-    Name = "Console",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
--- Create a scrolling frame for console logs
-local consoleFrame = Instance.new("ScrollingFrame")
-consoleFrame.Size = UDim2.new(1, -20, 1, -40)
-consoleFrame.Position = UDim2.new(0, 10, 0, 10)
-consoleFrame.BackgroundTransparency = 1
-consoleFrame.ScrollBarThickness = 4
-consoleFrame.Parent = ConsoleTab.Container
-
-local consoleText = Instance.new("TextLabel")
-consoleText.Size = UDim2.new(1,0,0,0)
-consoleText.BackgroundTransparency = 1
-consoleText.TextColor3 = Color3.new(1,1,1)
-consoleText.TextWrapped = true
-consoleText.TextXAlignment = Enum.TextXAlignment.Left
-consoleText.TextYAlignment = Enum.TextYAlignment.Top
-consoleText.Font = Enum.Font.SourceSans
-consoleText.TextSize = 16
-consoleText.Text = ""
-consoleText.Parent = consoleFrame
-
-local function logToConsole(message)
-    consoleText.Text = consoleText.Text .. "\n" .. message
-    consoleText.Size = UDim2.new(1,0,0,consoleText.TextBounds.Y)
-    consoleFrame.CanvasSize = UDim2.new(0,0,0,consoleText.TextBounds.Y + 20)
-end
-
--- Optionally, add a "Clear" button to the console tab
-local clearButton = Instance.new("TextButton")
-clearButton.Size = UDim2.new(0,100,0,30)
-clearButton.Position = UDim2.new(1,-110,0,10)
-clearButton.Text = "Clear"
-clearButton.Parent = ConsoleTab.Container
-clearButton.MouseButton1Click:Connect(function()
-    consoleText.Text = ""
-    consoleText.Size = UDim2.new(1,0,0,0)
-    consoleFrame.CanvasSize = UDim2.new(0,0,0,0)
-    logToConsole("Console cleared.")
-end)
-
------------------------------------------------------
 -- INITIALIZE ORIONLIB
 -----------------------------------------------------
 OrionLib:Init()
@@ -795,6 +671,7 @@ local function createMobileToggle()
             TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play()
         end
     end)
+    
     button.MouseButton1Click:Connect(function()
         AutoPassEnabled = not AutoPassEnabled
         if AutoPassEnabled then
