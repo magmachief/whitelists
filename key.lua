@@ -543,7 +543,7 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
 AutomatedTab:AddLabel("== Character Settings ==", 15)
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
-    Default = AntiSlipperyEnabled,
+    Default = "5.0",  -- change default to 1.0 or higher
     Flag = "AntiSlippery",
     Callback = function(value)
         AntiSlipperyEnabled = value
