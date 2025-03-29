@@ -579,7 +579,7 @@ UITab:AddColorpicker({
     end
 })
 
--- Farming Tab (Extra Features) -- Removed AddSection calls
+-- Farming Tab (Extra Features) -- No AddSection calls used here
 local FarmingTab = Window:MakeTab({ Name = "Farming", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 FarmingTab:AddToggle({
     Name = "Auto Farm Coins",
