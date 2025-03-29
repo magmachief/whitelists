@@ -666,7 +666,7 @@ local function createMobileToggle()
     button.TextScaled = true
     button.Font = Enum.Font.SourceSansBold
     button.TextColor3 = Color3.fromRGB(255,255,255)
-    button.ZIndex = 100
+    button.ZIndex = 60
     button.Parent = mobileGui
     
     local uicorner = Instance.new("UICorner")
