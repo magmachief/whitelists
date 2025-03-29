@@ -1,6 +1,6 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant
--- Final Consolidated Version (Extra Spin Removed, Stable FPS/MS)
+-- Final Consolidated Version (No Extra Spin, Stable FPS/Ping from Open Source v5)
 -- (Local Stats Removed)
 -- Features:
 -- • Auto Pass Bomb (Enhanced) using the default mobile thumbstick
@@ -10,7 +10,7 @@
 -- • OrionLib menu with addToggle/addTextbox (config saving enabled)
 -- • Mobile Toggle Button for Auto Pass Bomb (synced with OrionLib)
 -- • Shiftlock functionality
--- • Performance GUI (averaged FPS and MS displayed at top left)
+-- • Performance GUI (FPS and Ping updated every second from open source v5)
 -----------------------------------------------------
 
 -- SERVICES
@@ -22,55 +22,79 @@ local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
+local StatsService = game:GetService("Stats")
 
 -- LOCAL PLAYER & CHARACTER
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
 -----------------------------------------------------
--- PERFORMANCE GUI (Stable FPS & MS)
-local perfGui = Instance.new("ScreenGui")
-perfGui.Name = "PerformanceGui"
-perfGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+-- PERFORMANCE GUI (FPS & Ping from Open Source v5)
+local Main = Instance.new("ScreenGui")
+Main.Name = "Main"
+Main.Parent = LocalPlayer:WaitForChild("PlayerGui")
+Main.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+Main.ResetOnSpawn = false
+Main.DisplayOrder = 9999
 
-local fpsLabel = Instance.new("TextLabel")
-fpsLabel.Name = "FPSLabel"
-fpsLabel.Size = UDim2.new(0,100,0,20)
-fpsLabel.Position = UDim2.new(0,10,0,10)
-fpsLabel.BackgroundTransparency = 1
-fpsLabel.TextColor3 = Color3.new(1,1,1)
-fpsLabel.Font = Enum.Font.SourceSansBold
-fpsLabel.TextScaled = true
-fpsLabel.Text = "FPS: 0"
-fpsLabel.Parent = perfGui
+local FpsPingFrame = Instance.new("Frame")
+FpsPingFrame.Name = "FpsPingFrame"
+FpsPingFrame.Parent = Main
+FpsPingFrame.BackgroundColor3 = Color3.fromRGB(29, 29, 29)
+FpsPingFrame.BackgroundTransparency = 0.2
+FpsPingFrame.BorderSizePixel = 0
+FpsPingFrame.Position = UDim2.new(0.01, 0, 0.01, 0)
+FpsPingFrame.Size = UDim2.new(0, 150, 0, 50)
 
-local msLabel = Instance.new("TextLabel")
-msLabel.Name = "MSLabel"
-msLabel.Size = UDim2.new(0,100,0,20)
-msLabel.Position = UDim2.new(0,10,0,30)
-msLabel.BackgroundTransparency = 1
-msLabel.TextColor3 = Color3.new(1,1,1)
-msLabel.Font = Enum.Font.SourceSansBold
-msLabel.TextScaled = true
-msLabel.Text = "MS: 0"
-msLabel.Parent = perfGui
+local UICorner_FpsPing = Instance.new("UICorner")
+UICorner_FpsPing.CornerRadius = UDim.new(0, 8)
+UICorner_FpsPing.Parent = FpsPingFrame
 
--- Update FPS and MS every second (averaging)
-local updateInterval = 1
-local accumulatedTime = 0
-local frameCount = 0
-RunService.RenderStepped:Connect(function(dt)
-    accumulatedTime = accumulatedTime + dt
-    frameCount = frameCount + 1
-    if accumulatedTime >= updateInterval then
-        local avgFps = math.floor(frameCount / accumulatedTime)
-        local avgMs = math.floor((accumulatedTime / frameCount) * 1000)
-        fpsLabel.Text = "FPS: " .. avgFps
-        msLabel.Text = "MS: " .. avgMs
-        accumulatedTime = 0
-        frameCount = 0
+local Blur_FpsPing = Instance.new("ImageLabel")
+Blur_FpsPing.Name = "Blur_FpsPing"
+Blur_FpsPing.Parent = FpsPingFrame
+Blur_FpsPing.BackgroundTransparency = 1
+Blur_FpsPing.BorderSizePixel = 0
+Blur_FpsPing.Size = UDim2.new(1, 0, 1, 0)
+Blur_FpsPing.Image = "http://www.roblox.com/asset/?id=6758962034"
+Blur_FpsPing.ImageTransparency = 0.55
+
+local FpsLabel = Instance.new("TextLabel")
+FpsLabel.Name = "FpsLabel"
+FpsLabel.Parent = FpsPingFrame
+FpsLabel.BackgroundTransparency = 1
+FpsLabel.BorderSizePixel = 0
+FpsLabel.Position = UDim2.new(0.1, 0, 0.1, 0)
+FpsLabel.Size = UDim2.new(0.8, 0, 0.3, 0)
+FpsLabel.Font = Enum.Font.JosefinSans
+FpsLabel.Text = "FPS: 0"
+FpsLabel.TextColor3 = Color3.fromRGB(93, 255, 255)
+FpsLabel.TextSize = 14
+FpsLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local PingLabel = Instance.new("TextLabel")
+PingLabel.Name = "PingLabel"
+PingLabel.Parent = FpsPingFrame
+PingLabel.BackgroundTransparency = 1
+PingLabel.BorderSizePixel = 0
+PingLabel.Position = UDim2.new(0.1, 0, 0.5, 0)
+PingLabel.Size = UDim2.new(0.8, 0, 0.3, 0)
+PingLabel.Font = Enum.Font.JosefinSans
+PingLabel.Text = "Ping: 0ms"
+PingLabel.TextColor3 = Color3.fromRGB(93, 255, 255)
+PingLabel.TextSize = 14
+PingLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local function UpdateFpsPing()
+    while true do
+        local fps = math.floor(1 / RunService.RenderStepped:Wait())
+        FpsLabel.Text = "FPS: " .. fps
+        local ping = math.floor(StatsService.Network.ServerStatsItem["Data Ping"]:GetValue())
+        PingLabel.Text = "Ping: " .. ping .. "ms"
+        wait(1)
     end
-end)
+end
+coroutine.wrap(UpdateFpsPing)()
 
 -----------------------------------------------------
 -- CONFIGURATION VARIABLES
