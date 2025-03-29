@@ -6,7 +6,7 @@
 -- • Auto Pass Bomb (Enhanced) using the default mobile thumbstick
 -- • Anti‑Slippery with custom friction (updates every 0.5 sec)
 -- • Remove Hitbox with custom size
--- • Auto Farm Coins (fixed coin collector) & Auto Open Crates (fires remote)
+-- • Auto Farm Coins (fixed coin collector) & Auto Open Crates (fires remote; remote-check included)
 -- • OrionLib menu with addToggle/addTextbox (config saving enabled)
 -- • Mobile Toggle Button for Auto Pass Bomb (synced with OrionLib)
 -- • Shiftlock functionality
@@ -88,7 +88,7 @@ animeLabel.Parent = animeGui
 local function hideGui()
     perfGui.Enabled = false
     animeGui.Enabled = false
-    if autoPassMobileButton then
+    if autoPassMobileButton and autoPassMobileButton.Parent then
         autoPassMobileButton.Parent.Enabled = false
     end
 end
@@ -96,7 +96,7 @@ end
 local function showGui()
     perfGui.Enabled = true
     animeGui.Enabled = true
-    if autoPassMobileButton then
+    if autoPassMobileButton and autoPassMobileButton.Parent then
         autoPassMobileButton.Parent.Enabled = true
     end
 end
@@ -292,12 +292,10 @@ local function autoPassBombEnhanced()
                 AINotificationsModule.sendNotification("AI Alert", "Line-of-sight blocked! Adjust your position.")
                 return
             end
-
             TargetingModule.rotateCharacterTowardsTarget(targetPos)
             if AI_AssistanceEnabled then
                 AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name)
             end
-
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
