@@ -83,16 +83,16 @@ local updateInterval = 1
 local accumulatedTime = 0
 local frameCount = 0
 RunService.RenderStepped:Connect(function(dt)
-	accumulatedTime = accumulatedTime + dt
-	frameCount = frameCount + 1
-	if accumulatedTime >= updateInterval then
-		local avgFps = math.floor(frameCount / accumulatedTime)
-		local avgMs = math.floor((accumulatedTime / frameCount) * 1000)
-		fpsLabel.Text = "FPS: " .. avgFps
-		msLabel.Text = "MS: " .. avgMs
-		accumulatedTime = 0
-		frameCount = 0
-	end
+    accumulatedTime = accumulatedTime + dt
+    frameCount = frameCount + 1
+    if accumulatedTime >= updateInterval then
+        local avgFps = math.floor(frameCount / accumulatedTime)
+        local avgMs = math.floor((accumulatedTime / frameCount) * 1000)
+        fpsLabel.Text = "FPS: " .. avgFps
+        msLabel.Text = "MS: " .. avgMs
+        accumulatedTime = 0
+        frameCount = 0
+    end
 end)
 
 -----------------------------------------------------
@@ -129,6 +129,24 @@ else
     crateName = "Rainbow Crate"  -- update if needed
 end
 
+local function startCrateFarm()
+    crateOpenConnection = task.spawn(function()
+        while autoCrateOpenEnabled and CrateRemote do
+            pcall(function()
+                CrateRemote:FireServer(crateName)
+            end)
+            task.wait(crateOpenInterval)
+        end
+    end)
+end
+
+local function stopCrateFarm()
+    if crateOpenConnection then
+        task.cancel(crateOpenConnection)
+        crateOpenConnection = nil
+    end
+end
+
 -----------------------------------------------------
 -- MODULES & UTILITY FUNCTIONS
 local LoggingModule = {}
@@ -162,6 +180,34 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
             part.CustomPhysicalProperties = PhysicalProperties.new(frictionValue, 0.3, 0.5)
         end
     end
+end
+
+local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
+    local direction = (endPos - startPos).Unit
+    local distance = (endPos - startPos).Magnitude
+    
+    -- Check direct line of sight first
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    
+    local raycastResult = Workspace:Raycast(startPos, direction * distance, raycastParams)
+    if not raycastResult or raycastResult.Instance:IsDescendantOf(targetPart.Parent) then
+        return true
+    end
+    
+    -- If direct line is blocked, try multiple spread rays
+    for i = 1, numRaycasts do
+        local angle = math.rad(raySpreadAngle) * (i - (numRaycasts + 1)/2) / numRaycasts
+        local spreadDir = CFrame.fromAxisAngle(Vector3.new(0, 1, 0), angle) * direction
+        
+        raycastResult = Workspace:Raycast(startPos, spreadDir * distance, raycastParams)
+        if not raycastResult or raycastResult.Instance:IsDescendantOf(targetPart.Parent) then
+            return true
+        end
+    end
+    
+    return false
 end
 
 local function applyRemoveHitbox(enable)
@@ -307,7 +353,10 @@ local function startCoinFarm()
 end
 
 local function stopCoinFarm()
-    coinFarmConnection = nil
+    if coinFarmConnection then
+        task.cancel(coinFarmConnection)
+        coinFarmConnection = nil
+    end
 end
 
 -----------------------------------------------------
@@ -646,15 +695,18 @@ local function createMobileToggle()
     local mobileGui = Instance.new("ScreenGui")
     mobileGui.Name = "MobileToggleGui"
     mobileGui.Parent = game:GetService("CoreGui")
+    mobileGui.ResetOnSpawn = false
+    mobileGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
     local button = Instance.new("TextButton")
     button.Name = "AutoPassMobileToggle"
-    button.Size = UDim2.new(0,50,0,50)
-    button.Position = UDim2.new(1,-70,1,-110)
+    button.Size = UDim2.new(0,80,0,80)  -- Increased size for better visibility
+    button.Position = UDim2.new(1,-90,1,-130)  -- Adjusted position
     button.BackgroundColor3 = AutoPassEnabled and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,0,0)
     button.Text = AutoPassEnabled and "ON" or "OFF"
     button.TextScaled = true
     button.Font = Enum.Font.SourceSansBold
+    button.TextColor3 = Color3.fromRGB(255,255,255)
     button.ZIndex = 100
     button.Parent = mobileGui
     
@@ -702,11 +754,40 @@ local function createMobileToggle()
         end
     end)
     
-    return mobileGui, button
+    return button
 end
 
-local mobileGui, mobileButton = createMobileToggle()
-autoPassMobileButton = mobileButton
+-- Create the mobile button after OrionLib is initialized
+autoPassMobileButton = createMobileToggle()
+
+-----------------------------------------------------
+-- CHARACTER EVENT HANDLERS
+LocalPlayer.CharacterAdded:Connect(function(character)
+    Character = character
+    if AntiSlipperyEnabled then
+        FrictionModule.updateSlidingProperties(true)
+    end
+    if RemoveHitboxEnabled then
+        applyRemoveHitbox(true)
+    end
+end)
+
+-- Initial setup
+if AntiSlipperyEnabled then
+    FrictionModule.updateSlidingProperties(true)
+end
+if RemoveHitboxEnabled then
+    applyRemoveHitbox(true)
+end
+if AutoPassEnabled and not autoPassConnection then
+    autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
+end
+if autoFarmCoinsEnabled then
+    startCoinFarm()
+end
+if autoCrateOpenEnabled then
+    startCrateFarm()
+end
 
 -----------------------------------------------------
 -- END OF SCRIPT
