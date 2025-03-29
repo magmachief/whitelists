@@ -278,29 +278,37 @@ end
 
 -----------------------------------------------------
 -- AUTO PASS BOMB (Enhanced)
-local lastAIMessageTime = 0
-local aiMessageCooldown = 5 -- Cooldown for AI notifications
-
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
     LoggingModule.safeCall(function()
+        -- Ensure the player has a bomb
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if not bomb then return end
-        local BombEvent = bomb:FindFirstChild("RemoteEvent")
         
+        -- Ensure the bomb has a RemoteEvent for passing
+        local BombEvent = bomb:FindFirstChild("RemoteEvent")
+        if not BombEvent then return end
+        
+        -- Find the best target player
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
                            or TargetingModule.getClosestPlayer(bombPassDistance)
         
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            -- Ensure the target player doesn't already have the bomb
             if targetPlayer.Character:FindFirstChild("Bomb") then return end
+            
+            -- Calculate distance to the target
             local targetPos = targetPlayer.Character.HumanoidRootPart.Position
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance > bombPassDistance then return end
             
+            -- Find the target's collision part
             local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart")
                                    or targetPlayer.Character.HumanoidRootPart
+            if not targetCollision then return end
             
+            -- Check line of sight
             if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
                 if AI_AssistanceEnabled and tick() - lastAIMessageTime > aiMessageCooldown then
                     AINotificationsModule.sendNotification("AI Alert", "Line-of-sight blocked! Adjust your position.")
@@ -309,22 +317,20 @@ local function autoPassBombEnhanced()
                 return
             end
             
+            -- Rotate towards the target
             TargetingModule.rotateCharacterTowardsTarget(targetPos)
             
+            -- Send AI notification if cooldown has passed
             if AI_AssistanceEnabled and tick() - lastAIMessageTime > aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name)
                 lastAIMessageTime = tick()
             end
             
-            if BombEvent then
-                BombEvent:FireServer(targetPlayer.Character, targetCollision)
-            else
-                bomb.Parent = targetPlayer.Character
-            end
+            -- Pass the bomb
+            BombEvent:FireServer(targetPlayer.Character, targetCollision)
         end
     end, "autoPassBombEnhanced function")
 end
-
 -----------------------------------------------------
 -- COIN FARMING (Fixed)
 local coinFarmConnection = nil
