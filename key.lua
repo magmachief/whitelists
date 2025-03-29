@@ -1,3 +1,17 @@
+-----------------------------------------------------
+-- Ultra Advanced AI-Driven Bomb Passing Assistant
+-- Final Consolidated Version (Old AutoPass Logic, Flick/Smooth Toggle)
+-- Features:
+-- • Auto Pass Bomb (Enhanced) using the default mobile thumbstick (old logic)
+-- • Anti‑Slippery with custom friction (updates every 0.5 sec)
+-- • Remove Hitbox with custom size
+-- • Auto Farm Coins (fixed coin collector) & Auto Open Crates (fires remote; remote-check included)
+-- • OrionLib menu with config saving (using addToggle/addTextbox, including Flick/Smooth rotation toggle)
+-- • Mobile Toggle Button for Auto Pass Bomb (always visible via CoreGui)
+-- • Shiftlock functionality
+-- • Performance GUI (stable averaged FPS & MS with blur effect)
+-----------------------------------------------------
+
 -- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -18,7 +32,7 @@ local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local perfGui = Instance.new("ScreenGui")
 perfGui.Name = "PerformanceGui"
 perfGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-perfGui.ResetOnSpawn = false -- Ensures it stays visible after respawns
+perfGui.ResetOnSpawn = false
 
 local FpsPingFrame = Instance.new("Frame")
 FpsPingFrame.Name = "FpsPingFrame"
@@ -70,16 +84,16 @@ local updateInterval = 1
 local accumulatedTime = 0
 local frameCount = 0
 RunService.RenderStepped:Connect(function(dt)
-    accumulatedTime = accumulatedTime + dt
-    frameCount = frameCount + 1
-    if accumulatedTime >= updateInterval then
-        local avgFps = math.floor(frameCount / accumulatedTime)
-        local avgMs = math.floor((accumulatedTime / frameCount) * 1000)
-        fpsLabel.Text = "FPS: " .. avgFps
-        msLabel.Text = "MS: " .. avgMs
-        accumulatedTime = 0
-        frameCount = 0
-    end
+	accumulatedTime = accumulatedTime + dt
+	frameCount = frameCount + 1
+	if accumulatedTime >= updateInterval then
+		local avgFps = math.floor(frameCount / accumulatedTime)
+		local avgMs = math.floor((accumulatedTime / frameCount) * 1000)
+		fpsLabel.Text = "FPS: " .. avgFps
+		msLabel.Text = "MS: " .. avgMs
+		accumulatedTime = 0
+		frameCount = 0
+	end
 end)
 
 -----------------------------------------------------
@@ -169,32 +183,6 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 end
 
-local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
-    local direction = (endPos - startPos).Unit
-    local distance = (endPos - startPos).Magnitude
-    
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    
-    local raycastResult = Workspace:Raycast(startPos, direction * distance, raycastParams)
-    if not raycastResult or raycastResult.Instance:IsDescendantOf(targetPart.PParent) then
-        return true
-    end
-    
-    for i = 1, numRaycasts do
-        local angle = math.rad(raySpreadAngle) * (i - (numRaycasts + 1)/2) / numRaycasts
-        local spreadDir = CFrame.fromAxisAngle(Vector3.new(0, 1, 0), angle) * direction
-        
-        raycastResult = Workspace:Raycast(startPos, spreadDir * distance, raycastParams)
-        if not raycastResult or raycastResult.Instance:IsDescendantOf(targetPart.Parent) then
-            return true
-        end
-    end
-    
-    return false
-end
-
 local function applyRemoveHitbox(enable)
     local char = LocalPlayer.Character
     if not char then return end
@@ -214,7 +202,7 @@ local function applyRemoveHitbox(enable)
 end
 
 -----------------------------------------------------
--- TARGETING MODULE
+-- TARGETING MODULE (Old Version)
 local TargetingModule = {}
 local useFlickRotation = false
 local useSmoothRotation = true
@@ -277,47 +265,30 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPos)
 end
 
 -----------------------------------------------------
--- AUTO PASS BOMB (Enhanced)
-local lastAIMessageTime = 0
-local aiMessageCooldown = 5 -- Cooldown for AI notifications
-
+-- AUTO PASS BOMB (Enhanced - Old Logic)
+local autoPassConnection = nil
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
     LoggingModule.safeCall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if not bomb then return end
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
-        
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
                            or TargetingModule.getClosestPlayer(bombPassDistance)
-        
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if targetPlayer.Character:FindFirstChild("Bomb") then return end
             local targetPos = targetPlayer.Character.HumanoidRootPart.Position
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance > bombPassDistance then return end
-            
-            local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart")
-                                   or targetPlayer.Character.HumanoidRootPart
-            
-            if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
-                if AI_AssistanceEnabled and tick() - lastAIMessageTime > aiMessageCooldown then
-                    AINotificationsModule.sendNotification("AI Alert", "Line-of-sight blocked! Adjust your position.")
-                    lastAIMessageTime = tick()
-                end
-                return
-            end
-            
+            -- Old logic: No extra parent check, just rotate and pass
             TargetingModule.rotateCharacterTowardsTarget(targetPos)
-            
             if AI_AssistanceEnabled and tick() - lastAIMessageTime > aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name)
                 lastAIMessageTime = tick()
             end
-            
             if BombEvent then
-                BombEvent:FireServer(targetPlayer.Character, targetCollision)
+                BombEvent:FireServer(targetPlayer.Character, targetPlayer.Character:FindFirstChild("HumanoidRootPart"))
             else
                 bomb.Parent = targetPlayer.Character
             end
@@ -447,7 +418,6 @@ end, false, Enum.KeyCode.ButtonR2)
 -----------------------------------------------------
 -- ORIONLIB MENU (CONFIG SAVING)
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
-
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu (Full)",
     HidePremium = false,
@@ -492,7 +462,6 @@ local AntiSlipperyToggle = AutomatedTab:AddToggle({
         FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 })
-
 local AntiSlipFrictionBox = AutomatedTab:AddTextbox({
     Name = "Custom Anti‑Slippery Friction",
     Flag = "AntiSlipFriction",
@@ -506,7 +475,6 @@ local AntiSlipFrictionBox = AutomatedTab:AddTextbox({
         end
     end
 })
-
 local RemoveHitboxToggle = AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
     Flag = "RemoveHitbox",
@@ -516,7 +484,6 @@ local RemoveHitboxToggle = AutomatedTab:AddToggle({
         applyRemoveHitbox(value)
     end
 })
-
 local HitboxSizeBox = AutomatedTab:AddTextbox({
     Name = "Custom Hitbox Size",
     Flag = "HitboxSize",
@@ -537,7 +504,6 @@ local AITab = Window:MakeTab({
     Icon = "rbxassetid://7072720870",
     PremiumOnly = false
 })
-
 AITab:AddLabel("Targeting Settings")
 local AIAssistanceToggle = AITab:AddToggle({
     Name = "AI Assistance",
@@ -547,7 +513,6 @@ local AIAssistanceToggle = AITab:AddToggle({
         AI_AssistanceEnabled = value
     end
 })
-
 local BombPassDistBox = AITab:AddTextbox({
     Name = "Bomb Pass Distance",
     Flag = "BombPassDist",
@@ -558,7 +523,6 @@ local BombPassDistBox = AITab:AddTextbox({
         if num then bombPassDistance = num end
     end
 })
-
 local RaySpreadBox = AITab:AddTextbox({
     Name = "Ray Spread Angle",
     Flag = "RaySpread",
@@ -569,7 +533,6 @@ local RaySpreadBox = AITab:AddTextbox({
         if num then raySpreadAngle = num end
     end
 })
-
 local RaycastsNumBox = AITab:AddTextbox({
     Name = "Number of Raycasts",
     Flag = "RaycastsNum",
@@ -580,6 +543,52 @@ local RaycastsNumBox = AITab:AddTextbox({
         if num then numRaycasts = num end
     end
 })
+AITab:AddLabel("Rotation Settings")
+local FlickRotationToggle = AITab:AddToggle({
+    Name = "Flick Rotation",
+    Flag = "FlickRotation",
+    Default = false,
+    Callback = function(value)
+        useFlickRotation = value
+        if value then
+            useSmoothRotation = false
+        else
+            if not useSmoothRotation then
+                useSmoothRotation = true
+            end
+        end
+    end
+})
+local SmoothRotationToggle = AITab:AddToggle({
+    Name = "Smooth Rotation",
+    Flag = "SmoothRotation",
+    Default = true,
+    Callback = function(value)
+        useSmoothRotation = value
+        if value then
+            useFlickRotation = false
+        else
+            if not useFlickRotation then
+                useFlickRotation = true
+            end
+        end
+    end
+})
+
+-- UI ELEMENTS TAB
+local UITab = Window:MakeTab({
+    Name = "UI Elements",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+local MainColorPicker = UITab:AddColorpicker({
+    Name = "Menu Main Color",
+    Flag = "MainColor",
+    Default = Color3.fromRGB(255,0,0),
+    Callback = function(color)
+        OrionLib.Themes[OrionLib.SelectedTheme].Main = color
+    end
+})
 
 -- FARMING TAB
 local FarmingTab = Window:MakeTab({
@@ -587,7 +596,6 @@ local FarmingTab = Window:MakeTab({
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
-
 FarmingTab:AddLabel("Coin Farming")
 local CoinFarmToggle = FarmingTab:AddToggle({
     Name = "Auto Farm Coins",
@@ -598,7 +606,6 @@ local CoinFarmToggle = FarmingTab:AddToggle({
         if value then startCoinFarm() else stopCoinFarm() end
     end
 })
-
 local CoinFarmIntervalBox = FarmingTab:AddTextbox({
     Name = "Coin Farm Interval (sec)",
     Flag = "CoinFarmInterval",
@@ -609,7 +616,6 @@ local CoinFarmIntervalBox = FarmingTab:AddTextbox({
         if num then coinFarmInterval = num end
     end
 })
-
 FarmingTab:AddLabel("Crate Farming")
 local CrateFarmToggle = FarmingTab:AddToggle({
     Name = "Auto Open Crates",
@@ -620,7 +626,6 @@ local CrateFarmToggle = FarmingTab:AddToggle({
         if value then startCrateFarm() else stopCrateFarm() end
     end
 })
-
 local CrateOpenIntervalBox = FarmingTab:AddTextbox({
     Name = "Crate Open Interval (sec)",
     Flag = "CrateOpenInterval",
@@ -631,7 +636,6 @@ local CrateOpenIntervalBox = FarmingTab:AddTextbox({
         if num then crateOpenInterval = num end
     end
 })
-
 local CrateNameBox = FarmingTab:AddTextbox({
     Name = "Crate Type",
     Flag = "CrateName",
@@ -646,7 +650,6 @@ OrionLib:Init()
 
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS (Always Visible via CoreGui)
-local autoPassMobileButton = nil
 local function createMobileToggle()
     local mobileGui = Instance.new("ScreenGui")
     mobileGui.Name = "MobileToggleGui"
@@ -656,8 +659,8 @@ local function createMobileToggle()
     
     local button = Instance.new("TextButton")
     button.Name = "AutoPassMobileToggle"
-    button.Size = UDim2.new(0,80,0,80)  -- Increased size for better visibility
-    button.Position = UDim2.new(1,-90,1,-130)  -- Adjusted position
+    button.Size = UDim2.new(0,80,0,80)
+    button.Position = UDim2.new(1,-90,1,-130)
     button.BackgroundColor3 = AutoPassEnabled and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,0,0)
     button.Text = AutoPassEnabled and "ON" or "OFF"
     button.TextScaled = true
@@ -713,8 +716,7 @@ local function createMobileToggle()
     return button
 end
 
--- Create the mobile button after OrionLib is initialized
-autoPassMobileButton = createMobileToggle()
+local autoPassMobileButton = createMobileToggle()
 
 -----------------------------------------------------
 -- CHARACTER EVENT HANDLERS
@@ -747,4 +749,4 @@ end
 
 -----------------------------------------------------
 -- END OF SCRIPT
-print("Full script loaded with mobile auto pass button (always visible via CoreGui), coin collector, shiftlock, and all features. Enjoy!")
+print("Full script loaded with mobile auto pass button (always visible), coin collector, shiftlock, and all features. Enjoy!")
