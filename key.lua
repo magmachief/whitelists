@@ -10,6 +10,13 @@
 --      - Auto Open Crates (fires a remote to open crates)
 -- • OrionLib menu with four tabs (Automated, AI Based, UI Elements, Farming)
 -- • Shiftlock functionality
+--
+-- [NOTE] This version uses only:
+--    • AddLabel
+--    • AddToggle
+--    • AddTextbox
+--    • AddColorpicker
+-- to avoid errors in older OrionLib forks.
 -----------------------------------------------------
 
 -- SERVICES
@@ -187,7 +194,6 @@ local raySpreadAngle = 10
 local numRaycasts = 5
 local customAntiSlipperyFriction = 0.7
 local customHitboxSize = 0.1
--- (Local bomb hold stats have been removed)
 
 -----------------------------------------------------
 -- Update Friction Every 0.5 Seconds
@@ -332,7 +338,6 @@ end
 -----------------------------------------------------
 -- EXTRA FARMING FEATURES
 -----------------------------------------------------
--- Coin Farming Variables & Functions
 local autoFarmCoinsEnabled = false
 local coinFarmInterval = 1  -- seconds between collection attempts
 local coinFarmConnection = nil
@@ -364,13 +369,11 @@ local function stopCoinFarm()
     coinFarmConnection = nil
 end
 
--- Crate Farming Variables & Functions
 local autoCrateOpenEnabled = false
 local crateOpenInterval = 2  -- seconds between crate openings
 local crateOpenConnection = nil
 local crateName = "Rainbow Crate"  -- default crate type
 
--- Attempt to locate the crate remote (adjust the name if needed)
 local CrateRemote = ReplicatedStorage:FindFirstChild("CrateRemote") or ReplicatedStorage:FindFirstChild("OpenCrate")
 
 local function autoOpenCrates()
@@ -397,24 +400,25 @@ local function stopCrateFarm()
 end
 
 -----------------------------------------------------
--- ORIONLIB MENU CREATION
+-- ORIONLIB MENU (No AddSection, No AddSlider)
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
-    Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
-    HidePremium = false,
-    SaveConfig = true,
-    ConfigFolder = "YonMenu_Advanced",
-    ShowIcon = true
+    Name = "Yon Menu - No Sliders/Sections",
+    HidePremium = false
 })
 
--- Automated Settings Tab (Bomb Passing & Character Settings)
-local AutomatedTab = Window:MakeTab({ Name = "Automated Settings", Icon = "rbxassetid://4483345998", PremiumOnly = false })
-AutomatedTab:AddLabel("== Bomb Passing ==", 15)
-local orionAutoPassToggle = AutomatedTab:AddToggle({
+-- Automated Settings Tab
+local AutomatedTab = Window:MakeTab({
+    Name = "Automated Settings",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+AutomatedTab:AddLabel("Bomb Passing")
+AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Default = AutoPassEnabled,
-    Flag = "AutoPassBomb",
     Callback = function(value)
         AutoPassEnabled = value
         if value then
@@ -428,17 +432,13 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
             end
             removeTargetMarker()
         end
-        if autoPassMobileToggle and autoPassMobileToggle.Set then
-            autoPassMobileToggle:Set(value)
-        end
     end
 })
 
-AutomatedTab:AddLabel("== Character Settings ==", 15)
+AutomatedTab:AddLabel("Character Settings")
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
     Default = AntiSlipperyEnabled,
-    Flag = "AntiSlippery",
     Callback = function(value)
         AntiSlipperyEnabled = value
         FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
@@ -447,13 +447,11 @@ AutomatedTab:AddToggle({
 AutomatedTab:AddTextbox({
     Name = "Custom Anti‑Slippery Friction",
     Default = tostring(customAntiSlipperyFriction),
-    Flag = "CustomAntiSlipperyFrict",
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
         if num then
             customAntiSlipperyFriction = num
-            print("Custom Anti-Slippery Friction updated to: " .. num)
             FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
         end
     end
@@ -461,7 +459,6 @@ AutomatedTab:AddTextbox({
 AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
     Default = RemoveHitboxEnabled,
-    Flag = "RemoveHitbox",
     Callback = function(value)
         RemoveHitboxEnabled = value
         applyRemoveHitbox(value)
@@ -470,25 +467,27 @@ AutomatedTab:AddToggle({
 AutomatedTab:AddTextbox({
     Name = "Custom Hitbox Size",
     Default = tostring(customHitboxSize),
-    Flag = "CustomHitboxSize",
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
         if num then
             customHitboxSize = num
-            print("Custom Hitbox Size updated to: " .. num)
             if RemoveHitboxEnabled then applyRemoveHitbox(true) end
         end
     end
 })
 
 -- AI Based Settings Tab
-local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://7072720870", PremiumOnly = false })
-AITab:AddLabel("== Targeting Settings ==", 15)
+local AITab = Window:MakeTab({
+    Name = "AI Based Settings",
+    Icon = "rbxassetid://7072720870",
+    PremiumOnly = false
+})
+
+AITab:AddLabel("Targeting Settings")
 AITab:AddToggle({
     Name = "AI Assistance",
-    Default = false,
-    Flag = "AIAssistance",
+    Default = AI_AssistanceEnabled,
     Callback = function(value)
         AI_AssistanceEnabled = value
     end
@@ -496,7 +495,6 @@ AITab:AddToggle({
 AITab:AddTextbox({
     Name = "Bomb Pass Distance",
     Default = tostring(bombPassDistance),
-    Flag = "BombPassDistance",
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
@@ -506,7 +504,6 @@ AITab:AddTextbox({
 AITab:AddTextbox({
     Name = "Ray Spread Angle",
     Default = tostring(raySpreadAngle),
-    Flag = "RaySpreadAngle",
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
@@ -516,117 +513,116 @@ AITab:AddTextbox({
 AITab:AddTextbox({
     Name = "Number of Raycasts",
     Default = tostring(numRaycasts),
-    Flag = "NumberOfRaycasts",
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
         if num then numRaycasts = num end
     end
 })
-AITab:AddLabel("== Rotation Settings ==", 15)
-local orionFlickRotationToggle = AITab:AddToggle({
+
+AITab:AddLabel("Rotation Settings")
+AITab:AddToggle({
     Name = "Flick Rotation",
     Default = false,
-    Flag = "FlickRotation",
     Callback = function(value)
         useFlickRotation = value
         if value then
             useSmoothRotation = false
-            if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
-                orionSmoothRotationToggle:Set(false)
-            end
         else
             if not useSmoothRotation then
                 useSmoothRotation = true
-                if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
-                    orionSmoothRotationToggle:Set(true)
-                end
             end
         end
     end
 })
-local orionSmoothRotationToggle = AITab:AddToggle({
+AITab:AddToggle({
     Name = "Smooth Rotation",
     Default = true,
-    Flag = "SmoothRotation",
     Callback = function(value)
         useSmoothRotation = value
         if value then
             useFlickRotation = false
-            if orionFlickRotationToggle and orionFlickRotationToggle.Set then
-                orionFlickRotationToggle:Set(false)
-            end
         else
             if not useFlickRotation then
                 useFlickRotation = true
-                if orionFlickRotationToggle and orionFlickRotationToggle.Set then
-                    orionFlickRotationToggle:Set(true)
-                end
             end
         end
     end
 })
 
 -- UI Elements Tab
-local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
+local UITab = Window:MakeTab({
+    Name = "UI Elements",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
 UITab:AddColorpicker({
     Name = "Menu Main Color",
-    Default = Color3.fromRGB(255,0,0),
-    Flag = "MenuMainColor",
-    Save = true,
+    Default = Color3.fromRGB(255, 0, 0),
     Callback = function(color)
         OrionLib.Themes[OrionLib.SelectedTheme].Main = color
     end
 })
 
--- Farming Tab (Extra Features) -- No AddSection calls used here
-local FarmingTab = Window:MakeTab({ Name = "Farming", Icon = "rbxassetid://4483345998", PremiumOnly = false })
+-- Farming Tab
+local FarmingTab = Window:MakeTab({
+    Name = "Farming",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+FarmingTab:AddLabel("Coin Farming")
 FarmingTab:AddToggle({
     Name = "Auto Farm Coins",
     Default = autoFarmCoinsEnabled,
-    Flag = "AutoFarmCoins",
     Callback = function(value)
         autoFarmCoinsEnabled = value
         if value then
             startCoinFarm()
+        else
+            stopCoinFarm()
         end
     end
 })
-FarmingTab:AddSlider({
+FarmingTab:AddTextbox({
     Name = "Coin Farm Interval (sec)",
-    Min = 0.1,
-    Max = 5,
-    Default = coinFarmInterval,
-    Increment = 0.1,
+    Default = tostring(coinFarmInterval),
+    TextDisappear = false,
     Callback = function(value)
-        coinFarmInterval = value
+        local num = tonumber(value)
+        if num then
+            coinFarmInterval = num
+        end
     end
 })
+
+FarmingTab:AddLabel("Crate Farming")
 FarmingTab:AddToggle({
     Name = "Auto Open Crates",
     Default = autoCrateOpenEnabled,
-    Flag = "AutoOpenCrates",
     Callback = function(value)
         autoCrateOpenEnabled = value
         if value then
             startCrateFarm()
+        else
+            stopCrateFarm()
         end
     end
 })
-FarmingTab:AddSlider({
+FarmingTab:AddTextbox({
     Name = "Crate Open Interval (sec)",
-    Min = 0.5,
-    Max = 10,
-    Default = crateOpenInterval,
-    Increment = 0.5,
+    Default = tostring(crateOpenInterval),
+    TextDisappear = false,
     Callback = function(value)
-        crateOpenInterval = value
+        local num = tonumber(value)
+        if num then
+            crateOpenInterval = num
+        end
     end
 })
-FarmingTab:AddTextBox({
+FarmingTab:AddTextbox({
     Name = "Crate Type",
     Default = crateName,
-    Flag = "CrateType",
     TextDisappear = false,
     Callback = function(value)
         crateName = value
@@ -637,86 +633,6 @@ FarmingTab:AddTextBox({
 -- INITIALIZE ORIONLIB
 -----------------------------------------------------
 OrionLib:Init()
-
------------------------------------------------------
--- MOBILE TOGGLE BUTTON FOR AUTO PASS (Synchronized with menu)
------------------------------------------------------
-local autoPassMobileToggle = nil
-local function createMobileToggle()
-    local mobileGui = Instance.new("ScreenGui")
-    mobileGui.Name = "MobileToggleGui"
-    mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    
-    local button = Instance.new("TextButton")
-    button.Name = "AutoPassMobileToggle"
-    button.Size = UDim2.new(0,50,0,50)
-    button.Position = UDim2.new(1,-70,1,-110)
-    button.BackgroundColor3 = Color3.fromRGB(255,0,0)
-    button.Text = "OFF"
-    button.TextScaled = true
-    button.Font = Enum.Font.SourceSansBold
-    button.ZIndex = 100
-    button.Parent = mobileGui
-    
-    local uicorner = Instance.new("UICorner")
-    uicorner.CornerRadius = UDim.new(1,0)
-    uicorner.Parent = button
-    
-    local uistroke = Instance.new("UIStroke")
-    uistroke.Thickness = 2
-    uistroke.Color = Color3.fromRGB(0,0,0)
-    uistroke.Parent = button
-    
-    button.MouseEnter:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play()
-    end)
-    button.MouseLeave:Connect(function()
-        if AutoPassEnabled then
-            TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play()
-        else
-            TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play()
-        end
-    end)
-    
-    button.MouseButton1Click:Connect(function()
-        AutoPassEnabled = not AutoPassEnabled
-        if AutoPassEnabled then
-            button.BackgroundColor3 = Color3.fromRGB(0,255,0)
-            button.Text = "ON"
-            if orionAutoPassToggle and orionAutoPassToggle.Set then
-                orionAutoPassToggle:Set(true)
-            end
-            if not autoPassConnection then
-                autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
-            end
-        else
-            button.BackgroundColor3 = Color3.fromRGB(255,0,0)
-            button.Text = "OFF"
-            if orionAutoPassToggle and orionAutoPassToggle.Set then
-                orionAutoPassToggle:Set(false)
-            end
-            if autoPassConnection then
-                autoPassConnection:Disconnect()
-                autoPassConnection = nil
-            end
-        end
-    end)
-    
-    return mobileGui, button
-end
-
-local mobileGui, mobileToggle = createMobileToggle()
-autoPassMobileToggle = mobileToggle
-
-LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
-    if child.Name == "MobileToggleGui" then
-        wait(1)
-        if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
-            mobileGui, mobileToggle = createMobileToggle()
-            autoPassMobileToggle = mobileToggle
-        end
-    end
-end)
 
 -----------------------------------------------------
 -- SHIFTLOCK CODE
@@ -757,10 +673,10 @@ ShiftlockCursor.BackgroundTransparency = 1
 ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255,0,0)
 ShiftlockCursor.Visible = false
 
+local SL_Active = nil
 local SL_MaxLength = 900000
 local SL_EnabledOffset = CFrame.new(1.7,0,0)
 local SL_DisabledOffset = CFrame.new(-1.7,0,0)
-local SL_Active = nil
 
 ShiftLockButton.MouseButton1Click:Connect(function()
     if not SL_Active then
@@ -775,7 +691,8 @@ ShiftLockButton.MouseButton1Click:Connect(function()
                 root.CFrame = CFrame.new(root.Position, Vector3.new(
                     Workspace.CurrentCamera.CFrame.LookVector.X * SL_MaxLength,
                     root.Position.Y,
-                    Workspace.CurrentCamera.CFrame.LookVector.Z * SL_MaxLength))
+                    Workspace.CurrentCamera.CFrame.LookVector.Z * SL_MaxLength
+                ))
                 Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_EnabledOffset
                 Workspace.CurrentCamera.Focus = CFrame.fromMatrix(
                     Workspace.CurrentCamera.Focus.Position,
@@ -787,7 +704,9 @@ ShiftLockButton.MouseButton1Click:Connect(function()
     else
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChild("Humanoid")
-        if hum then hum.AutoRotate = true end
+        if hum then
+            hum.AutoRotate = true
+        end
         ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
         Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
         ShiftlockCursor.Visible = false
@@ -798,13 +717,11 @@ ShiftLockButton.MouseButton1Click:Connect(function()
     end
 end)
 
-local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(actionName, inputState, inputObject)
+ContextActionService:BindAction("ShiftLock", function(actionName, inputState)
     if inputState == Enum.UserInputState.Begin then
-        ShiftLockButton.MouseButton1Click:Fire()
+        ShiftLockButton:MouseButton1Click()
     end
     return Enum.ContextActionResult.Sink
 end, false, Enum.KeyCode.ButtonR2)
-ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8,0,0.8,0))
 
-print("Final Ultra-Advanced Bomb AI loaded. Menu, toggles (synchronized), shiftlock, friction updates, and farming features are active.")
-return {}
+print("Cleaned-up script loaded. No AddSection, no AddSlider, uses textboxes for intervals. Enjoy!")
