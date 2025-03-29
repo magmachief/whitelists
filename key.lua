@@ -2,9 +2,9 @@
 -- Ultra Advanced AI-Driven Bomb Passing Assistant
 -- Final Consolidated Version (Old AutoPass Logic, Flick/Smooth Toggle)
 -- Features:
--- • Auto Pass Bomb (Enhanced) using the default mobile thumbstick (old logic)
--- • Anti‑Slippery with custom friction (updates every 0.5 sec)
--- • Remove Hitbox with custom size
+-- • Auto Pass Bomb (Enhanced) using default mobile thumbstick (old logic)
+-- • Anti‑Slippery with custom friction (applied on character spawn via event)
+-- • Remove Hitbox with custom size (applied on character spawn via event)
 -- • Auto Farm Coins (fixed coin collector) & Auto Open Crates (fires remote; remote-check included)
 -- • OrionLib menu with config saving (using addToggle/addTextbox, including Flick/Smooth rotation toggle)
 -- • Mobile Toggle Button for Auto Pass Bomb (always visible via CoreGui)
@@ -183,6 +183,16 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 end
 
+-- Continuous update for Anti-Slippery (applied every 0.5 seconds)
+task.spawn(function()
+    while true do
+        if AntiSlipperyEnabled then
+            FrictionModule.updateSlidingProperties(true)
+        end
+        task.wait(0.5)
+    end
+end)
+
 local function applyRemoveHitbox(enable)
     local char = LocalPlayer.Character
     if not char then return end
@@ -281,7 +291,7 @@ local function autoPassBombEnhanced()
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance > bombPassDistance then return end
-            -- Old logic: No extra parent check, just rotate and pass
+            -- Old logic: rotate and pass without extra target parent check
             TargetingModule.rotateCharacterTowardsTarget(targetPos)
             if AI_AssistanceEnabled and tick() - lastAIMessageTime > aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name)
@@ -666,7 +676,7 @@ local function createMobileToggle()
     button.TextScaled = true
     button.Font = Enum.Font.SourceSansBold
     button.TextColor3 = Color3.fromRGB(255,255,255)
-    button.ZIndex = 60
+    button.ZIndex = 100
     button.Parent = mobileGui
     
     local uicorner = Instance.new("UICorner")
@@ -730,23 +740,4 @@ LocalPlayer.CharacterAdded:Connect(function(character)
     end
 end)
 
--- Initial setup
-if AntiSlipperyEnabled then
-    FrictionModule.updateSlidingProperties(true)
-end
-if RemoveHitboxEnabled then
-    applyRemoveHitbox(true)
-end
-if AutoPassEnabled and not autoPassConnection then
-    autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
-end
-if autoFarmCoinsEnabled then
-    startCoinFarm()
-end
-if autoCrateOpenEnabled then
-    startCrateFarm()
-end
-
------------------------------------------------------
--- END OF SCRIPT
-print("Full script loaded with mobile auto pass button (always visible), coin collector, shiftlock, and all features. Enjoy!")
+print("Full script loaded with mobile auto pass button (always visible via CoreGui), coin collector, shiftlock, and all features. Enjoy!")
