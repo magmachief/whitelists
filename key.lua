@@ -181,6 +181,15 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
         end
     end
 end
+-- Keep updating anti-slippery friction every 0.5 sec
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if AntiSlipperyEnabled then
+            FrictionModule.updateSlidingProperties(true)
+        end
+    end
+end)
 
 local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local direction = (endPos - startPos).Unit
@@ -561,6 +570,26 @@ local BombPassDistBox = AITab:AddTextbox({
     end
 })
 
+
+local p = AITab:AddToggle({
+    Name = "Use Flick Rotation",
+    Flag = "UseFlickRotation",
+    Default = useFlickRotation,
+    Callback = function(value)
+        useFlickRotation = value
+        if value then useSmoothRotation = false end
+    end
+})
+
+local r = AITab:AddToggle({
+    Name = "Use Smooth Rotation",
+    Flag = "UseSmoothRotation",
+    Default = useSmoothRotation,
+    Callback = function(value)
+        useSmoothRotation = value
+        if value then useFlickRotation = false end
+    end
+})
 local RaySpreadBox = AITab:AddTextbox({
     Name = "Ray Spread Angle",
     Flag = "RaySpread",
