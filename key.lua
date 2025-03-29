@@ -1,15 +1,7 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant
--- Full Script (Local Stats Removed)
--- Features:
--- • Auto Pass Bomb (Enhanced) with OrionLib menu toggle & a mobile toggle button (synced)
--- • Anti‑Slippery with custom friction (updates every 0.5s)
--- • Remove Hitbox with custom size
--- • Auto Farm Coins (simulate touch events) & Auto Open Crates (fires remote)
--- • OrionLib menu with config saving (using Flags)
--- • Shiftlock functionality
--- • Extra Spin: When you use the mobile joystick and spin its thumb, extra spin is accumulated.
---   If no spin input is detected for 0.2 seconds, extra spin resets immediately.
+-- with Custom Fixed Joystick & Extra Spin
+-- Full Integrated Script (Local Stats Removed)
 -----------------------------------------------------
 
 -- SERVICES
@@ -24,6 +16,11 @@ local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+
+-----------------------------------------------------
+-- DISABLE DEFAULT MOBILE THUMBSTICK
+-----------------------------------------------------
+LocalPlayer.DevTouchMovementMode = Enum.DevTouchMovementMode.Scriptable
 
 -----------------------------------------------------
 -- CONFIGURATION VARIABLES
@@ -44,18 +41,22 @@ local coinFarmInterval = 1
 
 local autoCrateOpenEnabled = false
 local crateOpenInterval = 2
-local crateName = "Rainbow Crate"
+local crateName = "Rainbow Crate"  -- Change if needed
 
 local aiMessageCooldown = 5
 local lastAIMessageTime = 0
 
 -----------------------------------------------------
--- EXTRA SPIN VARIABLES (for extra rotation when spinning)
+-- JOYSTICK & EXTRA SPIN VARIABLES
 -----------------------------------------------------
-local extraSpin = 0           -- extra spin in degrees (global)
-local spinMultiplier = 5      -- extra degrees per unit of angular change
-local spinResetThreshold = 0.2-- seconds to wait with no spin input before resetting extraSpin
-local lastSpinTime = tick()   -- time of last spin input
+local joystickDirection2D = Vector2.new(0, 0)  -- normalized movement vector
+local moveSpeed = 1  -- Adjust movement speed as desired
+
+-- Extra spin variables
+local extraSpin = 0         -- extra spin in degrees
+local spinMultiplier = 5    -- extra degrees per unit angular change
+local spinResetThreshold = 0.2  -- seconds with no spin input to reset extraSpin
+local lastSpinTime = tick()
 
 -----------------------------------------------------
 -- MODULES & UTILITY FUNCTIONS
@@ -65,9 +66,9 @@ function LoggingModule.logError(err, context)
     warn("[ERROR] Context: " .. tostring(context) .. " | Error: " .. tostring(err))
 end
 function LoggingModule.safeCall(func, context)
-    local success, result = pcall(func)
-    if not success then LoggingModule.logError(result, context) end
-    return success, result
+    local s, r = pcall(func)
+    if not s then LoggingModule.logError(r, context) end
+    return s, r
 end
 
 local AINotificationsModule = {}
@@ -118,7 +119,7 @@ local TargetingModule = {}
 local useFlickRotation = false
 local useSmoothRotation = true
 
-function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
+function TargetingModule.getOptimalPlayer(dist, speed)
     local bestPlayer, bestTravelTime = nil, math.huge
     local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
@@ -126,10 +127,10 @@ function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             if player.Character:FindFirstChild("Bomb") then continue end
-            local targetPos = player.Character.HumanoidRootPart.Position
-            local distance = (targetPos - myPos).Magnitude
-            if distance <= bombPassDistance then
-                local travelTime = distance / pathfindingSpeed
+            local tPos = player.Character.HumanoidRootPart.Position
+            local distance = (tPos - myPos).Magnitude
+            if distance <= dist then
+                local travelTime = distance / speed
                 if travelTime < bestTravelTime then
                     bestTravelTime = travelTime
                     bestPlayer = player
@@ -140,8 +141,8 @@ function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     return bestPlayer
 end
 
-function TargetingModule.getClosestPlayer(bombPassDistance)
-    local closestPlayer, shortestDistance = nil, bombPassDistance
+function TargetingModule.getClosestPlayer(dist)
+    local closestPlayer, shortestDistance = nil, dist
     local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
     local myPos = hrp.Position
@@ -158,12 +159,12 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     return closestPlayer
 end
 
-function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
+function TargetingModule.rotateCharacterTowardsTarget(targetPos)
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    local adjPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
+    local adjPos = Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z)
     if useFlickRotation then
         hrp.CFrame = CFrame.new(hrp.Position, adjPos)
     elseif useSmoothRotation then
@@ -178,18 +179,15 @@ end
 -----------------------------------------------------
 -- EXTRA SPIN ROTATION FUNCTION
 -----------------------------------------------------
-local function rotateCharacterWithExtraSpin(targetPosition)
+local function rotateCharacterWithExtraSpin(targetPos)
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-
-    -- Reset extraSpin if no spin input for threshold time
     if tick() - lastSpinTime > spinResetThreshold then
         extraSpin = 0
     end
-
-    local baseCFrame = CFrame.new(hrp.Position, Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z))
+    local baseCFrame = CFrame.new(hrp.Position, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))
     local extraCFrame = CFrame.Angles(0, math.rad(extraSpin), 0)
     hrp.CFrame = baseCFrame * extraCFrame
 end
@@ -210,8 +208,8 @@ function VisualModule.playPassVFX(target)
     local emitter = Instance.new("ParticleEmitter")
     emitter.Texture = "rbxassetid://258128463"
     emitter.Rate = 50
-    emitter.Lifetime = NumberRange.new(0.3, 0.5)
-    emitter.Speed = NumberRange.new(2, 5)
+    emitter.Lifetime = NumberRange.new(0.3,0.5)
+    emitter.Speed = NumberRange.new(2,5)
     emitter.VelocitySpread = 30
     emitter.Parent = hrp
     delay(1, function() emitter:Destroy() end)
@@ -231,21 +229,21 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
         rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
     end
 
-    local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
+    local centralResult = Workspace:Raycast(startPos, direction*distance, rayParams)
     if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
         return false
     end
 
-    local raysEachSide = math.floor((numRaycasts - 1) / 2)
+    local raysEachSide = math.floor((numRaycasts - 1)/2)
     for i = 1, raysEachSide do
         local angleOffset = spreadRad * i / raysEachSide
         local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), angleOffset) * CFrame.new(direction)).p
-        local leftResult = Workspace:Raycast(startPos, leftDirection * distance, rayParams)
+        local leftResult = Workspace:Raycast(startPos, leftDirection*distance, rayParams)
         if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
             return false
         end
         local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
-        local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
+        local rightResult = Workspace:Raycast(startPos, rightDirection*distance, rayParams)
         if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
             return false
         end
@@ -254,7 +252,7 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
 end
 
 -----------------------------------------------------
--- TARGET MARKER
+-- TARGET MARKER FUNCTIONS
 -----------------------------------------------------
 local currentTargetMarker, currentTargetPlayer = nil, nil
 local function removeTargetMarker()
@@ -263,12 +261,10 @@ local function removeTargetMarker()
         currentTargetMarker, currentTargetPlayer = nil, nil
     end
 end
-
 local function createOrUpdateTargetMarker(player, distance)
     if not player or not player.Character then return end
     local body = player.Character:FindFirstChild("HumanoidRootPart")
     if not body then return end
-
     if currentTargetMarker and currentTargetPlayer == player then
         local lbl = currentTargetMarker:FindFirstChildOfClass("TextLabel")
         if lbl then
@@ -276,12 +272,10 @@ local function createOrUpdateTargetMarker(player, distance)
         end
         return
     end
-
     if currentTargetMarker then
         currentTargetMarker:Destroy()
         currentTargetMarker, currentTargetPlayer = nil, nil
     end
-
     local marker = Instance.new("BillboardGui")
     marker.Name = "BombPassTargetMarker"
     marker.Adornee = body
@@ -308,18 +302,15 @@ end
 local autoPassConnection = nil
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
-
     LoggingModule.safeCall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if not bomb then
             removeTargetMarker()
             return
         end
-
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
                            or TargetingModule.getClosestPlayer(bombPassDistance)
-
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if targetPlayer.Character:FindFirstChild("Bomb") then
                 removeTargetMarker()
@@ -332,7 +323,6 @@ local function autoPassBombEnhanced()
                 removeTargetMarker()
                 return
             end
-
             local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart")
                                    or targetPlayer.Character.HumanoidRootPart
             if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
@@ -340,23 +330,19 @@ local function autoPassBombEnhanced()
                 removeTargetMarker()
                 return
             end
-
             createOrUpdateTargetMarker(targetPlayer, distance)
             VisualModule.playPassVFX(targetPlayer)
-            -- Use our rotation function that incorporates extra spin from the joystick
+            -- Use our rotation function that includes extra spin
             rotateCharacterWithExtraSpin(targetPos)
-
             if AI_AssistanceEnabled and (tick() - lastAIMessageTime) >= aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name)
                 lastAIMessageTime = tick()
             end
-
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
                 bomb.Parent = targetPlayer.Character
             end
-
             removeTargetMarker()
         else
             removeTargetMarker()
@@ -381,7 +367,6 @@ local function autoFarmCoins()
         end
     end
 end
-
 local function startCoinFarm()
     coinFarmConnection = task.spawn(function()
         while autoFarmCoinsEnabled do
@@ -390,7 +375,6 @@ local function startCoinFarm()
         end
     end)
 end
-
 local function stopCoinFarm()
     coinFarmConnection = nil
 end
@@ -400,7 +384,6 @@ end
 -----------------------------------------------------
 local crateOpenConnection = nil
 local CrateRemote = ReplicatedStorage:FindFirstChild("CrateRemote") or ReplicatedStorage:FindFirstChild("OpenCrate")
-
 local function autoOpenCrates()
     if CrateRemote then
         pcall(function()
@@ -410,7 +393,6 @@ local function autoOpenCrates()
         warn("CrateRemote not found! Check the remote's name in ReplicatedStorage.")
     end
 end
-
 local function startCrateFarm()
     crateOpenConnection = task.spawn(function()
         while autoCrateOpenEnabled do
@@ -419,13 +401,12 @@ local function startCrateFarm()
         end
     end)
 end
-
 local function stopCrateFarm()
     crateOpenConnection = nil
 end
 
 -----------------------------------------------------
--- ORIONLIB MENU (Config Saving Enabled)
+-- ORIONLIB MENU (CONFIG SAVING)
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
@@ -441,7 +422,6 @@ local AutomatedTab = Window:MakeTab({
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
-
 AutomatedTab:AddLabel("Bomb Passing")
 AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
@@ -471,7 +451,6 @@ AutomatedTab:AddToggle({
         end
     end
 })
-
 AutomatedTab:AddLabel("Character Settings")
 AutomatedTab:AddToggle({
     Name = "Anti Slippery",
@@ -524,7 +503,6 @@ local AITab = Window:MakeTab({
     Icon = "rbxassetid://7072720870",
     PremiumOnly = false
 })
-
 AITab:AddLabel("Targeting Settings")
 AITab:AddToggle({
     Name = "AI Assistance",
@@ -564,7 +542,6 @@ AITab:AddTextbox({
         if num then numRaycasts = num end
     end
 })
-
 AITab:AddLabel("Rotation Settings")
 AITab:AddToggle({
     Name = "Flick Rotation",
@@ -572,13 +549,7 @@ AITab:AddToggle({
     Default = false,
     Callback = function(value)
         useFlickRotation = value
-        if value then
-            useSmoothRotation = false
-        else
-            if not useSmoothRotation then
-                useSmoothRotation = true
-            end
-        end
+        if value then useSmoothRotation = false else if not useSmoothRotation then useSmoothRotation = true end end
     end
 })
 AITab:AddToggle({
@@ -587,13 +558,7 @@ AITab:AddToggle({
     Default = true,
     Callback = function(value)
         useSmoothRotation = value
-        if value then
-            useFlickRotation = false
-        else
-            if not useFlickRotation then
-                useFlickRotation = true
-            end
-        end
+        if value then useFlickRotation = false else if not useFlickRotation then useFlickRotation = true end end
     end
 })
 
@@ -618,7 +583,6 @@ local FarmingTab = Window:MakeTab({
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
-
 FarmingTab:AddLabel("Coin Farming")
 FarmingTab:AddToggle({
     Name = "Auto Farm Coins",
@@ -626,11 +590,7 @@ FarmingTab:AddToggle({
     Default = autoFarmCoinsEnabled,
     Callback = function(value)
         autoFarmCoinsEnabled = value
-        if value then
-            startCoinFarm()
-        else
-            stopCoinFarm()
-        end
+        if value then startCoinFarm() else stopCoinFarm() end
     end
 })
 FarmingTab:AddTextbox({
@@ -643,7 +603,6 @@ FarmingTab:AddTextbox({
         if num then coinFarmInterval = num end
     end
 })
-
 FarmingTab:AddLabel("Crate Farming")
 FarmingTab:AddToggle({
     Name = "Auto Open Crates",
@@ -651,11 +610,7 @@ FarmingTab:AddToggle({
     Default = autoCrateOpenEnabled,
     Callback = function(value)
         autoCrateOpenEnabled = value
-        if value then
-            startCrateFarm()
-        else
-            stopCrateFarm()
-        end
+        if value then startCrateFarm() else stopCrateFarm() end
     end
 })
 FarmingTab:AddTextbox({
@@ -678,104 +633,10 @@ FarmingTab:AddTextbox({
     end
 })
 
------------------------------------------------------
--- INITIALIZE ORIONLIB
------------------------------------------------------
 OrionLib:Init()
 
 -----------------------------------------------------
--- MOBILE JOYSTICK (For Extra Spin Input)
------------------------------------------------------
--- This joystick stays fixed (like Mobile Legends) and tracks its thumb's angle.
--- It updates a global extraSpin variable which is then used in the bomb pass rotation.
-local joystickGui = Instance.new("ScreenGui")
-joystickGui.Name = "FixedJoystickGui"
-joystickGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
-local joystickBg = Instance.new("Frame")
-joystickBg.Size = UDim2.new(0, 100, 0, 100)
-joystickBg.Position = UDim2.new(0, 50, 1, -150)  -- adjust position as needed
-joystickBg.BackgroundTransparency = 0.5
-joystickBg.BackgroundColor3 = Color3.new(0, 0, 0)
-joystickBg.AnchorPoint = Vector2.new(0, 1)
-joystickBg.Parent = joystickGui
-
-local joystickThumb = Instance.new("Frame")
-joystickThumb.Size = UDim2.new(0, 50, 0, 50)
-joystickThumb.Position = UDim2.new(0.5, -25, 0.5, -25)  -- centered in bg
-joystickThumb.BackgroundTransparency = 0.5
-joystickThumb.BackgroundColor3 = Color3.new(1, 1, 1)
-joystickThumb.Parent = joystickBg
-
--- Variables for joystick tracking
-local dragging = false
-local bgAbsSize = joystickBg.AbsoluteSize
-local center = Vector2.new(bgAbsSize.X/2, bgAbsSize.Y/2)
-local maxDistance = bgAbsSize.X/2  -- assuming square background
-local lastJoystickAngle = nil
-
-local function angleDiff(a, b)
-    local diff = math.abs(a - b) % 360
-    if diff > 180 then diff = 360 - diff end
-    return diff
-end
-
-local function updateThumb(touchPos)
-    local offset = touchPos - center
-    local magnitude = offset.Magnitude
-    if magnitude > maxDistance then
-        offset = offset.Unit * maxDistance
-    end
-
-    joystickThumb.Position = UDim2.new(0, center.X + offset.X - joystickThumb.AbsoluteSize.X/2,
-                                         0, center.Y + offset.Y - joystickThumb.AbsoluteSize.Y/2)
-
-    local currentAngle = math.deg(math.atan2(offset.Y, offset.X))
-    if lastJoystickAngle then
-        local deltaAngle = angleDiff(currentAngle, lastJoystickAngle)
-        if deltaAngle > 5 then  -- if significant angular change
-            extraSpin = extraSpin + deltaAngle
-            lastSpinTime = tick()
-        end
-    end
-    lastJoystickAngle = currentAngle
-end
-
-local function resetThumb()
-    joystickThumb.Position = UDim2.new(0.5, -joystickThumb.AbsoluteSize.X/2, 0.5, -joystickThumb.AbsoluteSize.Y/2)
-    lastJoystickAngle = nil
-end
-
-joystickBg.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        updateThumb(input.Position)
-        lastSpinTime = tick()
-    end
-end)
-
-joystickBg.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.Touch then
-        updateThumb(input.Position)
-    end
-end)
-
-joystickBg.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-        resetThumb()
-    end
-end)
-
--- Continuously reset extraSpin if no input is detected beyond threshold
-RunService.RenderStepped:Connect(function()
-    if tick() - lastSpinTime > spinResetThreshold then
-        extraSpin = 0
-    end
-end)
-
------------------------------------------------------
--- MOBILE TOGGLE BUTTON FOR AUTO PASS (Synced with OrionLib)
+-- MOBILE TOGGLE BUTTON FOR AUTO PASS (Synced)
 -----------------------------------------------------
 local autoPassMobileButton = nil
 local function createMobileToggle()
@@ -856,6 +717,101 @@ LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
 end)
 
 -----------------------------------------------------
+-- CUSTOM FIXED JOYSTICK FOR MOVEMENT
+-----------------------------------------------------
+local joystickGui = Instance.new("ScreenGui")
+joystickGui.Name = "FixedJoystickGui"
+joystickGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local joystickBg = Instance.new("Frame")
+joystickBg.Size = UDim2.new(0,100,0,100)
+joystickBg.Position = UDim2.new(0,20,1,-130)  -- Adjust as needed for comfort
+joystickBg.BackgroundTransparency = 0.5
+joystickBg.BackgroundColor3 = Color3.new(0,0,0)
+joystickBg.AnchorPoint = Vector2.new(0,1)
+joystickBg.Parent = joystickGui
+
+local joystickThumb = Instance.new("Frame")
+joystickThumb.Size = UDim2.new(0,50,0,50)
+joystickThumb.Position = UDim2.new(0.5,-25,0.5,-25)
+joystickThumb.BackgroundTransparency = 0.5
+joystickThumb.BackgroundColor3 = Color3.new(1,1,1)
+joystickThumb.Parent = joystickBg
+
+local dragging = false
+local bgAbsSize = joystickBg.AbsoluteSize
+local center = Vector2.new(bgAbsSize.X/2, bgAbsSize.Y/2)
+local maxDistance = bgAbsSize.X/2
+local lastAngle = nil
+
+local function angleDiff(a, b)
+    local diff = math.abs(a - b) % 360
+    if diff > 180 then diff = 360 - diff end
+    return diff
+end
+
+local function updateThumb(touchPos)
+    local offset = touchPos - center
+    local magnitude = offset.Magnitude
+    if magnitude > maxDistance then
+        offset = offset.Unit * maxDistance
+    end
+    joystickThumb.Position = UDim2.new(0, center.X + offset.X - joystickThumb.AbsoluteSize.X/2,
+                                       0, center.Y + offset.Y - joystickThumb.AbsoluteSize.Y/2)
+    local normOffset = offset / maxDistance
+    joystickDirection2D = Vector2.new(normOffset.X, -normOffset.Y)
+
+    local currentAngle = math.deg(math.atan2(offset.Y, offset.X))
+    if lastAngle then
+        local dAngle = angleDiff(currentAngle, lastAngle)
+        if dAngle > 5 then
+            extraSpin = extraSpin + dAngle * spinMultiplier
+            lastSpinTime = tick()
+        end
+    end
+    lastAngle = currentAngle
+end
+
+local function resetThumb()
+    joystickThumb.Position = UDim2.new(0.5, -25, 0.5, -25)
+    joystickDirection2D = Vector2.new(0, 0)
+    lastAngle = nil
+end
+
+joystickBg.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        updateThumb(input.Position)
+        lastSpinTime = tick()
+    end
+end)
+joystickBg.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.Touch then
+        updateThumb(input.Position)
+    end
+end)
+joystickBg.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+        resetThumb()
+    end
+end)
+
+-- Movement: move character using joystickDirection2D
+RunService.RenderStepped:Connect(function()
+    if tick() - lastSpinTime > spinResetThreshold then
+        extraSpin = 0
+    end
+    local hum = Character:FindFirstChild("Humanoid")
+    if hum then
+        local moveX = joystickDirection2D.X
+        local moveZ = joystickDirection2D.Y  -- negative Y is forward
+        local moveVector = Vector3.new(moveX, 0, moveZ) * moveSpeed
+        hum:Move(moveVector, false)
+    end
+end)
+
+-----------------------------------------------------
 -- SHIFTLOCK CODE
 -----------------------------------------------------
 local ShiftLockScreenGui = Instance.new("ScreenGui")
@@ -925,9 +881,7 @@ ShiftLockButton.MouseButton1Click:Connect(function()
     else
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChild("Humanoid")
-        if hum then
-            hum.AutoRotate = true
-        end
+        if hum then hum.AutoRotate = true end
         ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
         Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
         ShiftlockCursor.Visible = false
@@ -945,4 +899,4 @@ ContextActionService:BindAction("ShiftLock", function(_, inputState)
     return Enum.ContextActionResult.Sink
 end, false, Enum.KeyCode.ButtonR2)
 
-print("Full script loaded with config saving, mobile joystick extra spin, mobile toggle, shiftlock, and all features. Enjoy!")
+print("Full script loaded with joystick movement, extra spin, bomb passing, config saving, shiftlock, and all features. Enjoy!")
