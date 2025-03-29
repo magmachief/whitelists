@@ -1,17 +1,3 @@
------------------------------------------------------
--- Ultra Advanced AI-Driven Bomb Passing Assistant
--- Final Consolidated Version (No Extra Spin)
--- Features:
--- • Auto Pass Bomb (Enhanced) using default mobile thumbstick
--- • Anti‑Slippery with custom friction (updates every 0.5 sec)
--- • Remove Hitbox with custom size
--- • Auto Farm Coins (fixed coin collector) & Auto Open Crates (fires remote; remote-check included)
--- • OrionLib menu with config saving (using addToggle/addTextbox)
--- • Mobile Toggle Button for Auto Pass Bomb (always visible via CoreGui)
--- • Shiftlock functionality
--- • Performance GUI (stable averaged FPS & MS with blur effect)
------------------------------------------------------
-
 -- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -32,6 +18,7 @@ local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local perfGui = Instance.new("ScreenGui")
 perfGui.Name = "PerformanceGui"
 perfGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+perfGui.ResetOnSpawn = false -- Ensures it stays visible after respawns
 
 local FpsPingFrame = Instance.new("Frame")
 FpsPingFrame.Name = "FpsPingFrame"
@@ -186,17 +173,15 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local direction = (endPos - startPos).Unit
     local distance = (endPos - startPos).Magnitude
     
-    -- Check direct line of sight first
     local raycastParams = RaycastParams.new()
     raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
     raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
     
     local raycastResult = Workspace:Raycast(startPos, direction * distance, raycastParams)
-    if not raycastResult or raycastResult.Instance:IsDescendantOf(targetPart.Parent) then
+    if not raycastResult or raycastResult.Instance:IsDescendantOf(targetPart.PParent) then
         return true
     end
     
-    -- If direct line is blocked, try multiple spread rays
     for i = 1, numRaycasts do
         local angle = math.rad(raySpreadAngle) * (i - (numRaycasts + 1)/2) / numRaycasts
         local spreadDir = CFrame.fromAxisAngle(Vector3.new(0, 1, 0), angle) * direction
@@ -293,31 +278,44 @@ end
 
 -----------------------------------------------------
 -- AUTO PASS BOMB (Enhanced)
-local autoPassConnection = nil
+local lastAIMessageTime = 0
+local aiMessageCooldown = 5 -- Cooldown for AI notifications
+
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
     LoggingModule.safeCall(function()
         local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if not bomb then return end
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
+        
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
                            or TargetingModule.getClosestPlayer(bombPassDistance)
+        
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if targetPlayer.Character:FindFirstChild("Bomb") then return end
             local targetPos = targetPlayer.Character.HumanoidRootPart.Position
             local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance > bombPassDistance then return end
+            
             local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart")
                                    or targetPlayer.Character.HumanoidRootPart
+            
             if not isLineOfSightClearMultiple(myPos, targetPos, targetCollision) then
-                AINotificationsModule.sendNotification("AI Alert", "Line-of-sight blocked! Adjust your position.")
+                if AI_AssistanceEnabled and tick() - lastAIMessageTime > aiMessageCooldown then
+                    AINotificationsModule.sendNotification("AI Alert", "Line-of-sight blocked! Adjust your position.")
+                    lastAIMessageTime = tick()
+                end
                 return
             end
+            
             TargetingModule.rotateCharacterTowardsTarget(targetPos)
-            if AI_AssistanceEnabled then
+            
+            if AI_AssistanceEnabled and tick() - lastAIMessageTime > aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name)
+                lastAIMessageTime = tick()
             end
+            
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
