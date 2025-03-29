@@ -277,6 +277,10 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPos)
 end
 
 -----------------------------------------------------
+-- AUTO PASS BOMB (Enhanced)
+local lastAIMessageTime = 0
+local aiMessageCooldown = 5 -- Cooldown for AI notifications
+
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
     LoggingModule.safeCall(function()
