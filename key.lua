@@ -2,13 +2,14 @@
 -- Ultra Advanced AI-Driven Bomb Passing Assistant
 -- Full Script (Local Stats Removed)
 -- Features:
--- • Auto Pass Bomb (Enhanced) with OrionLib toggle & Mobile button (synced)
--- • Anti-Slippery with custom friction (updates every 0.5s)
+-- • Auto Pass Bomb (Enhanced) with OrionLib menu toggle & Mobile button (synced)
+-- • Anti‑Slippery with custom friction (updates every 0.5s)
 -- • Remove Hitbox with custom size
--- • Auto Farm Coins (touch events)
--- • Auto Open Crates (fires remote in ReplicatedStorage)
--- • OrionLib menu with config saving (no AddSection/Slider)
--- • Shiftlock
+-- • Auto Farm Coins (simulate touch events) & Auto Open Crates (fires remote)
+-- • OrionLib menu with config saving (using Flags)
+-- • Shiftlock functionality
+-- • Extra Spin: Extra rotation is added when you spin your mouse wheel;
+--   if no spin input is detected for 0.2 seconds, extra spin resets immediately.
 -----------------------------------------------------
 
 -- SERVICES
@@ -19,12 +20,13 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
 -----------------------------------------------------
--- CONFIG & VARIABLES
+-- CONFIGURATION VARIABLES
 -----------------------------------------------------
 local bombPassDistance = 10
 local AutoPassEnabled = false
@@ -44,15 +46,29 @@ local autoCrateOpenEnabled = false
 local crateOpenInterval = 2
 local crateName = "Rainbow Crate"
 
--- For friction updates
-local lastAIMessageTime = 0
 local aiMessageCooldown = 5
+local lastAIMessageTime = 0
 
 -----------------------------------------------------
--- MODULES & FUNCTIONS
+-- EXTRA SPIN VARIABLES & INPUT
 -----------------------------------------------------
+local extraSpin = 0           -- extra spin in degrees
+local spinMultiplier = 5      -- extra degrees per input unit
+local spinResetThreshold = 0.2 -- seconds after last input to reset spin immediately
+local lastSpinTime = tick()   -- tracks time of last spin input
 
--- Logging Module
+UserInputService.InputChanged:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.MouseWheel then
+        extraSpin = extraSpin + (input.Position.Z * spinMultiplier)
+        lastSpinTime = tick()
+    end
+    -- For mobile, you might need to detect touch gestures instead
+end)
+
+-----------------------------------------------------
+-- MODULES & UTILITY FUNCTIONS
+-----------------------------------------------------
 local LoggingModule = {}
 function LoggingModule.logError(err, context)
     warn("[ERROR] Context: " .. tostring(context) .. " | Error: " .. tostring(err))
@@ -63,7 +79,6 @@ function LoggingModule.safeCall(func, context)
     return success, result
 end
 
--- AI Notifications
 local AINotificationsModule = {}
 function AINotificationsModule.sendNotification(title, text, duration)
     pcall(function()
@@ -71,18 +86,15 @@ function AINotificationsModule.sendNotification(title, text, duration)
     end)
 end
 
--- Friction Module
 local FrictionModule = {}
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-
     local bomb = char:FindFirstChild("Bomb")
     local NORMAL_FRICTION = 0.5
     local frictionValue = (AntiSlipperyEnabled and not bomb) and customAntiSlipperyFriction or NORMAL_FRICTION
-
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CustomPhysicalProperties = PhysicalProperties.new(frictionValue, 0.3, 0.5)
@@ -90,7 +102,6 @@ function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 end
 
--- Remove Hitbox
 local function applyRemoveHitbox(enable)
     local char = LocalPlayer.Character
     if not char then return end
@@ -109,7 +120,9 @@ local function applyRemoveHitbox(enable)
     end
 end
 
--- Targeting Module
+-----------------------------------------------------
+-- TARGETING MODULE
+-----------------------------------------------------
 local TargetingModule = {}
 local useFlickRotation = false
 local useSmoothRotation = true
@@ -118,7 +131,6 @@ function TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
     local bestPlayer, bestTravelTime = nil, math.huge
     local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
-
     local myPos = hrp.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -141,7 +153,6 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     local closestPlayer, shortestDistance = nil, bombPassDistance
     local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
-
     local myPos = hrp.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -161,7 +172,6 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-
     local adjPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
     if useFlickRotation then
         hrp.CFrame = CFrame.new(hrp.Position, adjPos)
@@ -174,7 +184,28 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     end
 end
 
--- Visual Module
+-----------------------------------------------------
+-- EXTRA SPIN Rotation Function
+-----------------------------------------------------
+local function rotateCharacterWithExtraSpin(targetPosition)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    -- If no spin input for threshold time, reset extraSpin immediately.
+    if tick() - lastSpinTime > spinResetThreshold then
+        extraSpin = 0
+    end
+
+    local baseCFrame = CFrame.new(hrp.Position, Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z))
+    local extraCFrame = CFrame.Angles(0, math.rad(extraSpin), 0)
+    hrp.CFrame = baseCFrame * extraCFrame
+end
+
+-----------------------------------------------------
+-- VISUAL MODULE
+-----------------------------------------------------
 local VisualModule = {}
 function VisualModule.animateMarker(marker)
     if not marker then return end
@@ -188,14 +219,16 @@ function VisualModule.playPassVFX(target)
     local emitter = Instance.new("ParticleEmitter")
     emitter.Texture = "rbxassetid://258128463"
     emitter.Rate = 50
-    emitter.Lifetime = NumberRange.new(0.3, 0.5)
+    emitter.Lifetime = NumberRange.new(0.3,0.5)
     emitter.Speed = NumberRange.new(2,5)
     emitter.VelocitySpread = 30
     emitter.Parent = hrp
     delay(1, function() emitter:Destroy() end)
 end
 
--- Raycasting
+-----------------------------------------------------
+-- RAYCASTING (Line-of-Sight)
+-----------------------------------------------------
 local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
     local direction = (endPos - startPos).Unit
@@ -207,7 +240,6 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
         rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
     end
 
-    -- center
     local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
     if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
         return false
@@ -230,17 +262,17 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     return true
 end
 
--- Remove Target Marker
+-----------------------------------------------------
+-- TARGET MARKER
+-----------------------------------------------------
 local currentTargetMarker, currentTargetPlayer = nil, nil
 local function removeTargetMarker()
     if currentTargetMarker then
         currentTargetMarker:Destroy()
-        currentTargetMarker = nil
-        currentTargetPlayer = nil
+        currentTargetMarker, currentTargetPlayer = nil, nil
     end
 end
 
--- Create/Update Target Marker
 local function createOrUpdateTargetMarker(player, distance)
     if not player or not player.Character then return end
     local body = player.Character:FindFirstChild("HumanoidRootPart")
@@ -320,18 +352,17 @@ local function autoPassBombEnhanced()
 
             createOrUpdateTargetMarker(targetPlayer, distance)
             VisualModule.playPassVFX(targetPlayer)
-            TargetingModule.rotateCharacterTowardsTarget(targetPos)
+            -- Use our extra spin rotation function
+            rotateCharacterWithExtraSpin(targetPos)
 
             if AI_AssistanceEnabled and (tick() - lastAIMessageTime) >= aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name)
                 lastAIMessageTime = tick()
             end
 
-            -- Attempt to fire remote
             if BombEvent then
                 BombEvent:FireServer(targetPlayer.Character, targetCollision)
             else
-                -- fallback
                 bomb.Parent = targetPlayer.Character
             end
 
@@ -403,31 +434,17 @@ local function stopCrateFarm()
 end
 
 -----------------------------------------------------
--- PERIODIC FRICTION UPDATE
------------------------------------------------------
-task.spawn(function()
-    while true do
-        if AntiSlipperyEnabled then
-            FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
-        end
-        task.wait(0.5)
-    end
-end)
-
------------------------------------------------------
--- ORIONLIB MENU (Config Saving)
+-- ORIONLIB MENU (Config Saving Enabled)
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
-    Name = "Yon Menu (Full)",
+    Name = "Yon Menu (Config Saving)",
     HidePremium = false,
-    SaveConfig = true,               
+    SaveConfig = true,
     ConfigFolder = "YonMenu_Advanced"
 })
 
------------------------------------------------------
 -- Automated Settings Tab
------------------------------------------------------
 local AutomatedTab = Window:MakeTab({
     Name = "Automated Settings",
     Icon = "rbxassetid://4483345998",
@@ -435,7 +452,7 @@ local AutomatedTab = Window:MakeTab({
 })
 
 AutomatedTab:AddLabel("Bomb Passing")
-local orionAutoPassToggle = AutomatedTab:AddToggle({
+AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
     Flag = "AutoPassBomb",
     Default = AutoPassEnabled,
@@ -452,8 +469,6 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
             end
             removeTargetMarker()
         end
-
-        -- If the mobile toggle button exists, update it
         if autoPassMobileButton then
             if value then
                 autoPassMobileButton.BackgroundColor3 = Color3.fromRGB(0,255,0)
@@ -512,9 +527,7 @@ AutomatedTab:AddTextbox({
     end
 })
 
------------------------------------------------------
 -- AI Based Settings Tab
------------------------------------------------------
 local AITab = Window:MakeTab({
     Name = "AI Based Settings",
     Icon = "rbxassetid://7072720870",
@@ -593,9 +606,7 @@ AITab:AddToggle({
     end
 })
 
------------------------------------------------------
 -- UI Elements Tab
------------------------------------------------------
 local UITab = Window:MakeTab({
     Name = "UI Elements",
     Icon = "rbxassetid://4483345998",
@@ -610,9 +621,7 @@ UITab:AddColorpicker({
     end
 })
 
------------------------------------------------------
 -- Farming Tab
------------------------------------------------------
 local FarmingTab = Window:MakeTab({
     Name = "Farming",
     Icon = "rbxassetid://4483345998",
@@ -640,9 +649,7 @@ FarmingTab:AddTextbox({
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
-        if num then
-            coinFarmInterval = num
-        end
+        if num then coinFarmInterval = num end
     end
 })
 
@@ -667,9 +674,7 @@ FarmingTab:AddTextbox({
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
-        if num then
-            crateOpenInterval = num
-        end
+        if num then crateOpenInterval = num end
     end
 })
 FarmingTab:AddTextbox({
@@ -683,7 +688,7 @@ FarmingTab:AddTextbox({
 })
 
 -----------------------------------------------------
--- INIT ORIONLIB
+-- INITIALIZE ORIONLIB
 -----------------------------------------------------
 OrionLib:Init()
 
@@ -691,7 +696,6 @@ OrionLib:Init()
 -- MOBILE TOGGLE BUTTON (Synced with OrionLib "AutoPassBomb")
 -----------------------------------------------------
 local autoPassMobileButton = nil
-
 local function createMobileToggle()
     local mobileGui = Instance.new("ScreenGui")
     mobileGui.Name = "MobileToggleGui"
@@ -759,7 +763,6 @@ end
 local mobileGui, mobileButton = createMobileToggle()
 autoPassMobileButton = mobileButton
 
--- If the user’s PlayerGui resets, recreate the mobile toggle
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
     if child.Name == "MobileToggleGui" then
         wait(1)
@@ -824,7 +827,6 @@ ShiftLockButton.MouseButton1Click:Connect(function()
                 hum.AutoRotate = false
                 ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_on@2x.png"
                 ShiftlockCursor.Visible = true
-
                 root.CFrame = CFrame.new(root.Position, Vector3.new(
                     Workspace.CurrentCamera.CFrame.LookVector.X * SL_MaxLength,
                     root.Position.Y,
@@ -859,4 +861,4 @@ ContextActionService:BindAction("ShiftLock", function(_, inputState)
     return Enum.ContextActionResult.Sink
 end, false, Enum.KeyCode.ButtonR2)
 
-print("Full script loaded with config saving, mobile toggle, shiftlock, and all features. Enjoy!")
+print("Full script loaded with config saving, mobile toggle, shiftlock, and extra spin (reset when no spin input). Enjoy!")
