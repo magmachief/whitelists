@@ -1,6 +1,7 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant
--- with Custom Fixed Joystick & Extra Spin
+-- with Default Thumbstick Extra Spin Detection
+-- and Fixed Coin Collector
 -- Full Integrated Script (Local Stats Removed)
 -----------------------------------------------------
 
@@ -47,16 +48,13 @@ local aiMessageCooldown = 5
 local lastAIMessageTime = 0
 
 -----------------------------------------------------
--- JOYSTICK & EXTRA SPIN VARIABLES
+-- EXTRA SPIN VARIABLES & MOVE DIRECTION DETECTION
 -----------------------------------------------------
-local joystickDirection2D = Vector2.new(0, 0)  -- normalized movement vector
-local moveSpeed = 1  -- Adjust movement speed as desired
-
--- Extra spin variables
 local extraSpin = 0         -- extra spin in degrees
-local spinMultiplier = 5    -- extra degrees per unit angular change
-local spinResetThreshold = 0.2  -- seconds with no spin input to reset extraSpin
+local spinMultiplier = 5    -- multiplier for spin accumulation
+local spinResetThreshold = 0.2  -- seconds with no rapid change to reset extraSpin
 local lastSpinTime = tick()
+local lastMoveAngle = nil   -- last recorded move angle from default thumbstick
 
 -----------------------------------------------------
 -- MODULES & UTILITY FUNCTIONS
@@ -128,9 +126,9 @@ function TargetingModule.getOptimalPlayer(dist, speed)
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             if player.Character:FindFirstChild("Bomb") then continue end
             local tPos = player.Character.HumanoidRootPart.Position
-            local distance = (tPos - myPos).Magnitude
-            if distance <= dist then
-                local travelTime = distance / speed
+            local d = (tPos - myPos).Magnitude
+            if d <= dist then
+                local travelTime = d / speed
                 if travelTime < bestTravelTime then
                     bestTravelTime = travelTime
                     bestPlayer = player
@@ -149,9 +147,9 @@ function TargetingModule.getClosestPlayer(dist)
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             if player.Character:FindFirstChild("Bomb") then continue end
-            local distance = (player.Character.HumanoidRootPart.Position - myPos).Magnitude
-            if distance < shortestDistance then
-                shortestDistance = distance
+            local d = (player.Character.HumanoidRootPart.Position - myPos).Magnitude
+            if d < shortestDistance then
+                shortestDistance = d
                 closestPlayer = player
             end
         end
@@ -208,8 +206,8 @@ function VisualModule.playPassVFX(target)
     local emitter = Instance.new("ParticleEmitter")
     emitter.Texture = "rbxassetid://258128463"
     emitter.Rate = 50
-    emitter.Lifetime = NumberRange.new(0.3,0.5)
-    emitter.Speed = NumberRange.new(2,5)
+    emitter.Lifetime = NumberRange.new(0.3, 0.5)
+    emitter.Speed = NumberRange.new(2, 5)
     emitter.VelocitySpread = 30
     emitter.Parent = hrp
     delay(1, function() emitter:Destroy() end)
@@ -222,28 +220,25 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
     local direction = (endPos - startPos).Unit
     local distance = (endPos - startPos).Magnitude
-
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
     if LocalPlayer.Character then
         rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
     end
-
-    local centralResult = Workspace:Raycast(startPos, direction*distance, rayParams)
+    local centralResult = Workspace:Raycast(startPos, direction * distance, rayParams)
     if centralResult and not centralResult.Instance:IsDescendantOf(targetPart.Parent) then
         return false
     end
-
-    local raysEachSide = math.floor((numRaycasts - 1)/2)
+    local raysEachSide = math.floor((numRaycasts - 1) / 2)
     for i = 1, raysEachSide do
         local angleOffset = spreadRad * i / raysEachSide
         local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), angleOffset) * CFrame.new(direction)).p
-        local leftResult = Workspace:Raycast(startPos, leftDirection*distance, rayParams)
+        local leftResult = Workspace:Raycast(startPos, leftDirection * distance, rayParams)
         if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then
             return false
         end
         local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
-        local rightResult = Workspace:Raycast(startPos, rightDirection*distance, rayParams)
+        local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
         if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then
             return false
         end
@@ -297,13 +292,43 @@ local function createOrUpdateTargetMarker(player, distance)
 end
 
 -----------------------------------------------------
+-- EXTRA SPIN DETECTION VIA DEFAULT THUMBSTICK
+-----------------------------------------------------
+-- Use the Humanoid's MoveDirection (default thumbstick) to detect rotation
+RunService.RenderStepped:Connect(function()
+    local hum = Character:FindFirstChild("Humanoid")
+    if hum then
+        local moveDir = hum.MoveDirection  -- 3D vector
+        if moveDir.Magnitude > 0.1 then
+            -- Project to XZ plane and get angle (in degrees)
+            local currentAngle = math.deg(math.atan2(moveDir.Z, moveDir.X))
+            if lastMoveAngle then
+                local dAngle = math.abs((currentAngle - lastMoveAngle) % 360)
+                if dAngle > 180 then dAngle = 360 - dAngle end
+                if dAngle > 5 then
+                    extraSpin = extraSpin + dAngle * spinMultiplier
+                    lastSpinTime = tick()
+                end
+            end
+            lastMoveAngle = currentAngle
+        else
+            lastMoveAngle = nil
+        end
+    end
+    if tick() - lastSpinTime > spinResetThreshold then
+        extraSpin = 0
+    end
+end)
+local lastMoveAngle = nil  -- Initialize last move angle
+
+-----------------------------------------------------
 -- AUTO PASS BOMB (Enhanced)
 -----------------------------------------------------
 local autoPassConnection = nil
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
     LoggingModule.safeCall(function()
-        local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
+        local bomb = Character and Character:FindFirstChild("Bomb")
         if not bomb then
             removeTargetMarker()
             return
@@ -317,7 +342,7 @@ local function autoPassBombEnhanced()
                 return
             end
             local targetPos = targetPlayer.Character.HumanoidRootPart.Position
-            local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+            local myPos = Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance > bombPassDistance then
                 removeTargetMarker()
@@ -332,7 +357,6 @@ local function autoPassBombEnhanced()
             end
             createOrUpdateTargetMarker(targetPlayer, distance)
             VisualModule.playPassVFX(targetPlayer)
-            -- Use our rotation function that includes extra spin
             rotateCharacterWithExtraSpin(targetPos)
             if AI_AssistanceEnabled and (tick() - lastAIMessageTime) >= aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name)
@@ -351,19 +375,19 @@ local function autoPassBombEnhanced()
 end
 
 -----------------------------------------------------
--- COIN FARMING
+-- COIN FARMING (Fixed)
 -----------------------------------------------------
 local coinFarmConnection = nil
 local function autoFarmCoins()
-    local coinsFolder = Workspace:FindFirstChild("Coins") or Workspace:FindFirstChild("CoinSpawns")
-    if coinsFolder then
-        for _, coin in ipairs(coinsFolder:GetDescendants()) do
-            if coin:IsA("BasePart") and coin.Name == "Coin" then
-                pcall(function()
-                    firetouchinterest(Character.HumanoidRootPart, coin, 0)
-                    firetouchinterest(Character.HumanoidRootPart, coin, 1)
-                end)
-            end
+    local hrp = Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    -- Search entire Workspace for parts whose name contains "coin" (case-insensitive)
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Name:lower():find("coin") then
+            pcall(function()
+                firetouchinterest(hrp, obj, 0)
+                firetouchinterest(hrp, obj, 1)
+            end)
         end
     end
 end
@@ -571,7 +595,7 @@ local UITab = Window:MakeTab({
 UITab:AddColorpicker({
     Name = "Menu Main Color",
     Flag = "MainColor",
-    Default = Color3.fromRGB(255, 0, 0),
+    Default = Color3.fromRGB(255,0,0),
     Callback = function(color)
         OrionLib.Themes[OrionLib.SelectedTheme].Main = color
     end
@@ -717,101 +741,6 @@ LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
 end)
 
 -----------------------------------------------------
--- CUSTOM FIXED JOYSTICK FOR MOVEMENT
------------------------------------------------------
-local joystickGui = Instance.new("ScreenGui")
-joystickGui.Name = "FixedJoystickGui"
-joystickGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
-local joystickBg = Instance.new("Frame")
-joystickBg.Size = UDim2.new(0,100,0,100)
-joystickBg.Position = UDim2.new(0,20,1,-130)  -- Adjust as needed for comfort
-joystickBg.BackgroundTransparency = 0.5
-joystickBg.BackgroundColor3 = Color3.new(0,0,0)
-joystickBg.AnchorPoint = Vector2.new(0,1)
-joystickBg.Parent = joystickGui
-
-local joystickThumb = Instance.new("Frame")
-joystickThumb.Size = UDim2.new(0,50,0,50)
-joystickThumb.Position = UDim2.new(0.5,-25,0.5,-25)
-joystickThumb.BackgroundTransparency = 0.5
-joystickThumb.BackgroundColor3 = Color3.new(1,1,1)
-joystickThumb.Parent = joystickBg
-
-local dragging = false
-local bgAbsSize = joystickBg.AbsoluteSize
-local center = Vector2.new(bgAbsSize.X/2, bgAbsSize.Y/2)
-local maxDistance = bgAbsSize.X/2
-local lastAngle = nil
-
-local function angleDiff(a, b)
-    local diff = math.abs(a - b) % 360
-    if diff > 180 then diff = 360 - diff end
-    return diff
-end
-
-local function updateThumb(touchPos)
-    local offset = touchPos - center
-    local magnitude = offset.Magnitude
-    if magnitude > maxDistance then
-        offset = offset.Unit * maxDistance
-    end
-    joystickThumb.Position = UDim2.new(0, center.X + offset.X - joystickThumb.AbsoluteSize.X/2,
-                                       0, center.Y + offset.Y - joystickThumb.AbsoluteSize.Y/2)
-    local normOffset = offset / maxDistance
-    joystickDirection2D = Vector2.new(normOffset.X, -normOffset.Y)
-
-    local currentAngle = math.deg(math.atan2(offset.Y, offset.X))
-    if lastAngle then
-        local dAngle = angleDiff(currentAngle, lastAngle)
-        if dAngle > 5 then
-            extraSpin = extraSpin + dAngle * spinMultiplier
-            lastSpinTime = tick()
-        end
-    end
-    lastAngle = currentAngle
-end
-
-local function resetThumb()
-    joystickThumb.Position = UDim2.new(0.5, -25, 0.5, -25)
-    joystickDirection2D = Vector2.new(0, 0)
-    lastAngle = nil
-end
-
-joystickBg.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        updateThumb(input.Position)
-        lastSpinTime = tick()
-    end
-end)
-joystickBg.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.Touch then
-        updateThumb(input.Position)
-    end
-end)
-joystickBg.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-        resetThumb()
-    end
-end)
-
--- Movement: move character using joystickDirection2D
-RunService.RenderStepped:Connect(function()
-    if tick() - lastSpinTime > spinResetThreshold then
-        extraSpin = 0
-    end
-    local hum = Character:FindFirstChild("Humanoid")
-    if hum then
-        local moveX = joystickDirection2D.X
-        local moveZ = joystickDirection2D.Y  -- negative Y is forward
-        local moveVector = Vector3.new(moveX, 0, moveZ) * moveSpeed
-        hum:Move(moveVector, false)
-    end
-end)
-
------------------------------------------------------
 -- SHIFTLOCK CODE
 -----------------------------------------------------
 local ShiftLockScreenGui = Instance.new("ScreenGui")
@@ -899,4 +828,4 @@ ContextActionService:BindAction("ShiftLock", function(_, inputState)
     return Enum.ContextActionResult.Sink
 end, false, Enum.KeyCode.ButtonR2)
 
-print("Full script loaded with joystick movement, extra spin, bomb passing, config saving, shiftlock, and all features. Enjoy!")
+print("Full script loaded with default thumbstick extra spin detection, bomb passing, fixed coin collector, config saving, shiftlock, and all features. Enjoy!")
