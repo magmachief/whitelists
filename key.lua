@@ -1,12 +1,14 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
--- Client-Only Version (Local Stats, No DataStore)
+-- Client-Only Version (Local Stats Removed, No DataStore)
 -- Features:
 -- • Auto Pass Bomb (Enhanced) with synchronized mobile & menu toggles
 -- • Anti‑Slippery with custom friction applied (updated every 0.5 seconds)
 -- • Remove Hitbox with custom hitbox size applied immediately
--- • Local Stats: Only your (LocalPlayer’s) average hold time is displayed via a BillboardGui
--- • OrionLib menu with three tabs (Automated, AI Based, UI Elements)
+-- • Extra Farming:
+--      - Auto Farm Coins Invisibly (simulate touch events on coins)
+--      - Auto Open Crates (fires a remote to open crates)
+-- • OrionLib menu with four tabs (Automated, AI Based, UI Elements, Farming)
 -- • Shiftlock functionality
 -----------------------------------------------------
 
@@ -18,6 +20,7 @@ local Workspace = game:GetService("Workspace")
 local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 -----------------------------------------------------
@@ -132,7 +135,7 @@ function AINotificationsModule.sendNotification(title, text, duration)
 end
 
 local FrictionModule = {}
--- We now update friction properties every 0.5 seconds (see below)
+-- Update friction properties every 0.5 seconds
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
@@ -184,7 +187,7 @@ local raySpreadAngle = 10
 local numRaycasts = 5
 local customAntiSlipperyFriction = 0.7
 local customHitboxSize = 0.1
--- Bomb timer functionality is commented out in this version
+-- (Local bomb hold stats have been removed)
 
 -----------------------------------------------------
 -- Update Friction Every 0.5 Seconds
@@ -199,124 +202,7 @@ task.spawn(function()
 end)
 
 -----------------------------------------------------
--- CLIENT-SIDE BOMB STATS (LocalPlayer Only)
------------------------------------------------------
-local PlayerData = {}
-local function createBillboardGui(player)
-    if player ~= LocalPlayer then return end  -- Only for local player
-    local character = player.Character
-    if not character then return end
-    local head = character:FindFirstChild("Head")
-    if not head then return end
-    if head:FindFirstChild("StatsDisplay") then return end
-    local billboardGui = Instance.new("BillboardGui")
-    billboardGui.Name = "StatsDisplay"
-    billboardGui.Adornee = head
-    billboardGui.Size = UDim2.new(0,120,0,25)
-    billboardGui.StudsOffset = Vector3.new(0,3,0)
-    billboardGui.AlwaysOnTop = true
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Size = UDim2.new(1,0,1,0)
-    textLabel.BackgroundTransparency = 1
-    textLabel.TextColor3 = Color3.new(1,0,0)
-    textLabel.TextScaled = false
-    textLabel.TextSize = 16
-    textLabel.Font = Enum.Font.SourceSansBold
-    textLabel.TextStrokeTransparency = 0
-    textLabel.TextStrokeColor3 = Color3.new(0,0,0)
-    textLabel.Text = "Avg Hold: 0.00 s"
-    textLabel.Parent = billboardGui
-    billboardGui.Parent = head
-end
-
-local function updateBillboardGui(player)
-    if player ~= LocalPlayer then return end  -- Only update for local player
-    local data = PlayerData[player]
-    if not data then return end
-    local avgHold = data.average or 0
-    local character = player.Character
-    if not character then return end
-    local head = character:FindFirstChild("Head")
-    if not head then return end
-    local billboardGui = head:FindFirstChild("StatsDisplay")
-    if billboardGui then
-        local textLabel = billboardGui:FindFirstChildOfClass("TextLabel")
-        if textLabel then
-            textLabel.Text = "Avg Hold: " .. string.format("%.2f", avgHold) .. " s"
-        end
-    end
-end
-
-local currentBombHolder = nil
-local bombStartTime = nil
-
-local function recordPlayerDuration(player, duration)
-    if not PlayerData[player] then
-        PlayerData[player] = { rounds = {}, totalTime = 0, numHolds = 0, average = 0 }
-    end
-    local d = PlayerData[player]
-    table.insert(d.rounds, { duration = duration })
-    d.totalTime = d.totalTime + duration
-    d.numHolds = d.numHolds + 1
-    d.average = d.totalTime / d.numHolds
-    updateBillboardGui(player)
-end
-
-local function onBombAcquired(player)
-    currentBombHolder = player
-    bombStartTime = tick()
-end
-
-local function onBombLost(player)
-    if currentBombHolder == player and bombStartTime then
-        local heldTime = tick() - bombStartTime
-        recordPlayerDuration(player, heldTime)
-        currentBombHolder = nil
-        bombStartTime = nil
-    end
-end
-
-local function monitorPlayer(player)
-    if player ~= LocalPlayer then return end  -- Only monitor local player
-    local function onCharacterAdded(character)
-        character:WaitForChild("Head", 5)
-        createBillboardGui(player)
-        updateBillboardGui(player)
-        character.ChildAdded:Connect(function(child)
-            if child.Name == "Bomb" then
-                onBombAcquired(player)
-            end
-        end)
-        character.ChildRemoved:Connect(function(child)
-            if child.Name == "Bomb" then
-                onBombLost(player)
-            end
-        end)
-        local hum = character:FindFirstChild("Humanoid")
-        if hum then
-            hum.Died:Connect(function()
-                if player == LocalPlayer and currentBombHolder == player and bombStartTime then
-                    local heldTime = tick() - bombStartTime
-                    recordPlayerDuration(player, heldTime)
-                    currentBombHolder = nil
-                    bombStartTime = nil
-                end
-            end)
-        end
-    end
-    if player.Character then
-        onCharacterAdded(player.Character)
-    end
-    player.CharacterAdded:Connect(onCharacterAdded)
-end
-
-if LocalPlayer then
-    PlayerData[LocalPlayer] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
-    monitorPlayer(LocalPlayer)
-end
-
------------------------------------------------------
--- VISUAL TARGET MARKER
+-- VISUAL TARGET MARKER (For Bomb Passing)
 -----------------------------------------------------
 local currentTargetMarker, currentTargetPlayer = nil, nil
 local function createOrUpdateTargetMarker(player, distance)
@@ -390,8 +276,9 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
 end
 
 -----------------------------------------------------
--- AUTO PASS FUNCTION
+-- AUTO PASS FUNCTION (Bomb Passing)
 -----------------------------------------------------
+local autoPassConnection = nil
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
     LoggingModule.safeCall(function()
@@ -443,6 +330,73 @@ local function autoPassBombEnhanced()
 end
 
 -----------------------------------------------------
+-- EXTRA FARMING FEATURES
+-----------------------------------------------------
+-- Coin Farming Variables & Functions
+local autoFarmCoinsEnabled = false
+local coinFarmInterval = 1  -- seconds between collection attempts
+local coinFarmConnection = nil
+
+local function autoFarmCoins()
+    local coinsFolder = Workspace:FindFirstChild("Coins") or Workspace:FindFirstChild("CoinSpawns")
+    if coinsFolder then
+        for _, coin in ipairs(coinsFolder:GetDescendants()) do
+            if coin:IsA("BasePart") and coin.Name == "Coin" then
+                pcall(function()
+                    firetouchinterest(HRP, coin, 0)
+                    firetouchinterest(HRP, coin, 1)
+                end)
+            end
+        end
+    end
+end
+
+local function startCoinFarm()
+    coinFarmConnection = task.spawn(function()
+        while autoFarmCoinsEnabled do
+            autoFarmCoins()
+            task.wait(coinFarmInterval)
+        end
+    end)
+end
+
+local function stopCoinFarm()
+    coinFarmConnection = nil
+end
+
+-- Crate Farming Variables & Functions
+local autoCrateOpenEnabled = false
+local crateOpenInterval = 2  -- seconds between crate openings
+local crateOpenConnection = nil
+local crateName = "Rainbow Crate"  -- default crate type
+
+-- Attempt to locate the crate remote (adjust the name if needed)
+local CrateRemote = ReplicatedStorage:FindFirstChild("CrateRemote") or ReplicatedStorage:FindFirstChild("OpenCrate")
+
+local function autoOpenCrates()
+    if CrateRemote then
+        pcall(function()
+            CrateRemote:FireServer(crateName)
+        end)
+    else
+        print("CrateRemote not found! Check the remote's name in ReplicatedStorage.")
+    end
+end
+
+local function startCrateFarm()
+    crateOpenConnection = task.spawn(function()
+        while autoCrateOpenEnabled do
+            autoOpenCrates()
+            task.wait(crateOpenInterval)
+        end
+    end)
+end
+
+local function stopCrateFarm()
+    crateOpenConnection = nil
+end
+
+-----------------------------------------------------
 -- ORIONLIB MENU CREATION
 -----------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
@@ -454,12 +408,8 @@ local Window = OrionLib:MakeWindow({
     ShowIcon = true
 })
 
--- Create Tabs
+-- Automated Settings Tab (Bomb Passing & Character Settings)
 local AutomatedTab = Window:MakeTab({ Name = "Automated Settings", Icon = "rbxassetid://4483345998", PremiumOnly = false })
-local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://7072720870", PremiumOnly = false })
-local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
-
--- Automated Settings Tab
 AutomatedTab:AddLabel("== Bomb Passing ==", 15)
 local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb (Enhanced)",
@@ -533,6 +483,7 @@ AutomatedTab:AddTextbox({
 })
 
 -- AI Based Settings Tab
+local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://7072720870", PremiumOnly = false })
 AITab:AddLabel("== Targeting Settings ==", 15)
 AITab:AddToggle({
     Name = "AI Assistance",
@@ -617,6 +568,7 @@ local orionSmoothRotationToggle = AITab:AddToggle({
 })
 
 -- UI Elements Tab
+local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 UITab:AddColorpicker({
     Name = "Menu Main Color",
     Default = Color3.fromRGB(255,0,0),
@@ -624,6 +576,62 @@ UITab:AddColorpicker({
     Save = true,
     Callback = function(color)
         OrionLib.Themes[OrionLib.SelectedTheme].Main = color
+    end
+})
+
+-- Farming Tab (Extra Features)
+local FarmingTab = Window:MakeTab({ Name = "Farming", Icon = "rbxassetid://123456789", PremiumOnly = false })
+FarmingTab:AddSection("Coin Farming")
+FarmingTab:AddToggle({
+    Name = "Auto Farm Coins",
+    Default = autoFarmCoinsEnabled,
+    Flag = "AutoFarmCoins",
+    Callback = function(value)
+        autoFarmCoinsEnabled = value
+        if value then
+            startCoinFarm()
+        end
+    end
+})
+FarmingTab:AddSlider({
+    Name = "Coin Farm Interval (sec)",
+    Min = 0.1,
+    Max = 5,
+    Default = coinFarmInterval,
+    Increment = 0.1,
+    Callback = function(value)
+        coinFarmInterval = value
+    end
+})
+FarmingTab:AddSection("Crate Farming")
+FarmingTab:AddToggle({
+    Name = "Auto Open Crates",
+    Default = autoCrateOpenEnabled,
+    Flag = "AutoOpenCrates",
+    Callback = function(value)
+        autoCrateOpenEnabled = value
+        if value then
+            startCrateFarm()
+        end
+    end
+})
+FarmingTab:AddSlider({
+    Name = "Crate Open Interval (sec)",
+    Min = 0.5,
+    Max = 10,
+    Default = crateOpenInterval,
+    Increment = 0.5,
+    Callback = function(value)
+        crateOpenInterval = value
+    end
+})
+FarmingTab:AddTextBox({
+    Name = "Crate Type",
+    Default = crateName,
+    Flag = "CrateType",
+    TextDisappear = false,
+    Callback = function(value)
+        crateName = value
     end
 })
 
@@ -800,5 +808,5 @@ local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a
 end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8,0,0.8,0))
 
-print("Final Ultra-Advanced Bomb AI loaded. Menu, toggles (synchronized), shiftlock, friction updates, and mobile toggle are active.")
+print("Final Ultra-Advanced Bomb AI loaded. Menu, toggles (synchronized), shiftlock, friction updates, and farming features are active.")
 return {}
