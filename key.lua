@@ -1,16 +1,16 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant
--- Final Consolidated Version with Performance GUI
+-- Final Consolidated Version (Extra Spin Removed)
 -- (Local Stats Removed)
 -- Features:
--- • Auto Pass Bomb (Enhanced) using extra spin detection from the default mobile thumbstick
+-- • Auto Pass Bomb (Enhanced) using the default mobile thumbstick
 -- • Anti‑Slippery with custom friction (updates every 0.5 sec)
 -- • Remove Hitbox with custom size
 -- • Auto Farm Coins (fixed coin collector) & Auto Open Crates (fires remote)
 -- • OrionLib menu with addToggle/addTextbox (config saving enabled)
 -- • Mobile Toggle Button for Auto Pass Bomb (synced with OrionLib)
 -- • Shiftlock functionality
--- • Performance GUI (FPS and MS displayed at top left)
+-- • Performance GUI (FPS and MS at top left) & Anime-Style GUI with hide/show when recording
 -----------------------------------------------------
 
 -- SERVICES
@@ -29,7 +29,6 @@ local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
 -----------------------------------------------------
 -- PERFORMANCE GUI (FPS & MS)
------------------------------------------------------
 local perfGui = Instance.new("ScreenGui")
 perfGui.Name = "PerformanceGui"
 perfGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
@@ -68,6 +67,55 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -----------------------------------------------------
+-- ANIME-STYLE GUI
+local animeGui = Instance.new("ScreenGui")
+animeGui.Name = "AnimeGui"
+animeGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local animeLabel = Instance.new("TextLabel")
+animeLabel.Name = "AnimeLabel"
+animeLabel.Size = UDim2.new(0,200,0,50)
+animeLabel.Position = UDim2.new(0,10,0,50)
+animeLabel.BackgroundTransparency = 1
+animeLabel.TextColor3 = Color3.new(1,1,1)
+animeLabel.Font = Enum.Font.SourceSansBold
+animeLabel.TextScaled = true
+animeLabel.Text = "Anime-Style GUI"
+animeLabel.Parent = animeGui
+
+-----------------------------------------------------
+-- HIDE/SHOW GUI WHEN RECORDING
+local function hideGui()
+    perfGui.Enabled = false
+    animeGui.Enabled = false
+    if autoPassMobileButton then
+        autoPassMobileButton.Parent.Enabled = false
+    end
+end
+
+local function showGui()
+    perfGui.Enabled = true
+    animeGui.Enabled = true
+    if autoPassMobileButton then
+        autoPassMobileButton.Parent.Enabled = true
+    end
+end
+
+if UserInputService:IsRecording() then
+    hideGui()
+else
+    showGui()
+end
+
+UserInputService.RecordingStateChanged:Connect(function(state)
+    if state == Enum.RecordingState.Started then
+        hideGui()
+    elseif state == Enum.RecordingState.Stopped then
+        showGui()
+    end
+end)
+
+-----------------------------------------------------
 -- CONFIGURATION VARIABLES
 -----------------------------------------------------
 local bombPassDistance = 10
@@ -86,19 +134,21 @@ local coinFarmInterval = 1
 
 local autoCrateOpenEnabled = false
 local crateOpenInterval = 2
-local crateName = "Rainbow Crate"  -- update if needed
+local crateName = "Rainbow Crate"
 
 local aiMessageCooldown = 5
 local lastAIMessageTime = 0
 
 -----------------------------------------------------
--- EXTRA SPIN VARIABLES (Using default mobile thumbstick)
------------------------------------------------------
-local extraSpin = 0         -- extra spin (in degrees)
-local spinMultiplier = 5    -- multiplier for spin accumulation
-local spinResetThreshold = 0.2  -- seconds with no rapid change resets extraSpin
-local lastSpinTime = tick()
-local lastMoveAngle = nil   -- last recorded angle from Humanoid.MoveDirection
+-- CRATE FARMING (Updated)
+local crateOpenConnection = nil
+local CrateRemote = ReplicatedStorage:FindFirstChild("CrateRemote") or ReplicatedStorage:FindFirstChild("OpenCrate")
+if not CrateRemote then
+    warn("CrateRemote not found! Please check the remote's name in ReplicatedStorage.")
+    crateName = "Unknown Crate"
+else
+    crateName = "Rainbow Crate"  -- update if needed
+end
 
 -----------------------------------------------------
 -- MODULES & UTILITY FUNCTIONS
@@ -108,9 +158,9 @@ function LoggingModule.logError(err, context)
     warn("[ERROR] Context: " .. tostring(context) .. " | Error: " .. tostring(err))
 end
 function LoggingModule.safeCall(func, context)
-    local success, result = pcall(func)
-    if not success then LoggingModule.logError(result, context) end
-    return success, result
+    local s, r = pcall(func)
+    if not s then LoggingModule.logError(r, context) end
+    return s, r
 end
 
 local AINotificationsModule = {}
@@ -225,7 +275,7 @@ local autoPassConnection = nil
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
     LoggingModule.safeCall(function()
-        local bomb = Character and Character:FindFirstChild("Bomb")
+        local bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
         if not bomb then return end
         local BombEvent = bomb:FindFirstChild("RemoteEvent")
         local targetPlayer = TargetingModule.getOptimalPlayer(bombPassDistance, pathfindingSpeed)
@@ -233,7 +283,7 @@ local function autoPassBombEnhanced()
         if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             if targetPlayer.Character:FindFirstChild("Bomb") then return end
             local targetPos = targetPlayer.Character.HumanoidRootPart.Position
-            local myPos = Character.HumanoidRootPart.Position
+            local myPos = LocalPlayer.Character.HumanoidRootPart.Position
             local distance = (targetPos - myPos).Magnitude
             if distance > bombPassDistance then return end
             local targetCollision = targetPlayer.Character:FindFirstChild("CollisionPart")
@@ -243,7 +293,6 @@ local function autoPassBombEnhanced()
                 return
             end
 
-            -- Rotate using the default thumbstick extra spin (if any)
             TargetingModule.rotateCharacterTowardsTarget(targetPos)
             if AI_AssistanceEnabled then
                 AINotificationsModule.sendNotification("AI Assistance", "Passing bomb to " .. targetPlayer.Name)
@@ -265,7 +314,6 @@ local coinFarmConnection = nil
 local function autoFarmCoins()
     local hrp = Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    -- Search the entire Workspace for parts whose name contains "coin"
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") and obj.Name:lower():find("coin") then
             pcall(function()
@@ -290,10 +338,17 @@ local function stopCoinFarm()
 end
 
 -----------------------------------------------------
--- CRATE FARMING
+-- CRATE FARMING (Updated)
 -----------------------------------------------------
 local crateOpenConnection = nil
 local CrateRemote = ReplicatedStorage:FindFirstChild("CrateRemote") or ReplicatedStorage:FindFirstChild("OpenCrate")
+if not CrateRemote then
+    warn("CrateRemote not found! Please check the remote's name in ReplicatedStorage.")
+    crateName = "Unknown Crate"
+else
+    crateName = "Rainbow Crate"  -- update if needed
+end
+
 local function autoOpenCrates()
     if CrateRemote then
         pcall(function()
@@ -318,32 +373,9 @@ local function stopCrateFarm()
 end
 
 -----------------------------------------------------
--- EXTRA SPIN DETECTION USING DEFAULT THUMBSTICK
+-- EXTRA SPIN DETECTION REMOVED
 -----------------------------------------------------
-RunService.RenderStepped:Connect(function()
-    local hum = Character:FindFirstChild("Humanoid")
-    if hum then
-        local moveDir = hum.MoveDirection
-        if moveDir.Magnitude > 0.1 then
-            local currentAngle = math.deg(math.atan2(moveDir.Z, moveDir.X))
-            if lastMoveAngle then
-                local dAngle = math.abs((currentAngle - lastMoveAngle) % 360)
-                if dAngle > 180 then dAngle = 360 - dAngle end
-                if dAngle > 5 then
-                    extraSpin = extraSpin + dAngle * spinMultiplier
-                    lastSpinTime = tick()
-                end
-            end
-            lastMoveAngle = currentAngle
-        else
-            lastMoveAngle = nil
-        end
-    end
-    if tick() - lastSpinTime > spinResetThreshold then
-        extraSpin = 0
-    end
-end)
-lastMoveAngle = nil
+-- (Extra spin functionality has been removed.)
 
 -----------------------------------------------------
 -- ORIONLIB MENU (CONFIG SAVING)
@@ -444,7 +476,6 @@ local AITab = Window:MakeTab({
     Icon = "rbxassetid://7072720870",
     PremiumOnly = false
 })
-
 AITab:AddLabel("Targeting Settings")
 AITab:AddToggle({
     Name = "AI Assistance",
