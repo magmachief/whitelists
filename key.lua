@@ -1,15 +1,15 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant
--- Final Consolidated Version (No Extra Spin)
+-- Final Consolidated Version (No Extra Spin, With Blurry FPS/MS)
 -- Features:
--- • Auto Pass Bomb (Enhanced) using default mobile thumbstick
+-- • Auto Pass Bomb (Enhanced) using the default mobile thumbstick
 -- • Anti‑Slippery with custom friction (updates every 0.5 sec)
 -- • Remove Hitbox with custom size
 -- • Auto Farm Coins (fixed coin collector) & Auto Open Crates (fires remote; remote-check included)
 -- • OrionLib menu with config saving (using addToggle/addTextbox)
 -- • Mobile Toggle Button for Auto Pass Bomb (synced with OrionLib)
 -- • Shiftlock functionality
--- • Performance GUI (stable FPS & MS display at top left)
+-- • Performance GUI (FPS and MS displayed in a frame with a blur effect)
 -----------------------------------------------------
 
 -- SERVICES
@@ -21,39 +21,65 @@ local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
+local StatsService = game:GetService("Stats")
 
 -- LOCAL PLAYER & CHARACTER
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
 -----------------------------------------------------
--- PERFORMANCE GUI (FPS & MS)
+-- PERFORMANCE GUI (FPS & MS with Blur Effect)
 local perfGui = Instance.new("ScreenGui")
 perfGui.Name = "PerformanceGui"
 perfGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
+local FpsPingFrame = Instance.new("Frame")
+FpsPingFrame.Name = "FpsPingFrame"
+FpsPingFrame.Parent = perfGui
+FpsPingFrame.Position = UDim2.new(0,10,0,10)
+FpsPingFrame.Size = UDim2.new(0,150,0,50)
+FpsPingFrame.BackgroundColor3 = Color3.fromRGB(29,29,29)
+FpsPingFrame.BackgroundTransparency = 0.2
+FpsPingFrame.BorderSizePixel = 0
+
+local UICorner_FpsPing = Instance.new("UICorner")
+UICorner_FpsPing.CornerRadius = UDim.new(0,8)
+UICorner_FpsPing.Parent = FpsPingFrame
+
+local Blur_FpsPing = Instance.new("ImageLabel")
+Blur_FpsPing.Name = "Blur_FpsPing"
+Blur_FpsPing.Parent = FpsPingFrame
+Blur_FpsPing.BackgroundTransparency = 1
+Blur_FpsPing.BorderSizePixel = 0
+Blur_FpsPing.Size = UDim2.new(1,0,1,0)
+Blur_FpsPing.Image = "http://www.roblox.com/asset/?id=6758962034"
+Blur_FpsPing.ImageTransparency = 0.55
+
 local fpsLabel = Instance.new("TextLabel")
 fpsLabel.Name = "FPSLabel"
-fpsLabel.Size = UDim2.new(0,100,0,20)
-fpsLabel.Position = UDim2.new(0,10,0,10)
+fpsLabel.Parent = FpsPingFrame
 fpsLabel.BackgroundTransparency = 1
-fpsLabel.TextColor3 = Color3.new(1,1,1)
-fpsLabel.Font = Enum.Font.SourceSansBold
-fpsLabel.TextScaled = true
+fpsLabel.Position = UDim2.new(0.1,0,0.1,0)
+fpsLabel.Size = UDim2.new(0.8,0,0.35,0)
+fpsLabel.Font = Enum.Font.JosefinSans
 fpsLabel.Text = "FPS: 0"
-fpsLabel.Parent = perfGui
+fpsLabel.TextColor3 = Color3.fromRGB(93,255,255)
+fpsLabel.TextSize = 14
+fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 local msLabel = Instance.new("TextLabel")
 msLabel.Name = "MSLabel"
-msLabel.Size = UDim2.new(0,100,0,20)
-msLabel.Position = UDim2.new(0,10,0,30)
+msLabel.Parent = FpsPingFrame
 msLabel.BackgroundTransparency = 1
-msLabel.TextColor3 = Color3.new(1,1,1)
-msLabel.Font = Enum.Font.SourceSansBold
-msLabel.TextScaled = true
+msLabel.Position = UDim2.new(0.1,0,0.55,0)
+msLabel.Size = UDim2.new(0.8,0,0.35,0)
+msLabel.Font = Enum.Font.JosefinSans
 msLabel.Text = "MS: 0"
-msLabel.Parent = perfGui
+msLabel.TextColor3 = Color3.fromRGB(93,255,255)
+msLabel.TextSize = 14
+msLabel.TextXAlignment = Enum.TextXAlignment.Left
 
+-- Average FPS/MS over one second for stability
 local updateInterval = 1
 local accumulatedTime = 0
 local frameCount = 0
@@ -286,7 +312,7 @@ local function stopCoinFarm()
 end
 
 -----------------------------------------------------
--- SHIFTLOCK CODE
+-- SHIFTLOCK CODE (Single Block)
 local ShiftLockScreenGui = Instance.new("ScreenGui")
 ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
 ShiftLockScreenGui.Parent = game:GetService("CoreGui")
@@ -693,91 +719,4 @@ LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
     end
 end)
 
------------------------------------------------------
--- SHIFTLOCK CODE
-local ShiftLockScreenGui = Instance.new("ScreenGui")
-ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
-ShiftLockScreenGui.Parent = game:GetService("CoreGui")
-ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ShiftLockScreenGui.ResetOnSpawn = false
-
-local ShiftLockButton = Instance.new("ImageButton")
-ShiftLockButton.Parent = ShiftLockScreenGui
-ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
-ShiftLockButton.BackgroundTransparency = 1
-ShiftLockButton.Position = UDim2.new(0.7,0,0.75,0)
-ShiftLockButton.Size = UDim2.new(0.0636,0,0.0661,0)
-ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
-ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
-
-local shiftLockUICorner = Instance.new("UICorner")
-shiftLockUICorner.CornerRadius = UDim.new(0.2,0)
-shiftLockUICorner.Parent = ShiftLockButton
-
-local shiftLockUIStroke = Instance.new("UIStroke")
-shiftLockUIStroke.Thickness = 2
-shiftLockUIStroke.Color = Color3.fromRGB(0,0,0)
-shiftLockUIStroke.Parent = ShiftLockButton
-
-local ShiftlockCursor = Instance.new("ImageLabel")
-ShiftlockCursor.Name = "Shiftlock Cursor"
-ShiftlockCursor.Parent = ShiftLockScreenGui
-ShiftlockCursor.Image = "rbxasset://textures/MouseLockedCursor.png"
-ShiftlockCursor.Size = UDim2.new(0.03,0,0.03,0)
-ShiftlockCursor.Position = UDim2.new(0.5,0,0.5,0)
-ShiftlockCursor.AnchorPoint = Vector2.new(0.5,0.5)
-ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX
-ShiftlockCursor.BackgroundTransparency = 1
-ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255,0,0)
-ShiftlockCursor.Visible = false
-
-local SL_Active = nil
-local SL_MaxLength = 900000
-local SL_EnabledOffset = CFrame.new(1.7,0,0)
-local SL_DisabledOffset = CFrame.new(-1.7,0,0)
-
-ShiftLockButton.MouseButton1Click:Connect(function()
-    if not SL_Active then
-        SL_Active = RunService.RenderStepped:Connect(function()
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChild("Humanoid")
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            if hum and root then
-                hum.AutoRotate = false
-                ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_on@2x.png"
-                ShiftlockCursor.Visible = true
-                root.CFrame = CFrame.new(root.Position, Vector3.new(
-                    Workspace.CurrentCamera.CFrame.LookVector.X * SL_MaxLength,
-                    root.Position.Y,
-                    Workspace.CurrentCamera.CFrame.LookVector.Z * SL_MaxLength
-                ))
-                Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_EnabledOffset
-                Workspace.CurrentCamera.Focus = CFrame.fromMatrix(
-                    Workspace.CurrentCamera.Focus.Position,
-                    Workspace.CurrentCamera.CFrame.RightVector,
-                    Workspace.CurrentCamera.CFrame.UpVector
-                ) * SL_EnabledOffset
-            end
-        end)
-    else
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChild("Humanoid")
-        if hum then hum.AutoRotate = true end
-        ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
-        Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
-        ShiftlockCursor.Visible = false
-        if SL_Active then
-            SL_Active:Disconnect()
-            SL_Active = nil
-        end
-    end
-end)
-
-ContextActionService:BindAction("ShiftLock", function(_, inputState)
-    if inputState == Enum.UserInputState.Begin then
-        ShiftLockButton:MouseButton1Click()
-    end
-    return Enum.ContextActionResult.Sink
-end, false, Enum.KeyCode.ButtonR2)
-
-print("Full script loaded with mobile auto pass button, coin collector, shiftlock, and all features. Enjoy!")
+print("Full script loaded with fixed coin collector, mobile auto pass button, shiftlock, and all features. Enjoy!")
