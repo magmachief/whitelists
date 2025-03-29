@@ -579,9 +579,8 @@ UITab:AddColorpicker({
     end
 })
 
--- Farming Tab (Extra Features)
-local FarmingTab = Window:MakeTab({ Name = "Farming", Icon = "rbxassetid://123456789", PremiumOnly = false })
-FarmingTab:AddSection("Coin Farming")
+-- Farming Tab (Extra Features) -- Removed AddSection calls
+local FarmingTab = Window:MakeTab({ Name = "Farming", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 FarmingTab:AddToggle({
     Name = "Auto Farm Coins",
     Default = autoFarmCoinsEnabled,
@@ -603,7 +602,6 @@ FarmingTab:AddSlider({
         coinFarmInterval = value
     end
 })
-FarmingTab:AddSection("Crate Farming")
 FarmingTab:AddToggle({
     Name = "Auto Open Crates",
     Default = autoCrateOpenEnabled,
