@@ -1,6 +1,6 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant
--- Final Consolidated Version (Extra Spin Removed)
+-- Final Consolidated Version (Extra Spin Removed, Stable FPS/MS)
 -- (Local Stats Removed)
 -- Features:
 -- • Auto Pass Bomb (Enhanced) using the default mobile thumbstick
@@ -10,7 +10,7 @@
 -- • OrionLib menu with addToggle/addTextbox (config saving enabled)
 -- • Mobile Toggle Button for Auto Pass Bomb (synced with OrionLib)
 -- • Shiftlock functionality
--- • Performance GUI (FPS and MS at top left) & Anime-Style GUI with hide/show when recording
+-- • Performance GUI (averaged FPS and MS displayed at top left)
 -----------------------------------------------------
 
 -- SERVICES
@@ -28,7 +28,7 @@ local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
 -----------------------------------------------------
--- PERFORMANCE GUI (FPS & MS)
+-- PERFORMANCE GUI (Stable FPS & MS)
 local perfGui = Instance.new("ScreenGui")
 perfGui.Name = "PerformanceGui"
 perfGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
@@ -55,69 +55,25 @@ msLabel.TextScaled = true
 msLabel.Text = "MS: 0"
 msLabel.Parent = perfGui
 
-local lastRenderTime = tick()
-RunService.RenderStepped:Connect(function()
-    local now = tick()
-    local dt = now - lastRenderTime
-    lastRenderTime = now
-    local fps = math.floor(1 / dt)
-    local ms = math.floor(dt * 1000)
-    fpsLabel.Text = "FPS: " .. fps
-    msLabel.Text = "MS: " .. ms
-end)
-
------------------------------------------------------
--- ANIME-STYLE GUI
-local animeGui = Instance.new("ScreenGui")
-animeGui.Name = "AnimeGui"
-animeGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
-local animeLabel = Instance.new("TextLabel")
-animeLabel.Name = "AnimeLabel"
-animeLabel.Size = UDim2.new(0,200,0,50)
-animeLabel.Position = UDim2.new(0,10,0,50)
-animeLabel.BackgroundTransparency = 1
-animeLabel.TextColor3 = Color3.new(1,1,1)
-animeLabel.Font = Enum.Font.SourceSansBold
-animeLabel.TextScaled = true
-animeLabel.Text = "Anime-Style GUI"
-animeLabel.Parent = animeGui
-
------------------------------------------------------
--- HIDE/SHOW GUI WHEN RECORDING
-local function hideGui()
-    perfGui.Enabled = false
-    animeGui.Enabled = false
-    if autoPassMobileButton and autoPassMobileButton.Parent then
-        autoPassMobileButton.Parent.Enabled = false
-    end
-end
-
-local function showGui()
-    perfGui.Enabled = true
-    animeGui.Enabled = true
-    if autoPassMobileButton and autoPassMobileButton.Parent then
-        autoPassMobileButton.Parent.Enabled = true
-    end
-end
-
-if UserInputService:IsRecording() then
-    hideGui()
-else
-    showGui()
-end
-
-UserInputService.RecordingStateChanged:Connect(function(state)
-    if state == Enum.RecordingState.Started then
-        hideGui()
-    elseif state == Enum.RecordingState.Stopped then
-        showGui()
+-- Update FPS and MS every second (averaging)
+local updateInterval = 1
+local accumulatedTime = 0
+local frameCount = 0
+RunService.RenderStepped:Connect(function(dt)
+    accumulatedTime = accumulatedTime + dt
+    frameCount = frameCount + 1
+    if accumulatedTime >= updateInterval then
+        local avgFps = math.floor(frameCount / accumulatedTime)
+        local avgMs = math.floor((accumulatedTime / frameCount) * 1000)
+        fpsLabel.Text = "FPS: " .. avgFps
+        msLabel.Text = "MS: " .. avgMs
+        accumulatedTime = 0
+        frameCount = 0
     end
 end)
 
 -----------------------------------------------------
 -- CONFIGURATION VARIABLES
------------------------------------------------------
 local bombPassDistance = 10
 local AutoPassEnabled = false
 local AntiSlipperyEnabled = false
@@ -152,7 +108,6 @@ end
 
 -----------------------------------------------------
 -- MODULES & UTILITY FUNCTIONS
------------------------------------------------------
 local LoggingModule = {}
 function LoggingModule.logError(err, context)
     warn("[ERROR] Context: " .. tostring(context) .. " | Error: " .. tostring(err))
@@ -206,7 +161,6 @@ end
 
 -----------------------------------------------------
 -- TARGETING MODULE
------------------------------------------------------
 local TargetingModule = {}
 local useFlickRotation = false
 local useSmoothRotation = true
@@ -270,7 +224,6 @@ end
 
 -----------------------------------------------------
 -- AUTO PASS BOMB (Enhanced)
------------------------------------------------------
 local autoPassConnection = nil
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
@@ -307,7 +260,6 @@ end
 
 -----------------------------------------------------
 -- COIN FARMING (Fixed)
------------------------------------------------------
 local coinFarmConnection = nil
 local function autoFarmCoins()
     local hrp = Character:FindFirstChild("HumanoidRootPart")
@@ -336,48 +288,94 @@ local function stopCoinFarm()
 end
 
 -----------------------------------------------------
--- CRATE FARMING (Updated)
------------------------------------------------------
-local crateOpenConnection = nil
-local CrateRemote = ReplicatedStorage:FindFirstChild("CrateRemote") or ReplicatedStorage:FindFirstChild("OpenCrate")
-if not CrateRemote then
-    warn("CrateRemote not found! Please check the remote's name in ReplicatedStorage.")
-    crateName = "Unknown Crate"
-else
-    crateName = "Rainbow Crate"  -- update if needed
-end
+-- SHIFTLOCK CODE
+local ShiftLockScreenGui = Instance.new("ScreenGui")
+ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
+ShiftLockScreenGui.Parent = game:GetService("CoreGui")
+ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ShiftLockScreenGui.ResetOnSpawn = false
 
-local function autoOpenCrates()
-    if CrateRemote then
-        pcall(function()
-            CrateRemote:FireServer(crateName)
+local ShiftLockButton = Instance.new("ImageButton")
+ShiftLockButton.Parent = ShiftLockScreenGui
+ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
+ShiftLockButton.BackgroundTransparency = 1
+ShiftLockButton.Position = UDim2.new(0.7,0,0.75,0)
+ShiftLockButton.Size = UDim2.new(0.0636,0,0.0661,0)
+ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
+ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
+
+local shiftLockUICorner = Instance.new("UICorner")
+shiftLockUICorner.CornerRadius = UDim.new(0.2,0)
+shiftLockUICorner.Parent = ShiftLockButton
+
+local shiftLockUIStroke = Instance.new("UIStroke")
+shiftLockUIStroke.Thickness = 2
+shiftLockUIStroke.Color = Color3.fromRGB(0,0,0)
+shiftLockUIStroke.Parent = ShiftLockButton
+
+local ShiftlockCursor = Instance.new("ImageLabel")
+ShiftlockCursor.Name = "Shiftlock Cursor"
+ShiftlockCursor.Parent = ShiftLockScreenGui
+ShiftlockCursor.Image = "rbxasset://textures/MouseLockedCursor.png"
+ShiftlockCursor.Size = UDim2.new(0.03,0,0.03,0)
+ShiftlockCursor.Position = UDim2.new(0.5,0,0.5,0)
+ShiftlockCursor.AnchorPoint = Vector2.new(0.5,0.5)
+ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX
+ShiftlockCursor.BackgroundTransparency = 1
+ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255,0,0)
+ShiftlockCursor.Visible = false
+
+local SL_Active = nil
+local SL_MaxLength = 900000
+local SL_EnabledOffset = CFrame.new(1.7,0,0)
+local SL_DisabledOffset = CFrame.new(-1.7,0,0)
+
+ShiftLockButton.MouseButton1Click:Connect(function()
+    if not SL_Active then
+        SL_Active = RunService.RenderStepped:Connect(function()
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChild("Humanoid")
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if hum and root then
+                hum.AutoRotate = false
+                ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_on@2x.png"
+                ShiftlockCursor.Visible = true
+                root.CFrame = CFrame.new(root.Position, Vector3.new(
+                    Workspace.CurrentCamera.CFrame.LookVector.X * SL_MaxLength,
+                    root.Position.Y,
+                    Workspace.CurrentCamera.CFrame.LookVector.Z * SL_MaxLength
+                ))
+                Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_EnabledOffset
+                Workspace.CurrentCamera.Focus = CFrame.fromMatrix(
+                    Workspace.CurrentCamera.Focus.Position,
+                    Workspace.CurrentCamera.CFrame.RightVector,
+                    Workspace.CurrentCamera.CFrame.UpVector
+                ) * SL_EnabledOffset
+            end
         end)
     else
-        warn("CrateRemote not found! Check the remote's name in ReplicatedStorage.")
-    end
-end
-
-local function startCrateFarm()
-    crateOpenConnection = task.spawn(function()
-        while autoCrateOpenEnabled do
-            autoOpenCrates()
-            task.wait(crateOpenInterval)
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChild("Humanoid")
+        if hum then hum.AutoRotate = true end
+        ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
+        Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
+        ShiftlockCursor.Visible = false
+        if SL_Active then
+            SL_Active:Disconnect()
+            SL_Active = nil
         end
-    end)
-end
+    end
+end)
 
-local function stopCrateFarm()
-    crateOpenConnection = nil
-end
-
------------------------------------------------------
--- EXTRA SPIN DETECTION REMOVED
------------------------------------------------------
--- (Extra spin functionality has been removed.)
+ContextActionService:BindAction("ShiftLock", function(_, inputState)
+    if inputState == Enum.UserInputState.Begin then
+        ShiftLockButton:MouseButton1Click()
+    end
+    return Enum.ContextActionResult.Sink
+end, false, Enum.KeyCode.ButtonR2)
 
 -----------------------------------------------------
 -- ORIONLIB MENU (CONFIG SAVING)
------------------------------------------------------
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu (Full)",
@@ -620,7 +618,6 @@ OrionLib:Init()
 
 -----------------------------------------------------
 -- MOBILE TOGGLE BUTTON FOR AUTO PASS (Synced)
------------------------------------------------------
 local autoPassMobileButton = nil
 local function createMobileToggle()
     local mobileGui = Instance.new("ScreenGui")
@@ -700,7 +697,6 @@ end)
 
 -----------------------------------------------------
 -- SHIFTLOCK CODE
------------------------------------------------------
 local ShiftLockScreenGui = Instance.new("ScreenGui")
 ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
 ShiftLockScreenGui.Parent = game:GetService("CoreGui")
