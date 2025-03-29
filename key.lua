@@ -1,8 +1,15 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant
--- with Default Thumbstick Extra Spin Detection
--- and Fixed Coin Collector
--- Full Integrated Script (Local Stats Removed)
+-- (Local Stats Removed)
+-- Features:
+-- • Auto Pass Bomb (Enhanced) with OrionLib menu toggle & mobile toggle (synced)
+-- • Anti‑Slippery with custom friction (updates every 0.5s)
+-- • Remove Hitbox with custom size
+-- • Auto Farm Coins (using touch events) & Auto Open Crates (fires remote)
+-- • OrionLib menu with config saving (using Flags)
+-- • Shiftlock functionality
+-- • EXTRA SPIN: Detects rapid changes in your default mobile thumbstick’s move direction,
+--   accumulating extra spin that is applied when passing the bomb.
 -----------------------------------------------------
 
 -- SERVICES
@@ -19,9 +26,10 @@ local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
 -----------------------------------------------------
--- DISABLE DEFAULT MOBILE THUMBSTICK
+-- (DO NOT DISABLE DEFAULT THUMBSTICK)
 -----------------------------------------------------
-LocalPlayer.DevTouchMovementMode = Enum.DevTouchMovementMode.Scriptable
+-- By leaving the default thumbstick active, you can move normally.
+-- (Remove any lines that disable it.)
 
 -----------------------------------------------------
 -- CONFIGURATION VARIABLES
@@ -42,19 +50,19 @@ local coinFarmInterval = 1
 
 local autoCrateOpenEnabled = false
 local crateOpenInterval = 2
-local crateName = "Rainbow Crate"  -- Change if needed
+local crateName = "Rainbow Crate"  -- change if needed
 
 local aiMessageCooldown = 5
 local lastAIMessageTime = 0
 
 -----------------------------------------------------
--- EXTRA SPIN VARIABLES & MOVE DIRECTION DETECTION
+-- EXTRA SPIN VARIABLES (based on default thumbstick)
 -----------------------------------------------------
 local extraSpin = 0         -- extra spin in degrees
 local spinMultiplier = 5    -- multiplier for spin accumulation
 local spinResetThreshold = 0.2  -- seconds with no rapid change to reset extraSpin
 local lastSpinTime = tick()
-local lastMoveAngle = nil   -- last recorded move angle from default thumbstick
+local lastMoveAngle = nil   -- last recorded angle from MoveDirection
 
 -----------------------------------------------------
 -- MODULES & UTILITY FUNCTIONS
@@ -175,7 +183,7 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPos)
 end
 
 -----------------------------------------------------
--- EXTRA SPIN ROTATION FUNCTION
+-- EXTRA SPIN ROTATION FUNCTION (Applied during bomb pass)
 -----------------------------------------------------
 local function rotateCharacterWithExtraSpin(targetPos)
     local char = LocalPlayer.Character
@@ -207,7 +215,7 @@ function VisualModule.playPassVFX(target)
     emitter.Texture = "rbxassetid://258128463"
     emitter.Rate = 50
     emitter.Lifetime = NumberRange.new(0.3, 0.5)
-    emitter.Speed = NumberRange.new(2, 5)
+    emitter.Speed = NumberRange.new(2,5)
     emitter.VelocitySpread = 30
     emitter.Parent = hrp
     delay(1, function() emitter:Destroy() end)
@@ -278,7 +286,6 @@ local function createOrUpdateTargetMarker(player, distance)
     marker.StudsOffset = Vector3.new(0,2,0)
     marker.AlwaysOnTop = true
     marker.Parent = body
-
     local label = Instance.new("TextLabel", marker)
     label.Size = UDim2.new(1,0,1,0)
     label.BackgroundTransparency = 1
@@ -286,21 +293,18 @@ local function createOrUpdateTargetMarker(player, distance)
     label.TextScaled = true
     label.TextColor3 = Color3.new(1,0,0)
     label.Font = Enum.Font.SourceSansBold
-
     currentTargetMarker, currentTargetPlayer = marker, player
     VisualModule.animateMarker(marker)
 end
 
 -----------------------------------------------------
--- EXTRA SPIN DETECTION VIA DEFAULT THUMBSTICK
+-- EXTRA SPIN DETECTION USING DEFAULT THUMBSTICK
 -----------------------------------------------------
--- Use the Humanoid's MoveDirection (default thumbstick) to detect rotation
 RunService.RenderStepped:Connect(function()
     local hum = Character:FindFirstChild("Humanoid")
     if hum then
-        local moveDir = hum.MoveDirection  -- 3D vector
+        local moveDir = hum.MoveDirection  -- default thumbstick move direction
         if moveDir.Magnitude > 0.1 then
-            -- Project to XZ plane and get angle (in degrees)
             local currentAngle = math.deg(math.atan2(moveDir.Z, moveDir.X))
             if lastMoveAngle then
                 local dAngle = math.abs((currentAngle - lastMoveAngle) % 360)
@@ -319,7 +323,7 @@ RunService.RenderStepped:Connect(function()
         extraSpin = 0
     end
 end)
-local lastMoveAngle = nil  -- Initialize last move angle
+local lastMoveAngle = nil  -- initialize
 
 -----------------------------------------------------
 -- AUTO PASS BOMB (Enhanced)
@@ -381,7 +385,6 @@ local coinFarmConnection = nil
 local function autoFarmCoins()
     local hrp = Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    -- Search entire Workspace for parts whose name contains "coin" (case-insensitive)
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") and obj.Name:lower():find("coin") then
             pcall(function()
