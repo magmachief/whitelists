@@ -2,14 +2,14 @@
 -- Ultra Advanced AI-Driven Bomb Passing Assistant
 -- Full Script (Local Stats Removed)
 -- Features:
--- • Auto Pass Bomb (Enhanced) with OrionLib menu toggle & Mobile button (synced)
+-- • Auto Pass Bomb (Enhanced) with OrionLib menu toggle & a mobile toggle button (synced)
 -- • Anti‑Slippery with custom friction (updates every 0.5s)
 -- • Remove Hitbox with custom size
 -- • Auto Farm Coins (simulate touch events) & Auto Open Crates (fires remote)
 -- • OrionLib menu with config saving (using Flags)
 -- • Shiftlock functionality
--- • Extra Spin: Extra rotation is added when you spin your mouse wheel;
---   if no spin input is detected for 0.2 seconds, extra spin resets immediately.
+-- • Extra Spin: When you use the mobile joystick and spin its thumb, extra spin is accumulated.
+--   If no spin input is detected for 0.2 seconds, extra spin resets immediately.
 -----------------------------------------------------
 
 -- SERVICES
@@ -50,21 +50,12 @@ local aiMessageCooldown = 5
 local lastAIMessageTime = 0
 
 -----------------------------------------------------
--- EXTRA SPIN VARIABLES & INPUT
+-- EXTRA SPIN VARIABLES (for extra rotation when spinning)
 -----------------------------------------------------
-local extraSpin = 0           -- extra spin in degrees
-local spinMultiplier = 5      -- extra degrees per input unit
-local spinResetThreshold = 0.2 -- seconds after last input to reset spin immediately
-local lastSpinTime = tick()   -- tracks time of last spin input
-
-UserInputService.InputChanged:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.UserInputType == Enum.UserInputType.MouseWheel then
-        extraSpin = extraSpin + (input.Position.Z * spinMultiplier)
-        lastSpinTime = tick()
-    end
-    -- For mobile, you might need to detect touch gestures instead
-end)
+local extraSpin = 0           -- extra spin in degrees (global)
+local spinMultiplier = 5      -- extra degrees per unit of angular change
+local spinResetThreshold = 0.2-- seconds to wait with no spin input before resetting extraSpin
+local lastSpinTime = tick()   -- time of last spin input
 
 -----------------------------------------------------
 -- MODULES & UTILITY FUNCTIONS
@@ -185,7 +176,7 @@ function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
 end
 
 -----------------------------------------------------
--- EXTRA SPIN Rotation Function
+-- EXTRA SPIN ROTATION FUNCTION
 -----------------------------------------------------
 local function rotateCharacterWithExtraSpin(targetPosition)
     local char = LocalPlayer.Character
@@ -193,7 +184,7 @@ local function rotateCharacterWithExtraSpin(targetPosition)
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    -- If no spin input for threshold time, reset extraSpin immediately.
+    -- Reset extraSpin if no spin input for threshold time
     if tick() - lastSpinTime > spinResetThreshold then
         extraSpin = 0
     end
@@ -219,8 +210,8 @@ function VisualModule.playPassVFX(target)
     local emitter = Instance.new("ParticleEmitter")
     emitter.Texture = "rbxassetid://258128463"
     emitter.Rate = 50
-    emitter.Lifetime = NumberRange.new(0.3,0.5)
-    emitter.Speed = NumberRange.new(2,5)
+    emitter.Lifetime = NumberRange.new(0.3, 0.5)
+    emitter.Speed = NumberRange.new(2, 5)
     emitter.VelocitySpread = 30
     emitter.Parent = hrp
     delay(1, function() emitter:Destroy() end)
@@ -352,7 +343,7 @@ local function autoPassBombEnhanced()
 
             createOrUpdateTargetMarker(targetPlayer, distance)
             VisualModule.playPassVFX(targetPlayer)
-            -- Use our extra spin rotation function
+            -- Use our rotation function that incorporates extra spin from the joystick
             rotateCharacterWithExtraSpin(targetPos)
 
             if AI_AssistanceEnabled and (tick() - lastAIMessageTime) >= aiMessageCooldown then
@@ -615,7 +606,7 @@ local UITab = Window:MakeTab({
 UITab:AddColorpicker({
     Name = "Menu Main Color",
     Flag = "MainColor",
-    Default = Color3.fromRGB(255,0,0),
+    Default = Color3.fromRGB(255, 0, 0),
     Callback = function(color)
         OrionLib.Themes[OrionLib.SelectedTheme].Main = color
     end
@@ -693,7 +684,98 @@ FarmingTab:AddTextbox({
 OrionLib:Init()
 
 -----------------------------------------------------
--- MOBILE TOGGLE BUTTON (Synced with OrionLib "AutoPassBomb")
+-- MOBILE JOYSTICK (For Extra Spin Input)
+-----------------------------------------------------
+-- This joystick stays fixed (like Mobile Legends) and tracks its thumb's angle.
+-- It updates a global extraSpin variable which is then used in the bomb pass rotation.
+local joystickGui = Instance.new("ScreenGui")
+joystickGui.Name = "FixedJoystickGui"
+joystickGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local joystickBg = Instance.new("Frame")
+joystickBg.Size = UDim2.new(0, 100, 0, 100)
+joystickBg.Position = UDim2.new(0, 50, 1, -150)  -- adjust position as needed
+joystickBg.BackgroundTransparency = 0.5
+joystickBg.BackgroundColor3 = Color3.new(0, 0, 0)
+joystickBg.AnchorPoint = Vector2.new(0, 1)
+joystickBg.Parent = joystickGui
+
+local joystickThumb = Instance.new("Frame")
+joystickThumb.Size = UDim2.new(0, 50, 0, 50)
+joystickThumb.Position = UDim2.new(0.5, -25, 0.5, -25)  -- centered in bg
+joystickThumb.BackgroundTransparency = 0.5
+joystickThumb.BackgroundColor3 = Color3.new(1, 1, 1)
+joystickThumb.Parent = joystickBg
+
+-- Variables for joystick tracking
+local dragging = false
+local bgAbsSize = joystickBg.AbsoluteSize
+local center = Vector2.new(bgAbsSize.X/2, bgAbsSize.Y/2)
+local maxDistance = bgAbsSize.X/2  -- assuming square background
+local lastJoystickAngle = nil
+
+local function angleDiff(a, b)
+    local diff = math.abs(a - b) % 360
+    if diff > 180 then diff = 360 - diff end
+    return diff
+end
+
+local function updateThumb(touchPos)
+    local offset = touchPos - center
+    local magnitude = offset.Magnitude
+    if magnitude > maxDistance then
+        offset = offset.Unit * maxDistance
+    end
+
+    joystickThumb.Position = UDim2.new(0, center.X + offset.X - joystickThumb.AbsoluteSize.X/2,
+                                         0, center.Y + offset.Y - joystickThumb.AbsoluteSize.Y/2)
+
+    local currentAngle = math.deg(math.atan2(offset.Y, offset.X))
+    if lastJoystickAngle then
+        local deltaAngle = angleDiff(currentAngle, lastJoystickAngle)
+        if deltaAngle > 5 then  -- if significant angular change
+            extraSpin = extraSpin + deltaAngle
+            lastSpinTime = tick()
+        end
+    end
+    lastJoystickAngle = currentAngle
+end
+
+local function resetThumb()
+    joystickThumb.Position = UDim2.new(0.5, -joystickThumb.AbsoluteSize.X/2, 0.5, -joystickThumb.AbsoluteSize.Y/2)
+    lastJoystickAngle = nil
+end
+
+joystickBg.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        updateThumb(input.Position)
+        lastSpinTime = tick()
+    end
+end)
+
+joystickBg.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.Touch then
+        updateThumb(input.Position)
+    end
+end)
+
+joystickBg.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+        resetThumb()
+    end
+end)
+
+-- Continuously reset extraSpin if no input is detected beyond threshold
+RunService.RenderStepped:Connect(function()
+    if tick() - lastSpinTime > spinResetThreshold then
+        extraSpin = 0
+    end
+end)
+
+-----------------------------------------------------
+-- MOBILE TOGGLE BUTTON FOR AUTO PASS (Synced with OrionLib)
 -----------------------------------------------------
 local autoPassMobileButton = nil
 local function createMobileToggle()
@@ -843,7 +925,9 @@ ShiftLockButton.MouseButton1Click:Connect(function()
     else
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChild("Humanoid")
-        if hum then hum.AutoRotate = true end
+        if hum then
+            hum.AutoRotate = true
+        end
         ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
         Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
         ShiftlockCursor.Visible = false
@@ -861,4 +945,4 @@ ContextActionService:BindAction("ShiftLock", function(_, inputState)
     return Enum.ContextActionResult.Sink
 end, false, Enum.KeyCode.ButtonR2)
 
-print("Full script loaded with config saving, mobile toggle, shiftlock, and extra spin (reset when no spin input). Enjoy!")
+print("Full script loaded with config saving, mobile joystick extra spin, mobile toggle, shiftlock, and all features. Enjoy!")
