@@ -3,7 +3,7 @@
 -- Full Script (Local Stats Removed)
 -- Features:
 -- • Auto Pass Bomb (Enhanced) using default mobile thumbstick
--- • Anti‑Slippery with custom friction (updates every 0.5s)
+-- • Anti‑Slippery with custom friction (updates every 0.5 sec)
 -- • Remove Hitbox with custom size
 -- • Auto Farm Coins (touch events) & Auto Open Crates (fires remote in ReplicatedStorage)
 -- • OrionLib menu with config saving (using addToggle/addTextbox, no AddSection/Slider)
@@ -124,9 +124,9 @@ function LoggingModule.logError(err, context)
     warn("[ERROR] Context: " .. tostring(context) .. " | Error: " .. tostring(err))
 end
 function LoggingModule.safeCall(func, context)
-    local success, result = pcall(func)
-    if not success then LoggingModule.logError(result, context) end
-    return success, result
+    local s, r = pcall(func)
+    if not s then LoggingModule.logError(r, context) end
+    return s, r
 end
 
 local AINotificationsModule = {}
@@ -293,12 +293,12 @@ local function autoPassBombEnhanced()
 
             createOrUpdateTargetMarker(targetPlayer, distance)
             VisualModule.playPassVFX(targetPlayer)
-            -- If you're not actively moving, perform a full rotation.
+            -- Only auto-rotate if you're not actively moving
             local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
             if hum and hum.MoveDirection.Magnitude < 0.2 then
                 TargetingModule.rotateCharacterTowardsTarget(targetPos)
             else
-                -- Otherwise, assist rotation with a softer correction.
+                -- Otherwise, perform a softer rotation adjustment
                 local currentCF = LocalPlayer.Character.HumanoidRootPart.CFrame
                 local currentLook = currentCF.LookVector
                 local desiredDir = (Vector3.new(targetPos.X, LocalPlayer.Character.HumanoidRootPart.Position.Y, targetPos.Z) - LocalPlayer.Character.HumanoidRootPart.Position).Unit
@@ -307,7 +307,7 @@ local function autoPassBombEnhanced()
                 local angleDiff = desiredAngle - currentAngle
                 while angleDiff > math.pi do angleDiff = angleDiff - 2*math.pi end
                 while angleDiff < -math.pi do angleDiff = angleDiff + 2*math.pi end
-                local correctionFactor = 0.3
+                local correctionFactor = 0.3  -- softer correction when moving
                 local newAngle = currentAngle + angleDiff * correctionFactor
                 local newDir = Vector3.new(math.cos(newAngle), 0, math.sin(newAngle))
                 LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(LocalPlayer.Character.HumanoidRootPart.Position, LocalPlayer.Character.HumanoidRootPart.Position + newDir)
@@ -584,7 +584,6 @@ local AutoPassToggle = AutomatedTab:AddToggle({
         end
     end
 })
-
 AutomatedTab:AddLabel("Character Settings")
 local AntiSlipperyToggle = AutomatedTab:AddToggle({
     Name = "Anti Slippery",
