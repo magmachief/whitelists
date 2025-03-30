@@ -5,7 +5,6 @@
 -- • Auto Pass Bomb (Enhanced) with synchronized mobile & menu toggles
 -- • Anti‑Slippery with custom friction applied (updated every 0.5 seconds)
 -- • Remove Hitbox with custom hitbox size applied immediately
--- • Local Stats: Only your (LocalPlayer’s) average hold time is displayed via a BillboardGui
 -- • OrionLib menu with three tabs (Automated, AI Based, UI Elements)
 -- • Shiftlock functionality
 -----------------------------------------------------
@@ -86,22 +85,9 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     return closestPlayer
 end
 
+-- Disable forced rotation so that your character’s rotation remains free.
 function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
-    local character = LocalPlayer.Character
-    if not character then return end
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    local adjPos = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
-    if useFlickRotation then
-        hrp.CFrame = CFrame.new(hrp.Position, adjPos)
-    elseif useSmoothRotation then
-        local targetCFrame = CFrame.new(hrp.Position, adjPos)
-        local tween = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = targetCFrame})
-        tween:Play()
-        return tween
-    else
-        hrp.CFrame = CFrame.new(hrp.Position, adjPos)
-    end
+    -- Rotation intentionally disabled.
 end
 
 local VisualModule = {}
@@ -184,7 +170,7 @@ local raySpreadAngle = 10
 local numRaycasts = 5
 local customAntiSlipperyFriction = 0.7
 local customHitboxSize = 0.1
--- Bomb timer functionality is commented out in this version
+-- Bomb timer functionality removed
 
 -----------------------------------------------------
 -- Update Friction Every 0.5 Seconds
@@ -197,123 +183,6 @@ task.spawn(function()
         wait(0.5)
     end
 end)
-
------------------------------------------------------
--- CLIENT-SIDE BOMB STATS (LocalPlayer Only)
------------------------------------------------------
-local PlayerData = {}
-local function createBillboardGui(player)
-    if player ~= LocalPlayer then return end  -- Only for local player
-    local character = player.Character
-    if not character then return end
-    local head = character:FindFirstChild("Head")
-    if not head then return end
-    if head:FindFirstChild("StatsDisplay") then return end
-    local billboardGui = Instance.new("BillboardGui")
-    billboardGui.Name = "StatsDisplay"
-    billboardGui.Adornee = head
-    billboardGui.Size = UDim2.new(0,120,0,25)
-    billboardGui.StudsOffset = Vector3.new(0,3,0)
-    billboardGui.AlwaysOnTop = true
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Size = UDim2.new(1,0,1,0)
-    textLabel.BackgroundTransparency = 1
-    textLabel.TextColor3 = Color3.new(1,0,0)
-    textLabel.TextScaled = false
-    textLabel.TextSize = 16
-    textLabel.Font = Enum.Font.SourceSansBold
-    textLabel.TextStrokeTransparency = 0
-    textLabel.TextStrokeColor3 = Color3.new(0,0,0)
-    textLabel.Text = "Avg Hold: 0.00 s"
-    textLabel.Parent = billboardGui
-    billboardGui.Parent = head
-end
-
-local function updateBillboardGui(player)
-    if player ~= LocalPlayer then return end  -- Only update for local player
-    local data = PlayerData[player]
-    if not data then return end
-    local avgHold = data.average or 0
-    local character = player.Character
-    if not character then return end
-    local head = character:FindFirstChild("Head")
-    if not head then return end
-    local billboardGui = head:FindFirstChild("StatsDisplay")
-    if billboardGui then
-        local textLabel = billboardGui:FindFirstChildOfClass("TextLabel")
-        if textLabel then
-            textLabel.Text = "Avg Hold: " .. string.format("%.2f", avgHold) .. " s"
-        end
-    end
-end
-
-local currentBombHolder = nil
-local bombStartTime = nil
-
-local function recordPlayerDuration(player, duration)
-    if not PlayerData[player] then
-        PlayerData[player] = { rounds = {}, totalTime = 0, numHolds = 0, average = 0 }
-    end
-    local d = PlayerData[player]
-    table.insert(d.rounds, { duration = duration })
-    d.totalTime = d.totalTime + duration
-    d.numHolds = d.numHolds + 1
-    d.average = d.totalTime / d.numHolds
-    updateBillboardGui(player)
-end
-
-local function onBombAcquired(player)
-    currentBombHolder = player
-    bombStartTime = tick()
-end
-
-local function onBombLost(player)
-    if currentBombHolder == player and bombStartTime then
-        local heldTime = tick() - bombStartTime
-        recordPlayerDuration(player, heldTime)
-        currentBombHolder = nil
-        bombStartTime = nil
-    end
-end
-
-local function monitorPlayer(player)
-    if player ~= LocalPlayer then return end  -- Only monitor local player
-    local function onCharacterAdded(character)
-        character:WaitForChild("Head", 5)
-        createBillboardGui(player)
-        updateBillboardGui(player)
-        character.ChildAdded:Connect(function(child)
-            if child.Name == "Bomb" then
-                onBombAcquired(player)
-            end
-        end)
-        character.ChildRemoved:Connect(function(child)
-            if child.Name == "Bomb" then
-                onBombLost(player)
-            end
-        end)
-        local hum = character:FindFirstChild("Humanoid")
-        if hum then
-            hum.Died:Connect(function()
-                if player == LocalPlayer and currentBombHolder == player and bombStartTime then
-                    local heldTime = tick() - bombStartTime
-                    recordPlayerDuration(player, heldTime)
-                    currentBombHolder = nil
-                    bombStartTime = nil
-                end
-            end)
-        end
-    end
-    if player.Character then
-        onCharacterAdded(player.Character)
-    end
-    player.CharacterAdded:Connect(onCharacterAdded)
-end
-
-if LocalPlayer then
-    PlayerData[LocalPlayer] = { totalTime = 0, numHolds = 0, average = 0, rounds = {} }
-    monitorPlayer(LocalPlayer)
-end
 
 -----------------------------------------------------
 -- VISUAL TARGET MARKER
@@ -424,6 +293,7 @@ local function autoPassBombEnhanced()
             end
             createOrUpdateTargetMarker(targetPlayer, distance)
             VisualModule.playPassVFX(targetPlayer)
+            -- Rotation is no longer forced; your character’s rotation remains free.
             TargetingModule.rotateCharacterTowardsTarget(targetPos)
             if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance",
