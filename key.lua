@@ -1,7 +1,13 @@
-
--- Ultra Advanced AI-Driven Bomb Passing Assistant Script
+-----------------------------------------------------
+-- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
 -- Client-Only Version (Local Stats, No DataStore)
--- Updated with Modern Orion UI Integration
+-- Features:
+-- • Auto Pass Bomb (Enhanced) with synchronized mobile & menu toggles
+-- • Anti‑Slippery with custom friction applied (updated every 0.5 seconds)
+-- • Remove Hitbox with custom hitbox size applied immediately
+-- • OrionLib menu with three tabs (Automated, AI Based, UI Elements)
+-- • Shiftlock functionality
+-----------------------------------------------------
 
 -- SERVICES
 local Players = game:GetService("Players")
@@ -13,10 +19,9 @@ local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
--- Load Orion UI Library
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source"))()
-
+-----------------------------------------------------
 -- CHARACTER SETUP
+-----------------------------------------------------
 local CHAR = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HUMANOID = CHAR:WaitForChild("Humanoid")
 local HRP = CHAR:WaitForChild("HumanoidRootPart")
@@ -80,6 +85,7 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     return closestPlayer
 end
 
+-- Disable forced rotation so that your character’s rotation remains free.
 function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     -- Rotation intentionally disabled.
 end
@@ -112,6 +118,7 @@ function AINotificationsModule.sendNotification(title, text, duration)
 end
 
 local FrictionModule = {}
+-- We now update friction properties every 0.5 seconds (see below)
 function FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     local char = LocalPlayer.Character
     if not char then return end
@@ -163,6 +170,7 @@ local raySpreadAngle = 10
 local numRaycasts = 5
 local customAntiSlipperyFriction = 0.7
 local customHitboxSize = 0.1
+-- Bomb timer functionality removed
 
 -----------------------------------------------------
 -- Update Friction Every 0.5 Seconds
@@ -253,7 +261,6 @@ end
 -----------------------------------------------------
 -- AUTO PASS FUNCTION
 -----------------------------------------------------
-local autoPassConnection = nil
 local function autoPassBombEnhanced()
     if not AutoPassEnabled then return end
     LoggingModule.safeCall(function()
@@ -286,6 +293,7 @@ local function autoPassBombEnhanced()
             end
             createOrUpdateTargetMarker(targetPlayer, distance)
             VisualModule.playPassVFX(targetPlayer)
+            -- Rotation is no longer forced; your character’s rotation remains free.
             TargetingModule.rotateCharacterTowardsTarget(targetPos)
             if AI_AssistanceEnabled and tick() - lastAIMessageTime >= aiMessageCooldown then
                 AINotificationsModule.sendNotification("AI Assistance",
@@ -305,47 +313,28 @@ local function autoPassBombEnhanced()
 end
 
 -----------------------------------------------------
--- ORIONLIB MENU CREATION (UPDATED)
+-- ORIONLIB MENU CREATION
 -----------------------------------------------------
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
-    Name = "Bomb AI Assistant",
+    Name = "Yon Menu - Advanced (Auto Pass Bomb Enhanced)",
     HidePremium = false,
     SaveConfig = true,
-    ConfigFolder = "BombAIConfig",
-    IntroEnabled = true,
-    IntroText = "Bomb Passing AI Loaded"
+    ConfigFolder = "YonMenu_Advanced",
+    ShowIcon = true
 })
 
--- Create Tabs with modern styling
-local AutomatedTab = Window:MakeTab({
-    Name = "Automation",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
-local AITab = Window:MakeTab({
-    Name = "AI Settings",
-    Icon = "rbxassetid://7072720870",
-    PremiumOnly = false
-})
-
-local VisualTab = Window:MakeTab({
-    Name = "Visuals",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
+-- Create Tabs
+local AutomatedTab = Window:MakeTab({ Name = "Automated Settings", Icon = "rbxassetid://4483345998", PremiumOnly = false })
+local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://7072720870", PremiumOnly = false })
+local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 
 -- Automated Settings Tab
-AutomatedTab:AddSection({
-    Name = "Bomb Automation",
-    Center = true
-})
-
-local AutoPassToggle = AutomatedTab:AddToggle({
-    Name = "Auto Pass Bomb",
-    Default = false,
+AutomatedTab:AddLabel("== Bomb Passing ==", 15)
+local orionAutoPassToggle = AutomatedTab:AddToggle({
+    Name = "Auto Pass Bomb (Enhanced)",
+    Default = AutoPassEnabled,
     Flag = "AutoPassBomb",
-    Save = true,
     Callback = function(value)
         AutoPassEnabled = value
         if value then
@@ -359,148 +348,164 @@ local AutoPassToggle = AutomatedTab:AddToggle({
             end
             removeTargetMarker()
         end
+        if autoPassMobileToggle and autoPassMobileToggle.Set then
+            autoPassMobileToggle:Set(value)
+        end
     end
 })
 
-AutomatedTab:AddSection({
-    Name = "Character Mods",
-    Center = true
-})
-
-local AntiSlipperyToggle = AutomatedTab:AddToggle({
-    Name = "Anti-Slippery",
-    Default = false,
+AutomatedTab:AddLabel("== Character Settings ==", 15)
+AutomatedTab:AddToggle({
+    Name = "Anti Slippery",
+    Default = AntiSlipperyEnabled,
     Flag = "AntiSlippery",
-    Save = true,
     Callback = function(value)
         AntiSlipperyEnabled = value
-        FrictionModule.updateSlidingProperties(value)
+        FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
     end
 })
-
-AutomatedTab:AddInput({
-    Name = "Friction Value",
+AutomatedTab:AddTextbox({
+    Name = "Custom Anti‑Slippery Friction",
     Default = tostring(customAntiSlipperyFriction),
+    Flag = "CustomAntiSlipperyFrict",
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
         if num then
             customAntiSlipperyFriction = num
-            if AntiSlipperyEnabled then
-                FrictionModule.updateSlidingProperties(true)
-            end
+            print("Custom Anti-Slippery Friction updated to: " .. num)
+            FrictionModule.updateSlidingProperties(AntiSlipperyEnabled)
         end
     end
 })
-
-local HitboxToggle = AutomatedTab:AddToggle({
+AutomatedTab:AddToggle({
     Name = "Remove Hitbox",
-    Default = false,
+    Default = RemoveHitboxEnabled,
     Flag = "RemoveHitbox",
-    Save = true,
     Callback = function(value)
         RemoveHitboxEnabled = value
         applyRemoveHitbox(value)
     end
 })
-
-AutomatedTab:AddInput({
-    Name = "Hitbox Size",
+AutomatedTab:AddTextbox({
+    Name = "Custom Hitbox Size",
     Default = tostring(customHitboxSize),
+    Flag = "CustomHitboxSize",
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
         if num then
             customHitboxSize = num
-            if RemoveHitboxEnabled then
-                applyRemoveHitbox(true)
-            end
+            print("Custom Hitbox Size updated to: " .. num)
+            if RemoveHitboxEnabled then applyRemoveHitbox(true) end
         end
     end
 })
 
--- AI Settings Tab
-AITab:AddSection({
-    Name = "Targeting",
-    Center = true
-})
-
+-- AI Based Settings Tab
+AITab:AddLabel("== Targeting Settings ==", 15)
 AITab:AddToggle({
     Name = "AI Assistance",
     Default = false,
     Flag = "AIAssistance",
-    Save = true,
     Callback = function(value)
         AI_AssistanceEnabled = value
     end
 })
-
-AITab:AddInput({
-    Name = "Pass Distance",
+AITab:AddTextbox({
+    Name = "Bomb Pass Distance",
     Default = tostring(bombPassDistance),
+    Flag = "BombPassDistance",
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
         if num then bombPassDistance = num end
     end
 })
-
-AITab:AddSlider({
+AITab:AddTextbox({
     Name = "Ray Spread Angle",
-    Min = 5,
-    Max = 45,
-    Default = raySpreadAngle,
-    Color = Color3.fromRGB(255,255,255),
-    Increment = 1,
+    Default = tostring(raySpreadAngle),
+    Flag = "RaySpreadAngle",
+    TextDisappear = false,
     Callback = function(value)
-        raySpreadAngle = value
+        local num = tonumber(value)
+        if num then raySpreadAngle = num end
+    end
+})
+AITab:AddTextbox({
+    Name = "Number of Raycasts",
+    Default = tostring(numRaycasts),
+    Flag = "NumberOfRaycasts",
+    TextDisappear = false,
+    Callback = function(value)
+        local num = tonumber(value)
+        if num then numRaycasts = num end
+    end
+})
+AITab:AddLabel("== Rotation Settings ==", 15)
+local orionFlickRotationToggle = AITab:AddToggle({
+    Name = "Flick Rotation",
+    Default = false,
+    Flag = "FlickRotation",
+    Callback = function(value)
+        useFlickRotation = value
+        if value then
+            useSmoothRotation = false
+            if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                orionSmoothRotationToggle:Set(false)
+            end
+        else
+            if not useSmoothRotation then
+                useSmoothRotation = true
+                if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then
+                    orionSmoothRotationToggle:Set(true)
+                end
+            end
+        end
+    end
+})
+local orionSmoothRotationToggle = AITab:AddToggle({
+    Name = "Smooth Rotation",
+    Default = true,
+    Flag = "SmoothRotation",
+    Callback = function(value)
+        useSmoothRotation = value
+        if value then
+            useFlickRotation = false
+            if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                orionFlickRotationToggle:Set(false)
+            end
+        else
+            if not useFlickRotation then
+                useFlickRotation = true
+                if orionFlickRotationToggle and orionFlickRotationToggle.Set then
+                    orionFlickRotationToggle:Set(true)
+                end
+            end
+        end
     end
 })
 
-AITab:AddSlider({
-    Name = "Raycast Count",
-    Min = 1,
-    Max = 9,
-    Default = numRaycasts,
-    Color = Color3.fromRGB(255,255,255),
-    Increment = 2,
-    Callback = function(value)
-        numRaycasts = value
-    end
-})
-
--- Visual Settings Tab
-VisualTab:AddSection({
-    Name = "UI Customization",
-    Center = true
-})
-
-VisualTab:AddColorpicker({
-    Name = "Main Color",
+-- UI Elements Tab
+UITab:AddColorpicker({
+    Name = "Menu Main Color",
     Default = Color3.fromRGB(255,0,0),
     Flag = "MenuMainColor",
     Save = true,
     Callback = function(color)
-        OrionLib:ChangeColor(color)
+        OrionLib.Themes[OrionLib.SelectedTheme].Main = color
     end
 })
 
-VisualTab:AddToggle({
-    Name = "Show Target Markers",
-    Default = true,
-    Flag = "ShowMarkers",
-    Save = true,
-    Callback = function(value)
-        if not value then removeTargetMarker() end
-    end
-})
-
--- Initialize OrionLib
+-----------------------------------------------------
+-- INITIALIZE ORIONLIB
+-----------------------------------------------------
 OrionLib:Init()
 
 -----------------------------------------------------
--- MOBILE TOGGLE BUTTON
+-- MOBILE TOGGLE BUTTON FOR AUTO PASS (Synchronized with menu)
 -----------------------------------------------------
+local autoPassMobileToggle = nil
 local function createMobileToggle()
     local mobileGui = Instance.new("ScreenGui")
     mobileGui.Name = "MobileToggleGui"
@@ -529,7 +534,6 @@ local function createMobileToggle()
     button.MouseEnter:Connect(function()
         TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play()
     end)
-    
     button.MouseLeave:Connect(function()
         if AutoPassEnabled then
             TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play()
@@ -543,14 +547,18 @@ local function createMobileToggle()
         if AutoPassEnabled then
             button.BackgroundColor3 = Color3.fromRGB(0,255,0)
             button.Text = "ON"
-            AutoPassToggle:Set(true)
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(true)
+            end
             if not autoPassConnection then
                 autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
             end
         else
             button.BackgroundColor3 = Color3.fromRGB(255,0,0)
             button.Text = "OFF"
-            AutoPassToggle:Set(false)
+            if orionAutoPassToggle and orionAutoPassToggle.Set then
+                orionAutoPassToggle:Set(false)
+            end
             if autoPassConnection then
                 autoPassConnection:Disconnect()
                 autoPassConnection = nil
@@ -562,12 +570,14 @@ local function createMobileToggle()
 end
 
 local mobileGui, mobileToggle = createMobileToggle()
+autoPassMobileToggle = mobileToggle
 
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
     if child.Name == "MobileToggleGui" then
         wait(1)
         if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
             mobileGui, mobileToggle = createMobileToggle()
+            autoPassMobileToggle = mobileToggle
         end
     end
 end)
@@ -660,4 +670,5 @@ local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a
 end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8,0,0.8,0))
 
-print("Bomb Passing AI fully loaded with modern UI. Menu, toggles, and all features are active.")
+print("Final Ultra-Advanced Bomb AI loaded. Menu, toggles (synchronized), shiftlock, friction updates, and mobile toggle are active.")
+return {}
