@@ -568,7 +568,7 @@ local function createMobileToggle()
                 orionAutoPassToggle:Set(true)
             end
             if not autoPassConnection then
-                autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
+                autoPassConnection = RunService.Stepped:Connect(autoPassBomb)
             end
         else
             button.BackgroundColor3 = Color3.fromRGB(255,0,0)
