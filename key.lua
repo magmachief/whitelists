@@ -257,7 +257,19 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     end
     return true
 end
-
+local function getClosestPlayer()
+    local closestPlayer, shortestDistance = nil, math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local distance = (player.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
+            if distance < shortestDistance then
+                shortestDistance = distance
+                closestPlayer = player
+            end
+        end
+    end
+    return closestPlayer
+end
 -----------------------------------------------------
 -- AUTO PASS FUNCTION
 -----------------------------------------------------
