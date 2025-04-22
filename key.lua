@@ -311,7 +311,24 @@ local function autoPassBombEnhanced()
         end
     end, "autoPassBombEnhanced function")
 end
-
+local function autoPassBomb()
+    if not AutoPassEnabled then return end
+    pcall(function()
+        local Bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
+        if Bomb then
+            local BombEvent = Bomb:FindFirstChild("RemoteEvent")
+            local closestPlayer = getClosestPlayer()
+            if closestPlayer and closestPlayer.Character then
+                local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
+                local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
+                if distance <= bombPassDistance then
+                    -- Optionally rotate here if needed
+                    BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
+                end
+            end
+        end
+    end)
+end
 -----------------------------------------------------
 -- ORIONLIB MENU CREATION
 -----------------------------------------------------
@@ -339,7 +356,7 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
         AutoPassEnabled = value
         if value then
             if not autoPassConnection then
-                autoPassConnection = RunService.Stepped:Connect(autoPassBombEnhanced)
+                autoPassConnection = RunService.Stepped:Connect(autoPassBomb)
             end
         else
             if autoPassConnection then
