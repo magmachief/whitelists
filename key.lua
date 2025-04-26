@@ -1,12 +1,6 @@
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
 -- Client-Only Version (Local Stats, No DataStore)
--- Features:
--- • Auto Pass Bomb with synchronized mobile & menu toggles
--- • Anti‑Slippery with custom friction applied (updated every 0.5 seconds)
--- • Remove Hitbox with custom hitbox size applied immediately
--- • OrionLib menu with three tabs (Automated, AI Based, UI Elements)
--- • Shiftlock functionality
 -----------------------------------------------------
 
 -- SERVICES
@@ -40,7 +34,7 @@ function LoggingModule.safeCall(func, context)
 end
 
 local TargetingModule = {}
--- Removed getOptimalPlayer since it was only used by the enhanced version.
+-- Only the closest player function is used.
 function TargetingModule.getClosestPlayer(bombPassDistance)
     local closestPlayer, shortestDistance = nil, bombPassDistance
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -60,7 +54,7 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     return closestPlayer
 end
 
--- Disable forced rotation so that your character’s rotation remains free.
+-- Rotation is intentionally disabled so that your character’s rotation remains free.
 function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     -- Rotation intentionally disabled.
 end
@@ -101,20 +95,23 @@ do
         local char = LocalPlayer.Character
         if not char then return end
         
-        -- Surface check
-        local ray = workspace:Raycast(HRP.Position, Vector3.new(0,-3,0), RaycastParams.new())
+        -- Surface check: Raycast downward
+        local ray = Workspace:Raycast(HRP.Position, Vector3.new(0,-3,0), RaycastParams.new())
         if not ray or not table.find(SLIPPERY_MATERIALS, ray.Material) then return end
 
-        -- Stealth modification
+        -- Update friction using the customAntiSlipperyFriction value
         for _, partName in pairs({"LeftLeg", "RightLeg", "LeftFoot", "RightFoot"}) do
             local part = char:FindFirstChild(partName)
             if part then
                 if not originalProps[part] then
                     originalProps[part] = part.CustomPhysicalProperties
                 end
-                local friction = 0.18 + (math.random() * 0.03)
+                local friction
                 if char:FindFirstChild("Bomb") then
-                    friction = 0.09 + (math.random() * 0.02)
+                    -- If bomb present, reduce friction further (about half)
+                    friction = customAntiSlipperyFriction * 0.5 + (math.random() * 0.02)
+                else
+                    friction = customAntiSlipperyFriction + (math.random() * 0.03)
                 end
                 part.CustomPhysicalProperties = PhysicalProperties.new(friction, 0.3, 0.5)
             end
@@ -155,10 +152,9 @@ end
 -----------------------------------------------------
 -- CONFIGURATION VARIABLES
 -----------------------------------------------------
-
 local bombPassDistance = 10
 local AutoPassEnabled = false
-local AntiSlipperyEnabled = false
+local antiSlippery = false
 local RemoveHitboxEnabled = false
 local AI_AssistanceEnabled = false
 local pathfindingSpeed = 16
@@ -166,14 +162,13 @@ local lastAIMessageTime = 0
 local aiMessageCooldown = 5
 local raySpreadAngle = 10
 local numRaycasts = 5
-local customAntiSlipperyFriction = 0.7
+local customAntiSlipperyFriction = 0.2    -- Default custom friction value (normal state)
 local customHitboxSize = 0.1
 -- Bomb timer functionality removed
 
 -----------------------------------------------------
 -- Update Friction Every 0.5 Seconds
 -----------------------------------------------------
-
 task.spawn(function()
     while true do
         if antiSlippery then
@@ -256,6 +251,7 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     end
     return true
 end
+
 local function getClosestPlayer()
     local closestPlayer, shortestDistance = nil, math.huge
     for _, player in ipairs(Players:GetPlayers()) do
@@ -269,6 +265,7 @@ local function getClosestPlayer()
     end
     return closestPlayer
 end
+
 -----------------------------------------------------
 -- AUTO PASS FUNCTION
 -----------------------------------------------------
@@ -290,6 +287,7 @@ local function autoPassBomb()
         end
     end)
 end
+
 -----------------------------------------------------
 -- ORIONLIB MENU CREATION
 -----------------------------------------------------
@@ -335,7 +333,7 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
 AutomatedTab:AddLabel("== Character Settings ==", 15)
 AutomatedTab:AddToggle({
       Name = "Anti-Slippery",
-    Info = "0.18-0.21 (Normal) | 0.09-0.11 (Bomb)",
+    Info = "Uses custom friction value (normal: ~0.2, bomb state: ~0.1)",
     Default = false,
     Callback = function(v)
        antiSlippery = v
@@ -352,7 +350,6 @@ AutomatedTab:AddTextbox({
         if num then
             customAntiSlipperyFriction = num
             print("Custom Anti-Slippery Friction updated to: " .. num)
-            -- Removed call to non-existent FrictionModule.updateSlidingProperties.
         end
     end
 })
