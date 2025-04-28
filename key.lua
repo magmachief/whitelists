@@ -12,6 +12,85 @@ local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
+local bombName = "Bomb"
+
+-----------------------------------------------------
+-- BOMB TIMER (COUNTDOWN) GUI & DETECTION
+-----------------------------------------------------
+
+-- Setup GUI to display bomb timer countdown
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "BombRealCountdownGui"
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local timerLabel = Instance.new("TextLabel")
+timerLabel.Size = UDim2.new(0,250,0,50)
+timerLabel.Position = UDim2.new(0.5,-125,0,50)
+timerLabel.BackgroundColor3 = Color3.fromRGB(0,0,0)
+timerLabel.BackgroundTransparency = 0.5
+timerLabel.TextColor3 = Color3.fromRGB(255,255,255)
+timerLabel.TextScaled = true
+timerLabel.Text = ""
+timerLabel.Parent = screenGui
+timerLabel.Visible = false
+
+local holdingBomb = false
+local countdown = 0
+local defaultExplosionTime = 15 -- fallback value
+
+-- Function to retrieve a bomb's explosion time.
+-- Checks multiple possibilities: visible NumberValue "ExplosionTime", an attribute "ExplosionTime",
+-- an attribute called "timebomb" (if that hidden reference exists) or even a hidden child.
+local function getBombExplosionTime(bomb)
+    if bomb then
+        if bomb:FindFirstChild("ExplosionTime") and bomb.ExplosionTime:IsA("NumberValue") then
+            return bomb.ExplosionTime.Value
+        end
+        local attrTime = bomb:GetAttribute("ExplosionTime")
+        if attrTime then
+            return attrTime
+        end
+        local timebombAttr = bomb:GetAttribute("timebomb")
+        if timebombAttr then
+            return timebombAttr
+        end
+        local hiddenValue = bomb:FindFirstChild("hiddenTimebomb")
+        if hiddenValue and hiddenValue:IsA("NumberValue") then
+            return hiddenValue.Value
+        end
+    end
+    return defaultExplosionTime
+end
+
+-- Check if the player is currently holding the bomb
+local function isHoldingBomb()
+    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(bombName) ~= nil
+end
+
+-- Run a heartbeat loop to update the countdown GUI
+RunService.Heartbeat:Connect(function(dt)
+    if isHoldingBomb() then
+        local bomb = LocalPlayer.Character:FindFirstChild(bombName)
+        if not holdingBomb then
+            holdingBomb = true
+            countdown = getBombExplosionTime(bomb)
+            timerLabel.Visible = true
+        end
+
+        countdown = countdown - dt
+        if countdown > 0 then
+            timerLabel.Text = ("Bomb explodes in: %.1fs"):format(countdown)
+        else
+            timerLabel.Text = "BOOM!"
+        end
+    else
+        if holdingBomb then
+            holdingBomb = false
+            timerLabel.Visible = false
+            countdown = 0
+        end
+    end
+end)
 
 -----------------------------------------------------
 -- CHARACTER SETUP
@@ -34,7 +113,7 @@ function LoggingModule.safeCall(func, context)
 end
 
 local TargetingModule = {}
--- Only the closest player function is used.
+-- Returns the closest player (if not holding a bomb) within bombPassDistance.
 function TargetingModule.getClosestPlayer(bombPassDistance)
     local closestPlayer, shortestDistance = nil, bombPassDistance
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -43,7 +122,8 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            if player.Character:FindFirstChild("Bomb") then continue end
+            -- Skip players who are holding a bomb.
+            if player.Character:FindFirstChild(bombName) then continue end
             local distance = (player.Character.HumanoidRootPart.Position - myPos).Magnitude
             if distance < shortestDistance then
                 shortestDistance = distance
@@ -54,7 +134,6 @@ function TargetingModule.getClosestPlayer(bombPassDistance)
     return closestPlayer
 end
 
--- Rotation is intentionally disabled so that your character’s rotation remains free.
 function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     -- Rotation intentionally disabled.
 end
@@ -95,11 +174,11 @@ do
         local char = LocalPlayer.Character
         if not char then return end
         
-        -- Surface check: Raycast downward
+        -- Raycast downward from HRP to detect slippery surfaces
         local ray = Workspace:Raycast(HRP.Position, Vector3.new(0,-3,0), RaycastParams.new())
         if not ray or not table.find(SLIPPERY_MATERIALS, ray.Material) then return end
 
-        -- Update friction using the customAntiSlipperyFriction value
+        -- Loop through leg and foot parts, updating friction using customAntiSlipperyFriction.
         for _, partName in pairs({"LeftLeg", "RightLeg", "LeftFoot", "RightFoot"}) do
             local part = char:FindFirstChild(partName)
             if part then
@@ -107,8 +186,8 @@ do
                     originalProps[part] = part.CustomPhysicalProperties
                 end
                 local friction
-                if char:FindFirstChild("Bomb") then
-                    -- If bomb present, reduce friction further (about half)
+                if char:FindFirstChild(bombName) then
+                    -- Bomb state: roughly half friction plus a little random variation.
                     friction = customAntiSlipperyFriction * 0.5 + (math.random() * 0.02)
                 else
                     friction = customAntiSlipperyFriction + (math.random() * 0.03)
@@ -162,9 +241,8 @@ local lastAIMessageTime = 0
 local aiMessageCooldown = 5
 local raySpreadAngle = 10
 local numRaycasts = 5
-local customAntiSlipperyFriction = 0.2    -- Default custom friction value (normal state)
+local customAntiSlipperyFriction = 0.2    -- Default friction (normal: ~0.2, bomb state: ~0.1)
 local customHitboxSize = 0.1
--- Bomb timer functionality removed
 
 -----------------------------------------------------
 -- Update Friction Every 0.5 Seconds
@@ -179,7 +257,7 @@ task.spawn(function()
 end)
 
 -----------------------------------------------------
--- VISUAL TARGET MARKER
+-- VISUAL TARGET MARKER (FOR AUTO PASS)
 -----------------------------------------------------
 local currentTargetMarker, currentTargetPlayer = nil, nil
 local function createOrUpdateTargetMarker(player, distance)
@@ -220,7 +298,7 @@ local function removeTargetMarker()
 end
 
 -----------------------------------------------------
--- MULTIPLE RAYCASTS (Line-of-Sight Checks)
+-- MULTIPLE RAYCASTS (LINE-OF-SIGHT CHECKS)
 -----------------------------------------------------
 local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
     local spreadRad = math.rad(raySpreadAngle)
@@ -272,7 +350,7 @@ end
 local function autoPassBomb()
     if not AutoPassEnabled then return end
     pcall(function()
-        local Bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Bomb")
+        local Bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(bombName)
         if Bomb then
             local BombEvent = Bomb:FindFirstChild("RemoteEvent")
             local closestPlayer = getClosestPlayer()
@@ -280,7 +358,7 @@ local function autoPassBomb()
                 local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
                 local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
                 if distance <= bombPassDistance then
-                    -- Optionally rotate here if needed
+                    -- Optionally, rotation logic can be added here before passing
                     BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
                 end
             end
@@ -332,12 +410,12 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
 
 AutomatedTab:AddLabel("== Character Settings ==", 15)
 AutomatedTab:AddToggle({
-      Name = "Anti-Slippery",
+    Name = "Anti-Slippery",
     Info = "Uses custom friction value (normal: ~0.2, bomb state: ~0.1)",
     Default = false,
     Callback = function(v)
        antiSlippery = v
-        if not v then FrictionModule.restore() end
+       if not v then FrictionModule.restore() end
     end
 })
 AutomatedTab:AddTextbox({
