@@ -39,8 +39,8 @@ local countdown = 0
 local defaultExplosionTime = 15 -- fallback value
 
 -- Function to retrieve a bomb's explosion time.
--- Checks multiple possibilities: visible NumberValue "ExplosionTime", an attribute "ExplosionTime",
--- an attribute called "timebomb" (if that hidden reference exists) or even a hidden child.
+-- Checks multiple possibilities: a visible NumberValue "ExplosionTime",
+-- an attribute "ExplosionTime", an attribute "timebomb", or a hidden child.
 local function getBombExplosionTime(bomb)
     if bomb then
         if bomb:FindFirstChild("ExplosionTime") and bomb.ExplosionTime:IsA("NumberValue") then
@@ -62,12 +62,12 @@ local function getBombExplosionTime(bomb)
     return defaultExplosionTime
 end
 
--- Check if the player is currently holding the bomb
+-- Check if the player is currently holding the bomb (i.e. bomb is a child of the character)
 local function isHoldingBomb()
     return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(bombName) ~= nil
 end
 
--- Run a heartbeat loop to update the countdown GUI
+-- Heartbeat loop to update the countdown GUI
 RunService.Heartbeat:Connect(function(dt)
     if isHoldingBomb() then
         local bomb = LocalPlayer.Character:FindFirstChild(bombName)
@@ -108,7 +108,9 @@ function LoggingModule.logError(err, context)
 end
 function LoggingModule.safeCall(func, context)
     local success, result = pcall(func)
-    if not success then LoggingModule.logError(result, context) end
+    if not success then
+        LoggingModule.logError(result, context)
+    end
     return success, result
 end
 
@@ -178,7 +180,7 @@ do
         local ray = Workspace:Raycast(HRP.Position, Vector3.new(0,-3,0), RaycastParams.new())
         if not ray or not table.find(SLIPPERY_MATERIALS, ray.Material) then return end
 
-        -- Loop through leg and foot parts, updating friction using customAntiSlipperyFriction.
+        -- Update friction of parts using customAntiSlipperyFriction.
         for _, partName in pairs({"LeftLeg", "RightLeg", "LeftFoot", "RightFoot"}) do
             local part = char:FindFirstChild(partName)
             if part then
@@ -358,7 +360,7 @@ local function autoPassBomb()
                 local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
                 local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
                 if distance <= bombPassDistance then
-                    -- Optionally, rotation logic can be added here before passing
+                    -- Optionally, add rotation logic here before passing the bomb
                     BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
                 end
             end
