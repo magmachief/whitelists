@@ -141,8 +141,8 @@ local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://
 local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 
 -- Main Toggle
-AutomatedTab:AddLabel("== Bomb Passing ==", 15)
-local orionAutoPassToggle = AutomatedTab:AddToggle({
+au:AddLabel("== Bomb Passing ==", 15)
+local orionAutoPassToggle = au:AddToggle({
     Name = "Auto Pass Bomb",
     Default = AutoPassEnabled,
     Flag = "AutoPassBomb",
