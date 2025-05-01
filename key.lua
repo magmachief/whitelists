@@ -141,9 +141,11 @@ local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://
 local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 
 -- Main Toggle
-au:AddLabel({
-    Name = "Enable Auto Pass",
-    Default = false,
+AutomatedTab:AddLabel("== Bomb Passing ==", 15)
+local orionAutoPassToggle = AutomatedTab:AddToggle({
+    Name = "Auto Pass Bomb",
+    Default = AutoPassEnabled,
+    Flag = "AutoPassBomb",
     Callback = function(value)
         AutoPassEnabled = value
         if value then
@@ -153,6 +155,7 @@ au:AddLabel({
         end
     end
 })
+
 
 -- Distance Control
 au:AddTextbox({
