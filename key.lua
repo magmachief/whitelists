@@ -88,21 +88,20 @@ function LoggingModule.safeCall(func, context)
 end
 
 local TargetingModule = {}
--- Returns the closest player (if not holding a bomb) within bombPassDistance.
-function TargetingModule.getClosestPlayer(bombPassDistance)
-    local closestPlayer, shortestDistance = nil, bombPassDistance
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
-    local myPos = LocalPlayer.Character.HumanoidRootPart.Position
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- Skip players who are holding a bomb.
-            if player.Character:FindFirstChild(bombName) then continue end
-            local distance = (player.Character.HumanoidRootPart.Position - myPos).Magnitude
-            if distance < shortestDistance then
-                shortestDistance = distance
-                closestPlayer = player
+
+function TargetingModule.getClosestPlayer()
+    local closestPlayer, minDistance = nil, math.huge
+    local myPos = HRP.Position
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local targetHrp = player.Character:FindFirstChild("HumanoidRootPart")
+            if targetHrp and not player.Character:FindFirstChild(bombName) then
+                local distance = (targetHrp.Position - myPos).Magnitude
+                if distance < minDistance then
+                    minDistance = distance
+                    closestPlayer = player
+                end
             end
         end
     end
