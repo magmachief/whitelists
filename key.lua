@@ -136,40 +136,44 @@ local Window = OrionLib:MakeWindow({
 })
 
 -- Create Tabs
-local au = Window:MakeTab({ Name = "Automated Settings", Icon = "rbxassetid://4483345998", PremiumOnly = false })
+local AutomatedTab = Window:MakeTab({ Name = "Automated Settings", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://7072720870", PremiumOnly = false })
 local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 
 -- Main Toggle
-au:AddLabel("== Bomb Passing ==", 15)
-local orionAutoPassToggle = au:AddToggle({
+AutomatedTab:AddLabel("== Bomb Passing ==", 15)
+local orionAutoPassToggle = AutomatedTab:AddToggle({
     Name = "Auto Pass Bomb",
     Default = AutoPassEnabled,
     Flag = "AutoPassBomb",
     Callback = function(value)
         AutoPassEnabled = value
         if value then
-            RunService.Stepped:Connect(autoPassBomb)
+            if not autoPassConnection then
+                autoPassConnection = RunService.Stepped:Connect(autoPassBomb)
+            end
         else
-            RunService.Stepped:Disconnect()
+            if autoPassConnection then
+                autoPassConnection:Disconnect()
+                autoPassConnection = nil
+            end
+            removeTargetMarker()
+        end
+        if autoPassMobileToggle and autoPassMobileToggle.Set then
+            autoPassMobileToggle:Set(value)
         end
     end
 })
-
-
--- Distance Control
-au:AddTextbox({
-    Name = "Pass Distance",
-    Min = 10,
-    Max = 50,
-    Default = 15,
-    Color = Color3.fromRGB(255,0,0),
-    Increment = 1,
+AITab:AddTextbox({
+    Name = "Bomb Pass Distance",
+    Default = tostring(bombPassDistance),
+    Flag = "BombPassDistance",
+    TextDisappear = false,
     Callback = function(value)
-        bombPassDistance = value
+        local num = tonumber(value)
+        if num then bombPassDistance = num end
     end
 })
-
 OrionLib:Init()
 
 -----------------------------------------------------
