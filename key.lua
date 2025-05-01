@@ -142,7 +142,7 @@ local au = OrionLib:MakeWindow({
 })
 
 -- Main Toggle
-au:AddToggle({
+au:AddLabel({
     Name = "Enable Auto Pass",
     Default = false,
     Callback = function(value)
@@ -156,7 +156,7 @@ au:AddToggle({
 })
 
 -- Distance Control
-au:AddSlider({
+au:AddTextbox({
     Name = "Pass Distance",
     Min = 10,
     Max = 50,
