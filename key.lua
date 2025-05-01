@@ -134,12 +134,11 @@ local Window = OrionLib:MakeWindow({
     ConfigFolder = "YonMenu_Advanced",
     ShowIcon = true
 })
-local au = OrionLib:MakeWindow({
-    Name = "Precision Bomb Pass",
-    HidePremium = false,
-    SaveConfig = true,
-    ConfigFolder = "BombPassConfig"
-})
+
+-- Create Tabs
+local au = Window:MakeTab({ Name = "Automated Settings", Icon = "rbxassetid://4483345998", PremiumOnly = false })
+local AITab = Window:MakeTab({ Name = "AI Based Settings", Icon = "rbxassetid://7072720870", PremiumOnly = false })
+local UITab = Window:MakeTab({ Name = "UI Elements", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 
 -- Main Toggle
 au:AddLabel({
