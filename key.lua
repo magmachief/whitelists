@@ -328,48 +328,21 @@ local function autoPassBomb()
         if Bomb then
             local BombEvent = Bomb:FindFirstChild("RemoteEvent")
             local closestPlayer = getClosestPlayer()
+        local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
             if closestPlayer and closestPlayer.Character then
                 local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
                 local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
                 if distance <= bombPassDistance then
                     -- Optionally, add rotation logic here before passing the bomb
-                    BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
-                end
+                    
+            executePrecisionRotation(targetHrp.Position)
+BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
+                            HUMANOID:MoveTo(HRP.Position)
+end
             end
         end
     end)
 end
-local function autoPassBomb2()
-    if not AutoPassEnabled then return end
-    
-    pcall(function()
-        local bomb = LocalPlayer.Character:FindFirstChild(bombName)
-        if not bomb then return end
-        
-        local bombEvent = bomb:FindFirstChild("RemoteEvent")
-        if not bombEvent then return end
-        
-        local closestPlayer = TargetingModule.getClosestPlayer()
-        if not closestPlayer or not closestPlayer.Character then return end
-        
-        local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not targetHrp then return end
-        
-        local distance = (targetHrp.Position - HRP.Position).Magnitude
-        if distance <= bombPassDistance then
-            -- Execute precision rotation
-            executePrecisionRotation(targetHrp.Position)
-            
-            -- Immediate precise pass
-            bombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
-            
-            -- Post-pass stabilization
-            task.wait(0.05)
-            HUMANOID:MoveTo(HRP.Position)
-        end
-    end)
-end
-
 -----------------------------------------------------
 -- ORIONLIB MENU CREATION
 -----------------------------------------------------
@@ -397,7 +370,7 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({
         AutoPassEnabled = value
         if value then
             if not autoPassConnection then
-                autoPassConnection = RunService.Stepped:Connect(autoPassBomb2)
+                autoPassConnection = RunService.Stepped:Connect(autoPassBomb)
             end
         else
             if autoPassConnection then
@@ -608,7 +581,7 @@ local function createMobileToggle()
                 orionAutoPassToggle:Set(true)
             end
             if not autoPassConnection then
-                autoPassConnection = RunService.Stepped:Connect(autoPassBomb2)
+                autoPassConnection = RunService.Stepped:Connect(autoPassBomb)
             end
         else
             button.BackgroundColor3 = Color3.fromRGB(255,0,0)
