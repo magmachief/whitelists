@@ -52,7 +52,7 @@ local function executePrecisionRotation(targetPos)
         -- Body rotation
         humanoid.AutoRotate = false
         hrp.CFrame = CFrame.lookAt(hrp.Position, targetPos)
-        task.wait(0.05)
+        task.wait(0.01)
         
         -- Head emphasis
         local head = char:FindFirstChild("Head")
