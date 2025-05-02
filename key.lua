@@ -226,7 +226,7 @@ task.spawn(function()
         if antiSlippery then
             FrictionModule.update()
         end
-        wait(0.5 + math.random())
+        wait(0.5 + 0.0001)
     end
 end)
 
