@@ -162,9 +162,9 @@ do
                 local friction
                 if char:FindFirstChild(bombName) then
                     -- Bomb state: roughly half friction plus a little random variation.
-                    friction = customAntiSlipperyFriction * 0.5 + (math.random() * 0.02)
+                    friction = customAntiSlipperyFriction * 0.5 + (0.001 * 0.001)
                 else
-                    friction = customAntiSlipperyFriction + (math.random() * 0.03)
+                    friction = customAntiSlipperyFriction + (0.05 * 0.03)
                 end
                 part.CustomPhysicalProperties = PhysicalProperties.new(friction, 0.3, 0.5)
             end
