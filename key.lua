@@ -144,32 +144,29 @@ do
     local originalProps = {}
     local SLIPPERY_MATERIALS = {Enum.Material.Ice, Enum.Material.Plastic, Enum.Material.Glass}
 
-    function FrictionModule.update()
-        local char = LocalPlayer.Character
-        if not char then return end
-        
-        -- Raycast downward from HRP to detect slippery surfaces
-        local ray = Workspace:Raycast(HRP.Position, Vector3.new(0,-3,0), RaycastParams.new())
-        if not ray or not table.find(SLIPPERY_MATERIALS, ray.Material) then return end
+function FrictionModule.update()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local HRP = char:FindFirstChild("HumanoidRootPart")
+    if not HRP then return end
 
-        -- Update friction of parts using customAntiSlipperyFriction.
-        for _, partName in pairs({"LeftLeg", "RightLeg", "LeftFoot", "RightFoot"}) do
-            local part = char:FindFirstChild(partName)
-            if part then
-                if not originalProps[part] then
-                    originalProps[part] = part.CustomPhysicalProperties
-                end
-                local friction
-                if char:FindFirstChild(bombName) then
-                    -- Bomb state: roughly half friction plus a little random variation.
-                    friction = customAntiSlipperyFriction * 0.5 + (0.001 * 0.001)
-                else
-                    friction = customAntiSlipperyFriction + (0.05 * 0.03)
-                end
-                part.CustomPhysicalProperties = PhysicalProperties.new(friction, 0.3, 0.5)
+    -- Raycast downward from HRP to detect slippery surfaces
+    local ray = Workspace:Raycast(HRP.Position, Vector3.new(0, -3, 0), RaycastParams.new())
+    if not ray or not table.find(SLIPPERY_MATERIALS, ray.Material) then return end
+
+    -- Update friction of parts using improved anti-slippery friction
+    for _, partName in pairs({"LeftLeg", "RightLeg", "LeftFoot", "RightFoot"}) do
+        local part = char:FindFirstChild(partName)
+        if part then
+            if not originalProps[part] then
+                originalProps[part] = part.CustomPhysicalProperties
             end
+            local hasBomb = char:FindFirstChild(bombName)
+            local friction = hasBomb and 1.5 or 2.5 -- More grip when holding the bomb
+            part.CustomPhysicalProperties = PhysicalProperties.new(friction, 0.3, 0.5)
         end
     end
+end
 
     function FrictionModule.restore()
         for part, props in pairs(originalProps) do
