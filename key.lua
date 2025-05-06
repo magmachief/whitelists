@@ -316,23 +316,23 @@ end
 -- AUTO PASS FUNCTION
 -----------------------------------------------------
 local function autoPassBomb()
-    -- Only proceed if auto pass is enabled and the player is holding the bomb.
-    if not AutoPassEnabled or not isHoldingBomb() then return end
+    if not AutoPassEnabled then return end
     pcall(function()
         local Bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(bombName)
         if Bomb then
             local BombEvent = Bomb:FindFirstChild("RemoteEvent")
-            local closestPlayer = getClosestPlayer()  -- or TargetingModule.getClosestPlayer if you prefer
+            local closestPlayer = getClosestPlayer()
+        local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
             if closestPlayer and closestPlayer.Character then
-                local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if targetHrp then
-                    local targetPosition = targetHrp.Position
-                    local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
-                    if distance <= bombPassDistance then
-                        -- Optionally include rotation logic here before passing the bomb
-                        BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
-                    end
-                end
+                local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
+                local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
+                if distance <= bombPassDistance then
+                    -- Optionally, add rotation logic here before passing the bomb
+                    
+            executePrecisionRotation(targetHrp.Position)
+BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
+                            HUMANOID:MoveTo(HRP.Position)
+end
             end
         end
     end)
