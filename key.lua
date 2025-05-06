@@ -1,3 +1,4 @@
+
 -----------------------------------------------------
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
 -- Client-Only Version (Local Stats, No DataStore)
@@ -94,36 +95,6 @@ end
 local CHAR=LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HUMANOID=CHAR:WaitForChild("Humanoid")
 local HRP=CHAR:WaitForChild("HumanoidRootPart")
-
------------------------------------------------------
--- PRECISION ROTATION SYSTEM
------------------------------------------------------
-local ROTATION_ANGLES={5,10,-5,-10}
-local function executePrecisionRotation(targetPos)
- local char=LocalPlayer.Character; if not char then return end
- local humanoid=char:FindFirstChild("Humanoid")
- local hrp=char:FindFirstChild("HumanoidRootPart")
- if not (humanoid and hrp) then return end
- local microMovements={Vector3.new(0.0001,0,0.0001),Vector3.new(-0.0001,0,-0.0001)}
- for i=1,2 do
-  humanoid.AutoRotate=false
-  hrp.CFrame=CFrame.lookAt(hrp.Position,targetPos)
-  task.wait(0.01)
-  local head=char:FindFirstChild("Head")
-  if head then
-   local weld=head:FindFirstChildOfClass("Weld")
-   if weld then
-    local angle=ROTATION_ANGLES[(i % #ROTATION_ANGLES)+1]
-    weld.C0=weld.C0 * CFrame.Angles(0,math.rad(angle),0)
-    task.delay(0.2,function() weld.C0=weld.C0 * CFrame.Angles(0,math.rad(-angle),0) end)
-   end
-  end
-  humanoid:MoveTo(hrp.Position+microMovements[(i % #microMovements)+1])
-  task.wait(0.02)
-  humanoid:MoveTo(hrp.Position)
- end
- humanoid.AutoRotate=true
-end
 
 -----------------------------------------------------
 -- LOGGING & TARGETING MODULES
@@ -359,17 +330,6 @@ AITab:AddToggle({Name="AI Assistance",Default=false,Flag="AIAssistance",Callback
 AITab:AddTextbox({Name="Bomb Pass Distance",Default=tostring(bombPassDistance),Flag="BombPassDistance",TextDisappear=false,Callback=function(value) local num=tonumber(value) if num then bombPassDistance=num end end})
 AITab:AddTextbox({Name="Ray Spread Angle",Default=tostring(raySpreadAngle),Flag="RaySpreadAngle",TextDisappear=false,Callback=function(value) local num=tonumber(value) if num then raySpreadAngle=num end end})
 AITab:AddTextbox({Name="Number of Raycasts",Default=tostring(numRaycasts),Flag="NumberOfRaycasts",TextDisappear=false,Callback=function(value) local num=tonumber(value) if num then numRaycasts=num end end})
-AITab:AddLabel("== Rotation Settings ==",15)
-local orionFlickRotationToggle=AITab:AddToggle({Name="Flick Rotation",Default=false,Flag="FlickRotation",Callback=function(value)
- useFlickRotation=value
- if value then useSmoothRotation=false if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then orionSmoothRotationToggle:Set(false) end
- else if not useSmoothRotation then useSmoothRotation=true if orionSmoothRotationToggle and orionSmoothRotationToggle.Set then orionSmoothRotationToggle:Set(true) end end
-end})
-local orionSmoothRotationToggle=AITab:AddToggle({Name="Smooth Rotation",Default=true,Flag="SmoothRotation",Callback=function(value)
- useSmoothRotation=value
- if value then useFlickRotation=false if orionFlickRotationToggle and orionFlickRotationToggle.Set then orionFlickRotationToggle:Set(false) end
- else if not useFlickRotation then useFlickRotation=true if orionFlickRotationToggle and orionFlickRotationToggle.Set then orionFlickRotationToggle:Set(true) end end
-end})
 UITab:AddColorpicker({Name="Menu Main Color",Default=Color3.fromRGB(255,0,0),Flag="MenuMainColor",Save=true,Callback=function(color)
  OrionLib.Themes[OrionLib.SelectedTheme].Main=color end})
 OrionLib:Init()
