@@ -141,8 +141,8 @@ end
 
 local FrictionModule = {}
 do
-    local originalProps = {}
-    local SLIPPERY_MATERIALS = {Enum.Material.Ice, Enum.Material.Plastic, Enum.Material.Glass}
+local originalProps = {}
+local SLIPPERY_MATERIALS = {Enum.Material.Ice, Enum.Material.Plastic, Enum.Material.Glass}
 
 function FrictionModule.update()
     local char = LocalPlayer.Character
@@ -150,32 +150,29 @@ function FrictionModule.update()
     local HRP = char:FindFirstChild("HumanoidRootPart")
     if not HRP then return end
 
-    -- Raycast downward from HRP to detect slippery surfaces
-    local ray = Workspace:Raycast(HRP.Position, Vector3.new(0, -3, 0), RaycastParams.new())
-    if not ray or not table.find(SLIPPERY_MATERIALS, ray.Material) then return end
-
-    -- Update friction of parts using improved anti-slippery friction
+    -- Always update friction regardless of surface
     for _, partName in pairs({"LeftLeg", "RightLeg", "LeftFoot", "RightFoot"}) do
         local part = char:FindFirstChild(partName)
         if part then
             if not originalProps[part] then
                 originalProps[part] = part.CustomPhysicalProperties
             end
-            local hasBomb = char:FindFirstChild(bombName)
-            local friction = hasBomb and 4 or 5 -- More grip when holding the bomb
+            local hasBomb = isHoldingBomb()  -- check if holding bomb
+            -- When holding the bomb, assign a higher friction (e.g., 8) to be less slippery.
+            -- Otherwise, use the default value set in customAntiSlipperyFriction.
+            local friction = hasBomb and 8 or customAntiSlipperyFriction
             part.CustomPhysicalProperties = PhysicalProperties.new(friction, 0.3, 0.5)
         end
     end
 end
 
-    function FrictionModule.restore()
-        for part, props in pairs(originalProps) do
-            if part and part.Parent then
-                part.CustomPhysicalProperties = props
-            end
+function FrictionModule.restore()
+    for part, props in pairs(originalProps) do
+        if part and part.Parent then
+            part.CustomPhysicalProperties = props
         end
-        originalProps = {}
     end
+    originalProps = {}
 end
 
 -----------------------------------------------------
@@ -223,7 +220,7 @@ task.spawn(function()
         if antiSlippery then
             FrictionModule.update()
         end
-        wait(0.5 + 0.0001)
+        wait(0.5)
     end
 end)
 
@@ -319,23 +316,23 @@ end
 -- AUTO PASS FUNCTION
 -----------------------------------------------------
 local function autoPassBomb()
-    if not AutoPassEnabled then return end
+    -- Only proceed if auto pass is enabled and the player is holding the bomb.
+    if not AutoPassEnabled or not isHoldingBomb() then return end
     pcall(function()
         local Bomb = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(bombName)
         if Bomb then
             local BombEvent = Bomb:FindFirstChild("RemoteEvent")
-            local closestPlayer = getClosestPlayer()
-        local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local closestPlayer = getClosestPlayer()  -- or TargetingModule.getClosestPlayer if you prefer
             if closestPlayer and closestPlayer.Character then
-                local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
-                local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
-                if distance <= bombPassDistance then
-                    -- Optionally, add rotation logic here before passing the bomb
-                    
-            executePrecisionRotation(targetHrp.Position)
-BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
-                            HUMANOID:MoveTo(HRP.Position)
-end
+                local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if targetHrp then
+                    local targetPosition = targetHrp.Position
+                    local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
+                    if distance <= bombPassDistance then
+                        -- Optionally include rotation logic here before passing the bomb
+                        BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
+                    end
+                end
             end
         end
     end)
