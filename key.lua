@@ -425,9 +425,7 @@ local function autoPassBomb()
                 local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
                 local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
                 if distance <= bombPassDistance then
-                    executePrecisionRotation(targetHrp.Position)
                     BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
-                    HUMANOID:MoveTo(HRP.Position)
                 end
             end
         end
