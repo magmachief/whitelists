@@ -14,11 +14,119 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local bombName = "Bomb"
 
+-----------------------------------------------------
+-- ENHANCED ANTI‑SLIPPERY MODULE WITH SMART TRACTION
+-----------------------------------------------------
+local FrictionController = {}
+FrictionController.__index = FrictionController
 
--- Check if the player is currently holding the bomb (i.e. bomb is a child of the character)
-local function isHoldingBomb()
-    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(bombName) ~= nil
+function FrictionController.new()
+    local self = setmetatable({}, FrictionController)
+    self.originalProperties = {}                 -- Cache original physical properties
+    self.updateInterval = 0.1                      -- Update interval (in seconds)
+    -- Configuration variables:
+    self.normalFriction = 0.7                      -- Base friction when not holding the bomb
+    self.bombFriction = 0.4                        -- Friction when holding the bomb
+    self.movementThreshold = 0.85                  -- Threshold for intentional movement
+    self.stateMultipliers = {                      -- Multipliers based on humanoid state
+        Running = 1.2,
+        Walking = 1.0,
+        Crouching = 0.8
+    }
+    self.enabled = false
+    return self
 end
+
+-- Optional: Get the surface material beneath the character
+function FrictionController:getSurfaceMaterial(character)
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return Enum.Material.Plastic end
+    local rayParams = RaycastParams.new()
+    rayParams.FilterDescendantsInstances = {character}
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    local result = Workspace:Raycast(hrp.Position, Vector3.new(0, -5, 0), rayParams)
+    return result and result.Material or Enum.Material.Plastic
+end
+
+-- Calculate dynamic friction based on movement and character state
+function FrictionController:calculateFriction(character)
+    local humanoid = character:FindFirstChild("Humanoid")
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not (humanoid and hrp) then
+        return self.normalFriction
+    end
+
+    local moveDir = humanoid.MoveDirection
+    local velocity = hrp.Velocity
+    local velocityDir = velocity.Magnitude > 0 and velocity.Unit or Vector3.new(0, 0, 0)
+    local directionSimilarity = moveDir:Dot(velocityDir)
+    
+    local baseFriction = self.normalFriction
+    if character:FindFirstChild(bombName) then
+        baseFriction = self.bombFriction
+    end
+    
+    local stateName = humanoid:GetState()         -- e.g., "Running", "Walking", ...
+    local multiplier = self.stateMultipliers[stateName] or 1.0
+    
+    if directionSimilarity > self.movementThreshold then
+        return math.clamp(baseFriction * multiplier, 0.1, 1.0)
+    else
+        return math.clamp(baseFriction * 0.7, 0.1, 1.0)
+    end
+end
+
+-- Update the character's body parts friction
+function FrictionController:update()
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local parts = {"LeftFoot", "RightFoot", "LeftLeg", "RightLeg"}
+    for _, partName in ipairs(parts) do
+        local part = character:FindFirstChild(partName)
+        if part and part:IsA("BasePart") then
+            if not self.originalProperties[part] then
+                self.originalProperties[part] = part.CustomPhysicalProperties
+            end
+            local dynamicFriction = self:calculateFriction(character)
+            part.CustomPhysicalProperties = PhysicalProperties.new(
+                dynamicFriction,
+                part.CustomPhysicalProperties.Elasticity,
+                part.CustomPhysicalProperties.FrictionWeight
+            )
+        end
+    end
+end
+
+-- Restore original physical properties to the character parts
+function FrictionController:restore()
+    for part, orig in pairs(self.originalProperties) do
+        if part and part.Parent then
+            part.CustomPhysicalProperties = orig
+        end
+    end
+    self.originalProperties = {}
+end
+
+-- Enable the anti‑slippery system by connecting to the Heartbeat event
+function FrictionController:enable()
+    if self.enabled then return end
+    self.enabled = true
+    self.connection = RunService.Heartbeat:Connect(function()
+        self:update()
+    end)
+end
+
+-- Disable the system and restore parts' original properties
+function FrictionController:disable()
+    if self.connection then
+        self.connection:Disconnect()
+        self.connection = nil
+    end
+    self:restore()
+    self.enabled = false
+end
+
 -----------------------------------------------------
 -- CHARACTER SETUP
 -----------------------------------------------------
@@ -27,54 +135,45 @@ local HUMANOID = CHAR:WaitForChild("Humanoid")
 local HRP = CHAR:WaitForChild("HumanoidRootPart")
 
 -----------------------------------------------------
--- MODULES & UTILITY FUNCTIONS
------------------------------------------------------
------------------------------------------------------
 -- PRECISION ROTATION SYSTEM
 -----------------------------------------------------
 local ROTATION_ANGLES = {5, 10, -5, -10} -- Subtle natural angles
-
 local function executePrecisionRotation(targetPos)
     local char = LocalPlayer.Character
     if not char then return end
-    
     local humanoid = char:FindFirstChild("Humanoid")
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not humanoid or not hrp then return end
-
-    -- Server-recognized micro-adjustments
+    
     local microMovements = {
         Vector3.new(0.0001, 0, 0.0001),
         Vector3.new(-0.0001, 0, -0.0001)
     }
-
-    for i = 1, 2 do -- Double rotation sequence
-        -- Body rotation
+    for i = 1, 2 do
         humanoid.AutoRotate = false
         hrp.CFrame = CFrame.lookAt(hrp.Position, targetPos)
         task.wait(0.01)
-        
-        -- Head emphasis
         local head = char:FindFirstChild("Head")
         if head then
             local weld = head:FindFirstChildOfClass("Weld")
             if weld then
-                local angle = ROTATION_ANGLE[i % #ROTATION_ANGLES + 1]
+                local angle = ROTATION_ANGLES[(i % #ROTATION_ANGLES) + 1]
                 weld.C0 = weld.C0 * CFrame.Angles(0, math.rad(angle), 0)
                 task.delay(0.2, function()
                     weld.C0 = weld.C0 * CFrame.Angles(0, math.rad(-angle), 0)
                 end)
             end
         end
-
-        -- Micro-movement sync
-        humanoid:MoveTo(hrp.Position + microMovements[i % #microMovements + 1])
+        humanoid:MoveTo(hrp.Position + microMovements[(i % #microMovements) + 1])
         task.wait(0.02)
         humanoid:MoveTo(hrp.Position)
     end
     humanoid.AutoRotate = true
 end
 
+-----------------------------------------------------
+-- LOGGING & TARGETING MODULES
+-----------------------------------------------------
 local LoggingModule = {}
 function LoggingModule.logError(err, context)
     warn("[ERROR] Context: " .. tostring(context) .. " | Error: " .. tostring(err))
@@ -88,11 +187,9 @@ function LoggingModule.safeCall(func, context)
 end
 
 local TargetingModule = {}
-
 function TargetingModule.getClosestPlayer()
     local closestPlayer, minDistance = nil, math.huge
     local myPos = HRP.Position
-    
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local targetHrp = player.Character:FindFirstChild("HumanoidRootPart")
@@ -107,11 +204,13 @@ function TargetingModule.getClosestPlayer()
     end
     return closestPlayer
 end
-
 function TargetingModule.rotateCharacterTowardsTarget(targetPosition)
     -- Rotation intentionally disabled.
 end
 
+-----------------------------------------------------
+-- VISUAL MODULE
+-----------------------------------------------------
 local VisualModule = {}
 function VisualModule.animateMarker(marker)
     if not marker then return end
@@ -132,6 +231,9 @@ function VisualModule.playPassVFX(target)
     delay(1, function() emitter:Destroy() end)
 end
 
+-----------------------------------------------------
+-- AI NOTIFICATIONS MODULE
+-----------------------------------------------------
 local AINotificationsModule = {}
 function AINotificationsModule.sendNotification(title, text, duration)
     pcall(function()
@@ -139,33 +241,30 @@ function AINotificationsModule.sendNotification(title, text, duration)
     end)
 end
 
+-----------------------------------------------------
+-- LEGACY FRICTION MODULE (FOR REMOVING HITBOX AND OLD ANTI-SLIPPERY)
+-----------------------------------------------------
 local FrictionModule = {}
 do
 local originalProps = {}
 local SLIPPERY_MATERIALS = {Enum.Material.Ice, Enum.Material.Plastic, Enum.Material.Glass}
-
 function FrictionModule.update()
     local char = LocalPlayer.Character
     if not char then return end
     local HRP = char:FindFirstChild("HumanoidRootPart")
     if not HRP then return end
-
-    -- Always update friction regardless of surface
     for _, partName in pairs({"LeftLeg", "RightLeg", "LeftFoot", "RightFoot"}) do
         local part = char:FindFirstChild(partName)
         if part then
             if not originalProps[part] then
                 originalProps[part] = part.CustomPhysicalProperties
             end
-            local hasBomb = isHoldingBomb()  -- check if holding bomb
-            -- When holding the bomb, assign a higher friction (e.g., 8) to be less slippery.
-            -- Otherwise, use the default value set in customAntiSlipperyFriction.
+            local hasBomb = isHoldingBomb()
             local friction = hasBomb and 8 or customAntiSlipperyFriction
             part.CustomPhysicalProperties = PhysicalProperties.new(friction, 0.3, 0.5)
         end
     end
 end
-
 function FrictionModule.restore()
     for part, props in pairs(originalProps) do
         if part and part.Parent then
@@ -173,6 +272,7 @@ function FrictionModule.restore()
         end
     end
     originalProps = {}
+end
 end
 
 -----------------------------------------------------
@@ -213,7 +313,7 @@ local customAntiSlipperyFriction = 0.2    -- Default friction (normal: ~0.2, bom
 local customHitboxSize = 0.1
 
 -----------------------------------------------------
--- Update Friction Every 0.5 Seconds
+-- UPDATE FRICTION EVERY 0.5 SECONDS (Using new module if enabled)
 -----------------------------------------------------
 task.spawn(function()
     while true do
@@ -322,21 +422,20 @@ local function autoPassBomb()
         if Bomb then
             local BombEvent = Bomb:FindFirstChild("RemoteEvent")
             local closestPlayer = getClosestPlayer()
-        local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
             if closestPlayer and closestPlayer.Character then
                 local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
                 local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
                 if distance <= bombPassDistance then
-                    -- Optionally, add rotation logic here before passing the bomb
-                    
-            executePrecisionRotation(targetHrp.Position)
-BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
-                            HUMANOID:MoveTo(HRP.Position)
-end
+                    executePrecisionRotation(targetHrp.Position)
+                    BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
+                    HUMANOID:MoveTo(HRP.Position)
+                end
             end
         end
     end)
 end
+
 -----------------------------------------------------
 -- ORIONLIB MENU CREATION
 -----------------------------------------------------
@@ -694,5 +793,14 @@ local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a
 end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8,0,0.8,0))
 
-print("Final Ultra-Advanced Bomb AI loaded. Menu, toggles (synchronized), shiftlock, friction updates, and mobile toggle are active.")
+-----------------------------------------------------
+-- INITIALIZE ENHANCED ANTI‑SLIPPERY SYSTEM
+-----------------------------------------------------
+local myFrictionController = FrictionController.new()
+myFrictionController:enable()
+
+-----------------------------------------------------
+-- FINAL NOTIFICATION
+-----------------------------------------------------
+print("Final Ultra-Advanced Bomb AI & Anti‑Slippery system loaded. Menu, toggles (synchronized), shiftlock, friction updates, and bomb passing are active.")
 return {}
