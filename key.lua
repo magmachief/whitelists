@@ -2,7 +2,6 @@
 -- Ultra Advanced AI-Driven Bomb Passing Assistant Script for "Pass the Bomb"
 -- Client-Only Version (Local Stats, No DataStore)
 -----------------------------------------------------
-
 -- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -22,13 +21,13 @@ FrictionController.__index = FrictionController
 
 function FrictionController.new()
     local self = setmetatable({}, FrictionController)
-    self.originalProperties = {}                 -- Cache original physical properties
-    self.updateInterval = 0.1                      -- Update interval (in seconds)
+    self.originalProperties = {}  -- Cache original physical properties
+    self.updateInterval = 0.1       -- Update interval (in seconds)
     -- Configuration variables:
-    self.normalFriction = 0.7                      -- Base friction when not holding the bomb
-    self.bombFriction = 0.4                        -- Friction when holding the bomb
-    self.movementThreshold = 0.85                  -- Threshold for intentional movement
-    self.stateMultipliers = {                      -- Multipliers based on humanoid state
+    self.normalFriction = 0.7       -- Base friction when not holding the bomb
+    self.bombFriction = 0.4         -- Friction when holding the bomb (for bomb state)
+    self.movementThreshold = 0.85   -- Threshold for intentional movement
+    self.stateMultipliers = {       -- Multipliers based on humanoid state
         Running = 1.2,
         Walking = 1.0,
         Crouching = 0.8
@@ -48,7 +47,8 @@ function FrictionController:getSurfaceMaterial(character)
     return result and result.Material or Enum.Material.Plastic
 end
 
--- Calculate dynamic friction based on movement and character state
+-- Calculate dynamic friction based on movement and character state.
+-- Note: The clamp range is adjusted depending on whether the bomb is held.
 function FrictionController:calculateFriction(character)
     local humanoid = character:FindFirstChild("Humanoid")
     local hrp = character:FindFirstChild("HumanoidRootPart")
@@ -66,13 +66,14 @@ function FrictionController:calculateFriction(character)
         baseFriction = self.bombFriction
     end
     
-    local stateName = humanoid:GetState()         -- e.g., "Running", "Walking", ...
+    local stateName = humanoid:GetState()   -- e.g., "Running", "Walking", etc.
     local multiplier = self.stateMultipliers[stateName] or 1.0
-    
-    if directionSimilarity > self.movementThreshold then
-        return math.clamp(baseFriction * multiplier, 0.1, 1.0)
+
+    -- When bomb is held, allow a higher maximum friction so that custom numbers above 1.0 are effective.
+    if character:FindFirstChild(bombName) then
+        return math.clamp(baseFriction * multiplier, 0.1, 10.0)
     else
-        return math.clamp(baseFriction * 0.7, 0.1, 1.0)
+        return math.clamp(baseFriction * multiplier, 0.1, 1.0)
     end
 end
 
@@ -98,7 +99,7 @@ function FrictionController:update()
     end
 end
 
--- Restore original physical properties to the character parts
+-- Restore original physical properties
 function FrictionController:restore()
     for part, orig in pairs(self.originalProperties) do
         if part and part.Parent then
@@ -108,16 +109,14 @@ function FrictionController:restore()
     self.originalProperties = {}
 end
 
--- Enable the anti‑slippery system by connecting to the Heartbeat event
+-- Enable the anti‑slippery system
 function FrictionController:enable()
     if self.enabled then return end
     self.enabled = true
-    self.connection = RunService.Heartbeat:Connect(function()
-        self:update()
-    end)
+    self.connection = RunService.Heartbeat:Connect(function() self:update() end)
 end
 
--- Disable the system and restore parts' original properties
+-- Disable and restore default properties
 function FrictionController:disable()
     if self.connection then
         self.connection:Disconnect()
@@ -138,6 +137,7 @@ local HRP = CHAR:WaitForChild("HumanoidRootPart")
 -- PRECISION ROTATION SYSTEM
 -----------------------------------------------------
 local ROTATION_ANGLES = {5, 10, -5, -10} -- Subtle natural angles
+
 local function executePrecisionRotation(targetPos)
     local char = LocalPlayer.Character
     if not char then return end
@@ -159,9 +159,7 @@ local function executePrecisionRotation(targetPos)
             if weld then
                 local angle = ROTATION_ANGLES[(i % #ROTATION_ANGLES) + 1]
                 weld.C0 = weld.C0 * CFrame.Angles(0, math.rad(angle), 0)
-                task.delay(0.2, function()
-                    weld.C0 = weld.C0 * CFrame.Angles(0, math.rad(-angle), 0)
-                end)
+                task.delay(0.2, function() weld.C0 = weld.C0 * CFrame.Angles(0, math.rad(-angle), 0) end)
             end
         end
         humanoid:MoveTo(hrp.Position + microMovements[(i % #microMovements) + 1])
@@ -259,7 +257,7 @@ function FrictionModule.update()
             if not originalProps[part] then
                 originalProps[part] = part.CustomPhysicalProperties
             end
-            local hasBomb = isHoldingBomb()
+            local hasBomb = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(bombName)) and true or false
             local friction = hasBomb and 8 or customAntiSlipperyFriction
             part.CustomPhysicalProperties = PhysicalProperties.new(friction, 0.3, 0.5)
         end
@@ -313,7 +311,7 @@ local customAntiSlipperyFriction = 0.2    -- Default friction (normal: ~0.2, bom
 local customHitboxSize = 0.1
 
 -----------------------------------------------------
--- UPDATE FRICTION EVERY 0.5 SECONDS (Using new module if enabled)
+-- UPDATE FRICTION EVERY 0.5 SECONDS (Using legacy module if enabled)
 -----------------------------------------------------
 task.spawn(function()
     while true do
@@ -402,7 +400,7 @@ local function getClosestPlayer()
     local closestPlayer, shortestDistance = nil, math.huge
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local distance = (player.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
+            local distance = (player.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
             if distance < shortestDistance then
                 shortestDistance = distance
                 closestPlayer = player
@@ -425,7 +423,7 @@ local function autoPassBomb()
             local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
             if closestPlayer and closestPlayer.Character then
                 local targetPosition = closestPlayer.Character.HumanoidRootPart.Position
-                local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).magnitude
+                local distance = (targetPosition - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
                 if distance <= bombPassDistance then
                     executePrecisionRotation(targetHrp.Position)
                     BombEvent:FireServer(closestPlayer.Character, closestPlayer.Character:FindFirstChild("CollisionPart"))
@@ -802,5 +800,5 @@ myFrictionController:enable()
 -----------------------------------------------------
 -- FINAL NOTIFICATION
 -----------------------------------------------------
-print("Final Ultra-Advanced Bomb AI & Anti‑Slippery system loaded. Menu, toggles (synchronized), shiftlock, friction updates, and bomb passing are active.")
+print("Final Ultra-Advanced Bomb AI & Anti‑Slippery system loaded. Menu, toggles, shiftlock, friction updates, and bomb passing are active.")
 return {}
