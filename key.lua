@@ -162,7 +162,7 @@ function FrictionModule.update()
                 originalProps[part] = part.CustomPhysicalProperties
             end
             local hasBomb = char:FindFirstChild(bombName)
-            local friction = hasBomb and 1.5 or 2.5 -- More grip when holding the bomb
+            local friction = hasBomb and 4 or 5 -- More grip when holding the bomb
             part.CustomPhysicalProperties = PhysicalProperties.new(friction, 0.3, 0.5)
         end
     end
