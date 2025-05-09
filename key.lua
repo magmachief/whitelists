@@ -54,7 +54,7 @@ function FrictionController:calculateFriction(character)
 	end
 	local moveDir = humanoid.MoveDirection
 	local velocity = hrp.Velocity
-	local velocityDir = velocity.Magnitude > 0 and velocity.Unit or Vector3.new(0,0,0)
+	local velocityDir = velocity.Magnitude > 0 and velocity.Unit or Vector3.new(0, 0, 0)
 	local baseFriction = self.normalFriction
 	local stateName = humanoid:GetState()
 	local multiplier = self.stateMultipliers[stateName] or 1.0
@@ -77,8 +77,8 @@ function FrictionController:update()
 end
 function FrictionController:restore()
 	for part, orig in pairs(self.originalProperties) do
-		if part and part.Parent then
-			part.CustomPhysicalProperties = orig
+		if part and part.Parent then 
+			part.CustomPhysicalProperties = orig 
 		end
 	end
 	self.originalProperties = {}
@@ -89,8 +89,12 @@ function FrictionController:enable()
 	self.connection = RunService.Heartbeat:Connect(function() self:update() end)
 end
 function FrictionController:disable()
-	if self.connection then self.connection:Disconnect(); self.connection = nil end
-	self:restore(); self.enabled = false
+	if self.connection then 
+		self.connection:Disconnect(); 
+		self.connection = nil 
+	end
+	self:restore(); 
+	self.enabled = false
 end
 
 -----------------------------------------------------
@@ -130,17 +134,36 @@ local function applyAntiSlippery(enabled)
 end
 
 -----------------------------------------------------
--- FACE BOMB FUNCTIONALITY
+-- FACE BOMB FUNCTIONALITY (Face nearest bomb holder)
 -----------------------------------------------------
 local FaceBombEnabled = false
 local faceBombConnection = nil
-local function faceBombDirection()
-	local character = LocalPlayer.Character
-	if not character then return end
-	local bomb = character:FindFirstChild(bombName)
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if bomb and hrp then
-		hrp.CFrame = CFrame.lookAt(hrp.Position, bomb.Position)
+local function faceNearestBombHolder()
+	local myChar = LocalPlayer.Character
+	if not myChar then return end
+	local hrp = myChar:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	local nearest = nil
+	local nearestDist = math.huge
+	for _, p in pairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild(bombName) then
+			local pHRP = p.Character:FindFirstChild("HumanoidRootPart")
+			if pHRP then
+				local d = (pHRP.Position - hrp.Position).Magnitude
+				if d < nearestDist then
+					nearestDist = d
+					nearest = p
+				end
+			end
+		end
+	end
+	if nearest and nearest.Character then
+		local bombHolderHRP = nearest.Character:FindFirstChild("HumanoidRootPart")
+		if bombHolderHRP then
+			local cam = Workspace.CurrentCamera
+			local currentPos = cam.CFrame.Position
+			cam.CFrame = CFrame.new(currentPos, bombHolderHRP.Position)
+		end
 	end
 end
 
@@ -309,10 +332,10 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
 	local raysEachSide = math.floor((numRaycasts - 1) / 2)
 	for i = 1, raysEachSide do
 		local angleOffset = spreadRad * i / raysEachSide
-		local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), angleOffset) * CFrame.new(direction)).p
+		local leftDirection = (CFrame.fromAxisAngle(Vector3.new(0, 1, 0), angleOffset) * CFrame.new(direction)).p
 		local leftResult = Workspace:Raycast(startPos, leftDirection * distance, rayParams)
 		if leftResult and not leftResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
-		local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0,1,0), -angleOffset) * CFrame.new(direction)).p
+		local rightDirection = (CFrame.fromAxisAngle(Vector3.new(0, 1, 0), -angleOffset) * CFrame.new(direction)).p
 		local rightResult = Workspace:Raycast(startPos, rightDirection * distance, rayParams)
 		if rightResult and not rightResult.Instance:IsDescendantOf(targetPart.Parent) then return false end
 	end
@@ -385,10 +408,10 @@ AutomatedTab:AddTextbox({Name = "Custom Bomb Anti‑Slippery Friction", Default 
 	local num = tonumber(value)
 	if num then customBombAntiSlipperyFriction = num; print("Custom Bomb Anti-Slippery Friction updated to: " .. num) end
 end})
-AutomatedTab:AddToggle({Name = "Face Bomb", Info = "Automatically face the bomb direction for easier dodging", Default = false, Callback = function(v)
+AutomatedTab:AddToggle({Name = "Face Bomb", Info = "Automatically face the nearest bomb holder for easier dodging", Default = false, Callback = function(v)
 	FaceBombEnabled = v
 	if v then
-		faceBombConnection = RunService.Heartbeat:Connect(faceBombDirection)
+		faceBombConnection = RunService.Heartbeat:Connect(faceNearestBombHolder)
 	else
 		if faceBombConnection then faceBombConnection:Disconnect(); faceBombConnection = nil end
 	end
@@ -414,27 +437,27 @@ AITab:AddTextbox({Name = "Number of Raycasts", Default = tostring(numRaycasts), 
 	local num = tonumber(value)
 	if num then numRaycasts = num end
 end})
-UITab:AddColorpicker({Name = "Menu Main Color", Default = Color3.fromRGB(255,0,0), Flag = "MenuMainColor", Save = true, Callback = function(color)
+UITab:AddColorpicker({Name = "Menu Main Color", Default = Color3.fromRGB(255, 0, 0), Flag = "MenuMainColor", Save = true, Callback = function(color)
 	OrionLib.Themes[OrionLib.SelectedTheme].Main = color
 end})
 OrionLib:Init()
 local autoPassMobileToggle = nil
 local function createMobileToggle()
 	local mobileGui = Instance.new("ScreenGui"); mobileGui.Name = "MobileToggleGui"; mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-	local button = Instance.new("TextButton"); button.Name = "AutoPassMobileToggle"; button.Size = UDim2.new(0,50,0,50); button.Position = UDim2.new(1,-70,1,-110)
-	button.BackgroundColor3 = Color3.fromRGB(255,0,0); button.Text = "OFF"; button.TextScaled = true; button.Font = Enum.Font.SourceSansBold; button.ZIndex = 100; button.Parent = mobileGui
-	local uicorner = Instance.new("UICorner"); uicorner.CornerRadius = UDim.new(1,0); uicorner.Parent = button
-	local uistroke = Instance.new("UIStroke"); uistroke.Thickness = 2; uistroke.Color = Color3.fromRGB(0,0,0); uistroke.Parent = button
-	button.MouseEnter:Connect(function() TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play() end)
-	button.MouseLeave:Connect(function() if AutoPassEnabled then TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play() else TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play() end end)
+	local button = Instance.new("TextButton"); button.Name = "AutoPassMobileToggle"; button.Size = UDim2.new(0, 50, 0, 50); button.Position = UDim2.new(1, -70, 1, -110)
+	button.BackgroundColor3 = Color3.fromRGB(255, 0, 0); button.Text = "OFF"; button.TextScaled = true; button.Font = Enum.Font.SourceSansBold; button.ZIndex = 100; button.Parent = mobileGui
+	local uicorner = Instance.new("UICorner"); uicorner.CornerRadius = UDim.new(1, 0); uicorner.Parent = button
+	local uistroke = Instance.new("UIStroke"); uistroke.Thickness = 2; uistroke.Color = Color3.fromRGB(0, 0, 0); uistroke.Parent = button
+	button.MouseEnter:Connect(function() TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play() end)
+	button.MouseLeave:Connect(function() if AutoPassEnabled then TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 255, 0)}):Play() else TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 0, 0)}):Play() end end)
 	button.MouseButton1Click:Connect(function()
 		AutoPassEnabled = not AutoPassEnabled
 		if AutoPassEnabled then
-			button.BackgroundColor3 = Color3.fromRGB(0,255,0); button.Text = "ON"
+			button.BackgroundColor3 = Color3.fromRGB(0, 255, 0); button.Text = "ON"
 			if orionAutoPassToggle and orionAutoPassToggle.Set then orionAutoPassToggle:Set(true) end
 			if not autoPassConnection then autoPassConnection = RunService.Stepped:Connect(autoPassBomb) end
 		else
-			button.BackgroundColor3 = Color3.fromRGB(255,0,0); button.Text = "OFF"
+			button.BackgroundColor3 = Color3.fromRGB(255, 0, 0); button.Text = "OFF"
 			if orionAutoPassToggle and orionAutoPassToggle.Set then orionAutoPassToggle:Set(false) end
 			if autoPassConnection then autoPassConnection:Disconnect(); autoPassConnection = nil end
 		end
@@ -453,16 +476,16 @@ LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
 end)
 local ShiftLockScreenGui = Instance.new("ScreenGui"); ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"; ShiftLockScreenGui.Parent = game:GetService("CoreGui")
 ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling; ShiftLockScreenGui.ResetOnSpawn = false
-local ShiftLockButton = Instance.new("ImageButton"); ShiftLockButton.Parent = ShiftLockScreenGui; ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
-ShiftLockButton.BackgroundTransparency = 1; ShiftLockButton.Position = UDim2.new(0.7,0,0.75,0); ShiftLockButton.Size = UDim2.new(0.0636,0,0.0661,0)
+local ShiftLockButton = Instance.new("ImageButton"); ShiftLockButton.Parent = ShiftLockScreenGui; ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ShiftLockButton.BackgroundTransparency = 1; ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0); ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX; ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
-local shiftLockUICorner = Instance.new("UICorner"); shiftLockUICorner.CornerRadius = UDim.new(0.2,0); shiftLockUICorner.Parent = ShiftLockButton
-local shiftLockUIStroke = Instance.new("UIStroke"); shiftLockUIStroke.Thickness = 2; shiftLockUIStroke.Color = Color3.fromRGB(0,0,0); shiftLockUIStroke.Parent = ShiftLockButton
+local shiftLockUICorner = Instance.new("UICorner"); shiftLockUICorner.CornerRadius = UDim.new(0.2, 0); shiftLockUICorner.Parent = ShiftLockButton
+local shiftLockUIStroke = Instance.new("UIStroke"); shiftLockUIStroke.Thickness = 2; shiftLockUIStroke.Color = Color3.fromRGB(0, 0, 0); shiftLockUIStroke.Parent = ShiftLockButton
 local ShiftlockCursor = Instance.new("ImageLabel"); ShiftlockCursor.Name = "Shiftlock Cursor"; ShiftlockCursor.Parent = ShiftLockScreenGui
-ShiftlockCursor.Image = "rbxasset://textures/MouseLockedCursor.png"; ShiftlockCursor.Size = UDim2.new(0.03,0,0.03,0); ShiftlockCursor.Position = UDim2.new(0.5,0,0.5,0)
-ShiftlockCursor.AnchorPoint = Vector2.new(0.5,0.5); ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX; ShiftlockCursor.BackgroundTransparency = 1
-ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255,0,0); ShiftlockCursor.Visible = false
-local SL_MaxLength = 900000; local SL_EnabledOffset = CFrame.new(1.7,0,0); local SL_DisabledOffset = CFrame.new(-1.7,0,0); local SL_Active = nil
+ShiftlockCursor.Image = "rbxasset://textures/MouseLockedCursor.png"; ShiftlockCursor.Size = UDim2.new(0.03, 0, 0.03, 0); ShiftlockCursor.Position = UDim2.new(0.5, 0, 0.5, 0)
+ShiftlockCursor.AnchorPoint = Vector2.new(0.5, 0.5); ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX; ShiftlockCursor.BackgroundTransparency = 1
+ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255, 0, 0); ShiftlockCursor.Visible = false
+local SL_MaxLength = 900000; local SL_EnabledOffset = CFrame.new(1.7, 0, 0); local SL_DisabledOffset = CFrame.new(-1.7, 0, 0); local SL_Active = nil
 ShiftLockButton.MouseButton1Click:Connect(function()
 	if not SL_Active then
 		SL_Active = RunService.RenderStepped:Connect(function()
@@ -481,7 +504,7 @@ ShiftLockButton.MouseButton1Click:Connect(function()
 		if SL_Active then SL_Active:Disconnect(); SL_Active = nil end
 	end
 end)
-local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a,us,io)
+local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a, us, io)
 	if us == Enum.UserInputState.Begin then ShiftLockButton.MouseButton1Click:Fire() end; return Enum.ContextActionResult.Sink
 end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8, 0, 0.8, 0))
