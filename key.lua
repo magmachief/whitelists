@@ -63,9 +63,7 @@ function FrictionController:calculateFriction(character)
 			end
 		end
 	end
-	if character:FindFirstChild(bombName) then 
-		return self.bombFriction 
-	end
+	if character:FindFirstChild(bombName) then return self.bombFriction end
 	local stateName = humanoid:GetState()
 	local multiplier = self.stateMultipliers[stateName] or 1.0
 	return math.clamp(self.normalFriction * multiplier, 0.1, 1.0)
@@ -99,26 +97,16 @@ function FrictionController:update()
 end
 function FrictionController:restore()
 	for part, orig in pairs(self.originalProperties) do
-		if part and part.Parent then 
-			part.CustomPhysicalProperties = orig 
-		end
+		if part and part.Parent then part.CustomPhysicalProperties = orig end
 	end
 	self.originalProperties = {}
 end
 function FrictionController:enable()
 	if self.enabled then return end
 	self.enabled = true
-	spawn(function()
-		while self.enabled do
-			self:update()
-			wait(0.1)
-		end
-	end)
+	spawn(function() while self.enabled do self:update() wait(0.1) end end)
 end
-function FrictionController:disable()
-	self.enabled = false
-	self:restore()
-end
+function FrictionController:disable() self.enabled = false self:restore() end
 
 -- Smart Anti-Slippery Function
 local function applyAntiSlippery(enabled)
@@ -132,9 +120,7 @@ local function applyAntiSlippery(enabled)
 						if character:FindFirstChild(bombName) then
 							local speed = hrp and hrp.Velocity.Magnitude or 0
 							local fric = customBombAntiSlipperyFriction
-							if speed > 10 then 
-								fric = fric * 1.25 
-							end
+							if speed > 10 then fric = fric * 1.25 end
 							part.CustomPhysicalProperties = PhysicalProperties.new(fric, 0.3, 0.5)
 						else
 							part.CustomPhysicalProperties = PhysicalProperties.new(customAntiSlipperyFriction, 0.3, 0.5)
@@ -427,16 +413,15 @@ OrionLib:Init()
 local myFrictionController = FrictionController.new()
 myFrictionController:enable()
 
--- Mobile Auto Pass Button Creation (circle-ish, just On/Off, up by 30 pixels)
+-- Mobile Auto Pass Button Creation (circle, On/Off, positioned 30 pixels up)
 local function createMobileToggle()
 	local mobileGui = Instance.new("ScreenGui")
 	mobileGui.Name = "MobileToggleGui"
 	mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 	local button = Instance.new("TextButton")
 	button.Name = "AutoPassMobileToggle"
-	-- Position adjusted up by 30 pixels (Y offset -30)
 	button.Position = UDim2.new(0.8, 0, 0.8, -30)
-	button.Size = UDim2.new(0, 80, 0, 80) -- square size for circle look
+	button.Size = UDim2.new(0,80,0,80)
 	button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 	button.Text = "Off"
 	button.TextScaled = true
@@ -476,14 +461,19 @@ local function createMobileToggle()
 				autoPassConnection = nil
 			end
 		end
-		-- Also sync Orion toggle
-		if orionAutoPassToggle then
-			orionAutoPassToggle:Set(AutoPassEnabled)
-		end
+		if orionAutoPassToggle then orionAutoPassToggle:Set(AutoPassEnabled) end
 	end)
 	return mobileGui, button
 end
 local mobileGui, mobileToggle = createMobileToggle()
+LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
+	if child.Name == "MobileToggleGui" then
+		wait(1)
+		if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
+			mobileGui, mobileToggle = createMobileToggle()
+		end
+	end
+end)
 
 -- Shiftlock Button UI
 local ShiftLockScreenGui = Instance.new("ScreenGui")
@@ -493,7 +483,7 @@ ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ShiftLockScreenGui.ResetOnSpawn = false
 local ShiftLockButton = Instance.new("ImageButton")
 ShiftLockButton.Parent = ShiftLockScreenGui
-ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
 ShiftLockButton.BackgroundTransparency = 1
 ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0)
 ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
@@ -504,7 +494,7 @@ shiftLockUICorner.CornerRadius = UDim.new(0.2, 0)
 shiftLockUICorner.Parent = ShiftLockButton
 local shiftLockUIStroke = Instance.new("UIStroke")
 shiftLockUIStroke.Thickness = 2
-shiftLockUIStroke.Color = Color3.fromRGB(0, 0, 0)
+shiftLockUIStroke.Color = Color3.fromRGB(0,0,0)
 shiftLockUIStroke.Parent = ShiftLockButton
 local ShiftlockCursor = Instance.new("ImageLabel")
 ShiftlockCursor.Name = "Shiftlock Cursor"
@@ -515,11 +505,11 @@ ShiftlockCursor.Position = UDim2.new(0.5, 0, 0.5, 0)
 ShiftlockCursor.AnchorPoint = Vector2.new(0.5, 0.5)
 ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftlockCursor.BackgroundTransparency = 1
-ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255,0,0)
 ShiftlockCursor.Visible = false
 local SL_MaxLength = 900000
-local SL_EnabledOffset = CFrame.new(1.7, 0, 0)
-local SL_DisabledOffset = CFrame.new(-1.7, 0, 0)
+local SL_EnabledOffset = CFrame.new(1.7,0,0)
+local SL_DisabledOffset = CFrame.new(-1.7,0,0)
 local SL_Active = nil
 ShiftLockButton.MouseButton1Click:Connect(function()
 	if not SL_Active then
@@ -542,11 +532,8 @@ ShiftLockButton.MouseButton1Click:Connect(function()
 		ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
 		Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
 		ShiftlockCursor.Visible = false
-		if SL_Active then
-			SL_Active:Disconnect()
-			SL_Active = nil
-		end
+		if SL_Active then SL_Active:Disconnect() SL_Active = nil end
 	end
 end)
-print("Bomb AI, Anti-Slippery, and Shiftlock system loaded. Menu and features active.")
+print("Bomb AI, Anti-Slippery, Shiftlock, and Auto Pass systems loaded. Menu and features active.")
 return {}
