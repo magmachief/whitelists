@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -64,8 +63,8 @@ function FrictionController:calculateFriction(character)
 			end
 		end
 	end
-	if character:FindFirstChild(bombName) then
-		return self.bombFriction
+	if character:FindFirstChild(bombName) then 
+		return self.bombFriction 
 	end
 	local stateName = humanoid:GetState()
 	local multiplier = self.stateMultipliers[stateName] or 1.0
@@ -383,7 +382,7 @@ AutomatedTab:AddTextbox({Name="Custom Anti‑Slippery Friction", Default=tostrin
 	local num = tonumber(value) if num then customAntiSlipperyFriction = num end
 end})
 AutomatedTab:AddTextbox({Name="Custom Bomb Anti‑Slippery Friction", Default=tostring(customBombAntiSlipperyFriction), Flag="CustomBombAntiSlipperyFrict", TextDisappear=false, Callback=function(value)
-	local num = tonumber(value) if num then customBombAntiSlipperyFrictions = num; customBombAntiSlipperyFriction = num end
+	local num = tonumber(value) if num then customBombAntiSlipperyFriction = num end
 end})
 AutomatedTab:AddToggle({Name="Face Bomb", Info="Face nearest bomb holder", Default=false, Callback=function(v)
 	FaceBombEnabled = v
@@ -417,6 +416,59 @@ end})
 OrionLib:Init()
 local myFrictionController = FrictionController.new()
 myFrictionController:enable()
+
+-- Mobile Auto Pass Button Creation (updated position for visibility)
+local function createMobileToggle()
+	local mobileGui = Instance.new("ScreenGui")
+	mobileGui.Name = "MobileToggleGui"
+	mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	local button = Instance.new("TextButton")
+	button.Name = "AutoPassMobileToggle"
+	-- Updated position: adjust as needed for better visibility
+	button.Position = UDim2.new(0.8, 0, 0.8, 0)
+	button.Size = UDim2.new(0, 100, 0, 50)
+	button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+	button.Text = "Auto Pass: OFF"
+	button.TextScaled = true
+	button.Font = Enum.Font.SourceSansBold
+	button.ZIndex = 100
+	button.Parent = mobileGui
+	local uicorner = Instance.new("UICorner")
+	uicorner.CornerRadius = UDim.new(1, 0)
+	uicorner.Parent = button
+	local uistroke = Instance.new("UIStroke")
+	uistroke.Thickness = 2
+	uistroke.Color = Color3.fromRGB(0, 0, 0)
+	uistroke.Parent = button
+	button.MouseEnter:Connect(function() TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play() end)
+	button.MouseLeave:Connect(function() 
+		if AutoPassEnabled then 
+			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 255, 0)}):Play() 
+		else 
+			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 0, 0)}):Play() 
+		end 
+	end)
+	button.MouseButton1Click:Connect(function()
+		AutoPassEnabled = not AutoPassEnabled
+		if AutoPassEnabled then
+			button.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+			button.Text = "Auto Pass: ON"
+			if not autoPassConnection then 
+				autoPassConnection = RunService.Stepped:Connect(autoPassBomb) 
+			end
+		else
+			button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+			button.Text = "Auto Pass: OFF"
+			if autoPassConnection then 
+				autoPassConnection:Disconnect()
+				autoPassConnection = nil
+			end
+		end
+	end)
+	return mobileGui, button
+end
+
+local mobileGui, mobileToggle = createMobileToggle()
 
 -- Shiftlock Button UI
 local ShiftLockScreenGui = Instance.new("ScreenGui")
@@ -464,7 +516,7 @@ ShiftLockButton.MouseButton1Click:Connect(function()
 				hum.AutoRotate = false
 				ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_on@2x.png"
 				ShiftlockCursor.Visible = true
-				root.CFrame = CFrame.new(root.Position, Vector3.new(Workspace.CurrentCamera.CFrame.LookVector.X*SL_MaxLength, root.Position.Y, Workspace.CurrentCamera.CFrame.LookVector.Z*SL_MaxLength))
+				root.CFrame = CFrame.new(root.Position, Vector3.new(Workspace.CurrentCamera.CFrame.LookVector.X * SL_MaxLength, root.Position.Y, Workspace.CurrentCamera.CFrame.LookVector.Z * SL_MaxLength))
 				Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_EnabledOffset
 			end
 		end)
@@ -475,7 +527,10 @@ ShiftLockButton.MouseButton1Click:Connect(function()
 		ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
 		Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
 		ShiftlockCursor.Visible = false
-		if SL_Active then SL_Active:Disconnect(); SL_Active = nil end
+		if SL_Active then
+			SL_Active:Disconnect()
+			SL_Active = nil
+		end
 	end
 end)
 print("Bomb AI, Anti-Slippery, and Shiftlock system loaded. Menu and features active.")
