@@ -372,6 +372,16 @@ local orionAutoPassToggle = AutomatedTab:AddToggle({Name="Auto Pass Bomb", Defau
 		if autoPassConnection then autoPassConnection:Disconnect(); autoPassConnection = nil end
 		removeTargetMarker()
 	end
+	-- Sync mobile button state with menu toggle
+	if mobileToggle then
+		if AutoPassEnabled then
+			mobileToggle.Text = "On"
+			mobileToggle.BackgroundColor3 = Color3.fromRGB(0,255,0)
+		else
+			mobileToggle.Text = "Off"
+			mobileToggle.BackgroundColor3 = Color3.fromRGB(255,0,0)
+		end
+	end
 end})
 AutomatedTab:AddLabel("== Character Settings ==",15)
 AutomatedTab:AddToggle({Name="Anti-Slippery", Info="Custom friction: normal (~0.7)/bomb state", Default=false, Callback=function(v)
@@ -417,18 +427,18 @@ OrionLib:Init()
 local myFrictionController = FrictionController.new()
 myFrictionController:enable()
 
--- Mobile Auto Pass Button Creation (updated position for visibility)
+-- Mobile Auto Pass Button Creation (circle-ish, just On/Off, up by 30 pixels)
 local function createMobileToggle()
 	local mobileGui = Instance.new("ScreenGui")
 	mobileGui.Name = "MobileToggleGui"
 	mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 	local button = Instance.new("TextButton")
 	button.Name = "AutoPassMobileToggle"
-	-- Updated position: adjust as needed for better visibility
-	button.Position = UDim2.new(0.8, 0, 0.8, 0)
-	button.Size = UDim2.new(0, 100, 0, 50)
+	-- Position adjusted up by 30 pixels (Y offset -30)
+	button.Position = UDim2.new(0.8, 0, 0.8, -30)
+	button.Size = UDim2.new(0, 80, 0, 80) -- square size for circle look
 	button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-	button.Text = "Auto Pass: OFF"
+	button.Text = "Off"
 	button.TextScaled = true
 	button.Font = Enum.Font.SourceSansBold
 	button.ZIndex = 100
@@ -440,34 +450,39 @@ local function createMobileToggle()
 	uistroke.Thickness = 2
 	uistroke.Color = Color3.fromRGB(0, 0, 0)
 	uistroke.Parent = button
-	button.MouseEnter:Connect(function() TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play() end)
-	button.MouseLeave:Connect(function() 
-		if AutoPassEnabled then 
-			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 255, 0)}):Play() 
-		else 
-			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 0, 0)}):Play() 
-		end 
+	button.MouseEnter:Connect(function()
+		TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play()
+	end)
+	button.MouseLeave:Connect(function()
+		if AutoPassEnabled then
+			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 255, 0)}):Play()
+		else
+			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 0, 0)}):Play()
+		end
 	end)
 	button.MouseButton1Click:Connect(function()
 		AutoPassEnabled = not AutoPassEnabled
 		if AutoPassEnabled then
 			button.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-			button.Text = "Auto Pass: ON"
-			if not autoPassConnection then 
-				autoPassConnection = RunService.Stepped:Connect(autoPassBomb) 
+			button.Text = "On"
+			if not autoPassConnection then
+				autoPassConnection = RunService.Stepped:Connect(autoPassBomb)
 			end
 		else
 			button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-			button.Text = "Auto Pass: OFF"
-			if autoPassConnection then 
+			button.Text = "Off"
+			if autoPassConnection then
 				autoPassConnection:Disconnect()
 				autoPassConnection = nil
 			end
 		end
+		-- Also sync Orion toggle
+		if orionAutoPassToggle then
+			orionAutoPassToggle:Set(AutoPassEnabled)
+		end
 	end)
 	return mobileGui, button
 end
-
 local mobileGui, mobileToggle = createMobileToggle()
 
 -- Shiftlock Button UI
@@ -478,7 +493,7 @@ ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ShiftLockScreenGui.ResetOnSpawn = false
 local ShiftLockButton = Instance.new("ImageButton")
 ShiftLockButton.Parent = ShiftLockScreenGui
-ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
+ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 ShiftLockButton.BackgroundTransparency = 1
 ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0)
 ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
@@ -489,7 +504,7 @@ shiftLockUICorner.CornerRadius = UDim.new(0.2, 0)
 shiftLockUICorner.Parent = ShiftLockButton
 local shiftLockUIStroke = Instance.new("UIStroke")
 shiftLockUIStroke.Thickness = 2
-shiftLockUIStroke.Color = Color3.fromRGB(0,0,0)
+shiftLockUIStroke.Color = Color3.fromRGB(0, 0, 0)
 shiftLockUIStroke.Parent = ShiftLockButton
 local ShiftlockCursor = Instance.new("ImageLabel")
 ShiftlockCursor.Name = "Shiftlock Cursor"
@@ -500,11 +515,11 @@ ShiftlockCursor.Position = UDim2.new(0.5, 0, 0.5, 0)
 ShiftlockCursor.AnchorPoint = Vector2.new(0.5, 0.5)
 ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftlockCursor.BackgroundTransparency = 1
-ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255,0,0)
+ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 ShiftlockCursor.Visible = false
 local SL_MaxLength = 900000
-local SL_EnabledOffset = CFrame.new(1.7,0,0)
-local SL_DisabledOffset = CFrame.new(-1.7,0,0)
+local SL_EnabledOffset = CFrame.new(1.7, 0, 0)
+local SL_DisabledOffset = CFrame.new(-1.7, 0, 0)
 local SL_Active = nil
 ShiftLockButton.MouseButton1Click:Connect(function()
 	if not SL_Active then
