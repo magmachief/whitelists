@@ -1,3 +1,4 @@
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -63,8 +64,8 @@ function FrictionController:calculateFriction(character)
 			end
 		end
 	end
-	if character:FindFirstChild(bombName) then 
-		return self.bombFriction 
+	if character:FindFirstChild(bombName) then
+		return self.bombFriction
 	end
 	local stateName = humanoid:GetState()
 	local multiplier = self.stateMultipliers[stateName] or 1.0
@@ -78,7 +79,6 @@ function FrictionController:update()
 		local part = character:FindFirstChild(pn)
 		if part and part:IsA("BasePart") then
 			if not self.originalProperties[part] then
-				-- Use default values if CustomPhysicalProperties is nil
 				local elasticity = 0.3
 				local frictionWeight = 0.5
 				if part.CustomPhysicalProperties then
@@ -109,7 +109,6 @@ end
 function FrictionController:enable()
 	if self.enabled then return end
 	self.enabled = true
-	-- Update at intervals (every 0.1 sec) instead of every frame to reduce lag
 	spawn(function()
 		while self.enabled do
 			self:update()
@@ -192,7 +191,7 @@ local HRP = CHAR:WaitForChild("HumanoidRootPart")
 
 -- Logging & Targeting Modules
 local LoggingModule = {}
-function LoggingModule.logError(err, ctx) warn("[ERROR] Context: " .. tostring(ctx) .. " | Error: " .. tostring(err)) end
+function LoggingModule.logError(err, ctx) warn("[ERROR] Context: " .. tostring(ctx) .. " | " .. tostring(err)) end
 function LoggingModule.safeCall(func, ctx) local s, r = pcall(func); if not s then LoggingModule.logError(r, ctx) end; return s, r end
 local TargetingModule = {}
 function TargetingModule.getClosestPlayer()
@@ -225,7 +224,7 @@ function VisualModule.playPassVFX(target)
 	local emitter = Instance.new("ParticleEmitter")
 	emitter.Texture = "rbxassetid://258128463"
 	emitter.Rate = 50
-	emitter.Lifetime = NumberRange.new(0.3,0.5)
+	emitter.Lifetime = NumberRange.new(0.3, 0.5)
 	emitter.Speed = NumberRange.new(2,5)
 	emitter.VelocitySpread = 30
 	emitter.Parent = hrp
@@ -327,12 +326,12 @@ local function isLineOfSightClearMultiple(startPos, endPos, targetPart)
 end
 
 local function getClosestPlayer()
-	local closest, nilD = nil, math.huge
+	local closest, nd = nil, math.huge
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
 			local d = (p.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-			if d < nilD then
-				nilD = d
+			if d < nd then
+				nd = d
 				closest = p
 			end
 		end
@@ -381,12 +380,10 @@ AutomatedTab:AddToggle({Name="Anti-Slippery", Info="Custom friction: normal (~0.
 	applyAntiSlippery(v)
 end})
 AutomatedTab:AddTextbox({Name="Custom Anti‑Slippery Friction", Default=tostring(customAntiSlipperyFriction), Flag="CustomAntiSlipperyFrict", TextDisappear=false, Callback=function(value)
-	local num = tonumber(value)
-	if num then customAntiSlipperyFriction = num; print("Custom Anti-Slippery Friction updated to: " .. num) end
+	local num = tonumber(value) if num then customAntiSlipperyFriction = num end
 end})
 AutomatedTab:AddTextbox({Name="Custom Bomb Anti‑Slippery Friction", Default=tostring(customBombAntiSlipperyFriction), Flag="CustomBombAntiSlipperyFrict", TextDisappear=false, Callback=function(value)
-	local num = tonumber(value)
-	if num then customBombAntiSlipperyFriction = num; print("Custom Bomb Anti-Slippery Friction updated to: " .. num) end
+	local num = tonumber(value) if num then customBombAntiSlipperyFrictions = num; customBombAntiSlipperyFriction = num end
 end})
 AutomatedTab:AddToggle({Name="Face Bomb", Info="Face nearest bomb holder", Default=false, Callback=function(v)
 	FaceBombEnabled = v
@@ -397,25 +394,22 @@ AutomatedTab:AddToggle({Name="Face Bomb", Info="Face nearest bomb holder", Defau
 	end
 end})
 AutomatedTab:AddToggle({Name="Remove Hitbox", Default=RemoveHitboxEnabled, Flag="RemoveHitbox", Callback=function(value)
-	RemoveHitboxEnabled = value; applyRemoveHitbox(value)
+	RemoveHitboxEnabled = value
+	applyRemoveHitbox(value)
 end})
 AutomatedTab:AddTextbox({Name="Custom Hitbox Size", Default=tostring(customHitboxSize), Flag="CustomHitboxSize", TextDisappear=false, Callback=function(value)
-	local num = tonumber(value)
-	if num then customHitboxSize = num; print("Custom Hitbox Size updated to: " .. num) if RemoveHitboxEnabled then applyRemoveHitbox(true) end end
+	local num = tonumber(value) if num then customHitboxSize = num end
 end})
 AITab:AddLabel("== Targeting Settings ==",15)
 AITab:AddToggle({Name="AI Assistance", Default=false, Flag="AIAssistance", Callback=function(value) AI_AssistanceEnabled = value end})
 AITab:AddTextbox({Name="Bomb Pass Distance", Default=tostring(bombPassDistance), Flag="BombPassDistance", TextDisappear=false, Callback=function(value)
-	local num = tonumber(value)
-	if num then bombPassDistance = num end
+	local num = tonumber(value) if num then bombPassDistance = num end
 end})
 AITab:AddTextbox({Name="Ray Spread Angle", Default=tostring(raySpreadAngle), Flag="RaySpreadAngle", TextDisappear=false, Callback=function(value)
-	local num = tonumber(value)
-	if num then raySpreadAngle = num end
+	local num = tonumber(value) if num then raySpreadAngle = num end
 end})
 AITab:AddTextbox({Name="Number of Raycasts", Default=tostring(numRaycasts), Flag="NumberOfRaycasts", TextDisappear=false, Callback=function(value)
-	local num = tonumber(value)
-	if num then numRaycasts = num end
+	local num = tonumber(value) if num then numRaycasts = num end
 end})
 UITab:AddColorpicker({Name="Menu Main Color", Default=Color3.fromRGB(255,0,0), Flag="MenuMainColor", Save=true, Callback=function(color)
 	OrionLib.Themes[OrionLib.SelectedTheme].Main = color
@@ -423,5 +417,66 @@ end})
 OrionLib:Init()
 local myFrictionController = FrictionController.new()
 myFrictionController:enable()
-print("Bomb AI, Anti-Slippery system loaded. Menu and related features active.")
+
+-- Shiftlock Button UI
+local ShiftLockScreenGui = Instance.new("ScreenGui")
+ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
+ShiftLockScreenGui.Parent = game:GetService("CoreGui")
+ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ShiftLockScreenGui.ResetOnSpawn = false
+local ShiftLockButton = Instance.new("ImageButton")
+ShiftLockButton.Parent = ShiftLockScreenGui
+ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
+ShiftLockButton.BackgroundTransparency = 1
+ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0)
+ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
+ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
+ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
+local shiftLockUICorner = Instance.new("UICorner")
+shiftLockUICorner.CornerRadius = UDim.new(0.2, 0)
+shiftLockUICorner.Parent = ShiftLockButton
+local shiftLockUIStroke = Instance.new("UIStroke")
+shiftLockUIStroke.Thickness = 2
+shiftLockUIStroke.Color = Color3.fromRGB(0,0,0)
+shiftLockUIStroke.Parent = ShiftLockButton
+local ShiftlockCursor = Instance.new("ImageLabel")
+ShiftlockCursor.Name = "Shiftlock Cursor"
+ShiftlockCursor.Parent = ShiftLockScreenGui
+ShiftlockCursor.Image = "rbxasset://textures/MouseLockedCursor.png"
+ShiftlockCursor.Size = UDim2.new(0.03, 0, 0.03, 0)
+ShiftlockCursor.Position = UDim2.new(0.5, 0, 0.5, 0)
+ShiftlockCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX
+ShiftlockCursor.BackgroundTransparency = 1
+ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255,0,0)
+ShiftlockCursor.Visible = false
+local SL_MaxLength = 900000
+local SL_EnabledOffset = CFrame.new(1.7,0,0)
+local SL_DisabledOffset = CFrame.new(-1.7,0,0)
+local SL_Active = nil
+ShiftLockButton.MouseButton1Click:Connect(function()
+	if not SL_Active then
+		SL_Active = RunService.RenderStepped:Connect(function()
+			local char = LocalPlayer.Character
+			local hum = char and char:FindFirstChild("Humanoid")
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if hum and root then
+				hum.AutoRotate = false
+				ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_on@2x.png"
+				ShiftlockCursor.Visible = true
+				root.CFrame = CFrame.new(root.Position, Vector3.new(Workspace.CurrentCamera.CFrame.LookVector.X*SL_MaxLength, root.Position.Y, Workspace.CurrentCamera.CFrame.LookVector.Z*SL_MaxLength))
+				Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_EnabledOffset
+			end
+		end)
+	else
+		local char = LocalPlayer.Character
+		local hum = char and char:FindFirstChild("Humanoid")
+		if hum then hum.AutoRotate = true end
+		ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
+		Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
+		ShiftlockCursor.Visible = false
+		if SL_Active then SL_Active:Disconnect(); SL_Active = nil end
+	end
+end)
+print("Bomb AI, Anti-Slippery, and Shiftlock system loaded. Menu and features active.")
 return {}
