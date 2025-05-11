@@ -41,19 +41,36 @@ end
 function FrictionController:getSurfaceMaterial(character)
 	local hrp = character:FindFirstChild("HumanoidRootPart")
 	if not hrp then return Enum.Material.Plastic end
-	return Workspace.Terrain:GetMaterialAt(hrp.Position - Vector3.new(0, hrp.Size.Y/2 + 0.1, 0)) or Enum.Material.Plastic
+	-- Use a raycast to detect the floor part
+	local rayOrigin = hrp.Position
+	local rayDir = Vector3.new(0, -5, 0)
+	local rayParams = RaycastParams.new()
+	rayParams.FilterDescendantsInstances = {character}
+	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+	local rayResult = Workspace:Raycast(rayOrigin, rayDir, rayParams)
+	return rayResult and rayResult.Instance.Material or Enum.Material.Plastic
 end
 function FrictionController:calculateFriction(character)
 	local humanoid = character:FindFirstChild("Humanoid")
 	local hrp = character:FindFirstChild("HumanoidRootPart")
 	if not (humanoid and hrp) then return self.normalFriction end
-	local floorMaterial = Workspace.Terrain:GetMaterialAt(hrp.Position - Vector3.new(0, hrp.Size.Y/2 + 0.1, 0))
-	if floorMaterial == Enum.Material.Ice or floorMaterial == Enum.Material.Glass then
-		return math.clamp(customAntiSlipperyFriction * 0.5, 0.1, 1.0)
+	-- Raycast downward to detect the floor part and check its Friction property
+	local rayOrigin = hrp.Position
+	local rayDir = Vector3.new(0, -5, 0)
+	local rayParams = RaycastParams.new()
+	rayParams.FilterDescendantsInstances = {character}
+	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+	local rayResult = Workspace:Raycast(rayOrigin, rayDir, rayParams)
+	if rayResult then
+		local floorPart = rayResult.Instance
+		-- Check if the part's name is "Floor" (or customize as needed)
+		if floorPart:IsA("BasePart") and floorPart.Name == "Floor" then
+			if floorPart.Friction <= 0.2 then
+				return math.clamp(customAntiSlipperyFriction * 0.5, 0.1, 1.0)
+			end
+		end
 	end
-	if character:FindFirstChild(bombName) then
-		return self.bombFriction
-	end
+	if character:FindFirstChild(bombName) then return self.bombFriction end
 	local stateName = humanoid:GetState()
 	local multiplier = self.stateMultipliers[stateName] or 1.0
 	return math.clamp(self.normalFriction * multiplier, 0.1, 1.0)
@@ -62,17 +79,19 @@ function FrictionController:update()
 	local character = LocalPlayer.Character
 	if not character then return end
 	local parts = {"LeftFoot", "RightFoot", "LeftLeg", "RightLeg"}
-	for _, pn in ipairs(parts) do
+	for _,pn in ipairs(parts) do
 		local part = character:FindFirstChild(pn)
 		if part and part:IsA("BasePart") then
-			if not self.originalProperties[part] then self.originalProperties[part] = part.CustomPhysicalProperties end
+			if not self.originalProperties[part] then
+				self.originalProperties[part] = part.CustomPhysicalProperties
+			end
 			local df = self:calculateFriction(character)
 			part.CustomPhysicalProperties = PhysicalProperties.new(df, part.CustomPhysicalProperties.Elasticity, part.CustomPhysicalProperties.FrictionWeight)
 		end
 	end
 end
 function FrictionController:restore()
-	for part, orig in pairs(self.originalProperties) do
+	for part,orig in pairs(self.originalProperties) do
 		if part and part.Parent then part.CustomPhysicalProperties = orig end
 	end
 	self.originalProperties = {}
@@ -97,7 +116,7 @@ local function applyAntiSlippery(enabled)
 			while AntiSlipperyEnabledFlag do
 				local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 				local hrp = character:FindFirstChild("HumanoidRootPart")
-				for _, part in pairs(character:GetDescendants()) do
+				for _,part in pairs(character:GetDescendants()) do
 					if part:IsA("BasePart") then
 						if character:FindFirstChild(bombName) then
 							local speed = hrp and hrp.Velocity.Magnitude or 0
@@ -226,7 +245,7 @@ do
 	function LegacyFrictionModule.update()
 		local char = LocalPlayer.Character; if not char then return end
 		local HRP = char:FindFirstChild("HumanoidRootPart"); if not HRP then return end
-		for _, pn in pairs({"LeftLeg", "RightLeg", "LeftFoot", "RightFoot"}) do
+		for _, pn in pairs({"LeftLeg","RightLeg","LeftFoot","RightFoot"}) do
 			local part = char:FindFirstChild(pn)
 			if part then
 				if not origProps[part] then origProps[part] = part.CustomPhysicalProperties end
@@ -516,7 +535,7 @@ ShiftLockButton.MouseButton1Click:Connect(function()
 		if SL_Active then SL_Active:Disconnect(); SL_Active = nil end
 	end
 end)
-local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a, us, io)
+local ShiftLockAction = ContextActionService:BindAction("Shift Lock", function(a,us,io)
 	if us == Enum.UserInputState.Begin then ShiftLockButton.MouseButton1Click:Fire() end; return Enum.ContextActionResult.Sink
 end, false, Enum.KeyCode.ButtonR2)
 ContextActionService:SetPosition("Shift Lock", UDim2.new(0.8,0,0.8,0))
