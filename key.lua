@@ -415,9 +415,9 @@ local function createMobileToggle()
 	local button = Instance.new("TextButton")
 	button.Name = "AutoPassMobileToggle"
 	-- Position set to bottom right, slightly up where jump button normally is (approximate)
- button.Position = UDim2.new(1, -60, 1, -90)
+button.Position = UDim2.new(1, -50, 1, -70) -- Slightly smaller offset
 	button.AnchorPoint = Vector2.new(1,1)
-	button.Size = UDim2.new(0,80,0,80)
+	button.Size = UDim2.new(0,60,0,60)
 	button.BackgroundColor3 = Color3.fromRGB(255,0,0)
 	button.Text = "Off"
 	button.TextScaled = true
