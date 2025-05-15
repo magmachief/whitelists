@@ -125,9 +125,7 @@ local function applyAntiSlippery(enabled)
 						if character:FindFirstChild(bombName) then
 							local speed = hrp and hrp.Velocity.Magnitude or 0
 							local fric = customBombAntiSlipperyFriction
-							if speed > 10 then
-								fric = fric * 1.25
-							end
+							if speed > 10 then fric = fric * 1.25 end
 							part.CustomPhysicalProperties = PhysicalProperties.new(fric, 0.3, 0.5)
 						else
 							part.CustomPhysicalProperties = PhysicalProperties.new(customAntiSlipperyFriction, 0.3, 0.5)
@@ -191,10 +189,7 @@ function TargetingModule.getClosestPlayer()
 			local targetHrp = p.Character:FindFirstChild("HumanoidRootPart")
 			if targetHrp and not p.Character:FindFirstChild(bombName) then
 				local d = (targetHrp.Position - myPos).Magnitude
-				if d < md then
-					md = d
-					closest = p
-				end
+				if d < md then md = d; closest = p end
 			end
 		end
 	end
@@ -412,7 +407,71 @@ OrionLib:Init()
 local myFrictionController = FrictionController.new()
 myFrictionController:enable()
 
--- Mobile Auto Pass Button: Circle, near jump button area (bottom right, to the right and slightly up)
+-- Function to update UI transparency to hide visual cues while keeping interaction enabled
+local function updateUIVisibility(hidden)
+	-- For mobile UI
+	if mobileGui then
+		for _, obj in ipairs(mobileGui:GetDescendants()) do
+			if obj:IsA("GuiObject") then
+				if obj:IsA("TextButton") then
+					obj.TextTransparency = hidden and 1 or 0
+				end
+				if obj:IsA("ImageLabel") then
+					obj.ImageTransparency = hidden and 1 or 0
+				end
+				if obj:IsA("Frame") or obj:IsA("ScrollingFrame") or obj:IsA("TextLabel") then
+					obj.BackgroundTransparency = hidden and 1 or 0
+				end
+			end
+		end
+	end
+	-- For ShiftLock UI
+	if ShiftLockScreenGui then
+		for _, obj in ipairs(ShiftLockScreenGui:GetDescendants()) do
+			if obj:IsA("GuiObject") then
+				if obj:IsA("TextButton") then
+					obj.TextTransparency = hidden and 1 or 0
+				end
+				if obj:IsA("ImageLabel") then
+					obj.ImageTransparency = hidden and 1 or 0
+				end
+				if obj:IsA("Frame") or obj:IsA("ScrollingFrame") or obj:IsA("TextLabel") then
+					obj.BackgroundTransparency = hidden and 1 or 0
+				end
+			end
+		end
+	end
+	-- For OrionLib UI in PlayerGui and CoreGui
+	local function hideOrShowOrion(gui)
+		for _, obj in ipairs(gui:GetDescendants()) do
+			if obj:IsA("GuiObject") then
+				if obj:IsA("TextButton") or obj:IsA("TextLabel") then
+					obj.TextTransparency = hidden and 1 or 0
+				end
+				if obj:IsA("ImageLabel") then
+					obj.ImageTransparency = hidden and 1 or 0
+				end
+				if obj:IsA("Frame") then
+					obj.BackgroundTransparency = hidden and 1 or 0
+				end
+			end
+		end
+	end
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+	for _, child in ipairs(playerGui:GetChildren()) do
+		if child.Name:match("Orion") then
+			hideOrShowOrion(child)
+		end
+	end
+	local coreGui = game:GetService("CoreGui")
+	for _, child in ipairs(coreGui:GetChildren()) do
+		if child.Name:match("Orion") then
+			hideOrShowOrion(child)
+		end
+	end
+end
+
+-- Mobile Auto Pass Button: Circle, near jump button area
 local function createMobileToggle()
 	local mobileGui = Instance.new("ScreenGui")
 	mobileGui.Name = "MobileToggleGui"
@@ -420,50 +479,41 @@ local function createMobileToggle()
 	local button = Instance.new("TextButton")
 	button.Name = "AutoPassMobileToggle"
 	button.Position = UDim2.new(1, -50, 1, -100)
-	button.AnchorPoint = Vector2.new(1,1)
-	button.Size = UDim2.new(0,60,0,60)
-	button.BackgroundColor3 = Color3.fromRGB(255,0,0)
+	button.AnchorPoint = Vector2.new(1, 1)
+	button.Size = UDim2.new(0, 60, 0, 60)
+	button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 	button.Text = "Off"
 	button.TextScaled = true
 	button.Font = Enum.Font.SourceSansBold
 	button.ZIndex = 100
 	button.Parent = mobileGui
 	local uicorner = Instance.new("UICorner")
-	uicorner.CornerRadius = UDim.new(1,0)
+	uicorner.CornerRadius = UDim.new(1, 0)
 	uicorner.Parent = button
 	local uistroke = Instance.new("UIStroke")
 	uistroke.Thickness = 2
-	uistroke.Color = Color3.fromRGB(0,0,0)
+	uistroke.Color = Color3.fromRGB(0, 0, 0)
 	uistroke.Parent = button
-	button.MouseEnter:Connect(function()
-		TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play()
-	end)
+	button.MouseEnter:Connect(function() TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 100, 100)}):Play() end)
 	button.MouseLeave:Connect(function()
 		if AutoPassEnabled then
-			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play()
+			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 255, 0)}):Play()
 		else
-			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play()
+			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255, 0, 0)}):Play()
 		end
 	end)
 	button.MouseButton1Click:Connect(function()
 		AutoPassEnabled = not AutoPassEnabled
 		if AutoPassEnabled then
-			button.BackgroundColor3 = Color3.fromRGB(0,255,0)
+			button.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
 			button.Text = "On"
-			if not autoPassConnection then
-				autoPassConnection = RunService.Stepped:Connect(autoPassBomb)
-			end
+			if not autoPassConnection then autoPassConnection = RunService.Stepped:Connect(autoPassBomb) end
 		else
-			button.BackgroundColor3 = Color3.fromRGB(255,0,0)
+			button.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 			button.Text = "Off"
-			if autoPassConnection then
-				autoPassConnection:Disconnect()
-				autoPassConnection = nil
-			end
+			if autoPassConnection then autoPassConnection:Disconnect() autoPassConnection = nil end
 		end
-		if orionAutoPassToggle then
-			orionAutoPassToggle:Set(AutoPassEnabled)
-		end
+		if orionAutoPassToggle then orionAutoPassToggle:Set(AutoPassEnabled) end
 	end)
 	return mobileGui, button
 end
@@ -473,6 +523,7 @@ LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
 		wait(1)
 		if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
 			mobileGui, mobileToggle = createMobileToggle()
+			updateUIVisibility(not allUIVisible)
 		end
 	end
 end)
@@ -484,33 +535,33 @@ ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ShiftLockScreenGui.ResetOnSpawn = false
 local ShiftLockButton = Instance.new("ImageButton")
 ShiftLockButton.Parent = ShiftLockScreenGui
-ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255,255,255)
+ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 ShiftLockButton.BackgroundTransparency = 1
-ShiftLockButton.Position = UDim2.new(0.7,0,0.75,0)
-ShiftLockButton.Size = UDim2.new(0.0636,0,0.0661,0)
+ShiftLockButton.Position = UDim2.new(0.7, 0, 0.75, 0)
+ShiftLockButton.Size = UDim2.new(0.0636, 0, 0.0661, 0)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
 local shiftLockUICorner = Instance.new("UICorner")
-shiftLockUICorner.CornerRadius = UDim.new(0.2,0)
+shiftLockUICorner.CornerRadius = UDim.new(0.2, 0)
 shiftLockUICorner.Parent = ShiftLockButton
 local shiftLockUIStroke = Instance.new("UIStroke")
 shiftLockUIStroke.Thickness = 2
-shiftLockUIStroke.Color = Color3.fromRGB(0,0,0)
+shiftLockUIStroke.Color = Color3.fromRGB(0, 0, 0)
 shiftLockUIStroke.Parent = ShiftLockButton
 local ShiftlockCursor = Instance.new("ImageLabel")
 ShiftlockCursor.Name = "Shiftlock Cursor"
 ShiftlockCursor.Parent = ShiftLockScreenGui
 ShiftlockCursor.Image = "rbxasset://textures/MouseLockedCursor.png"
-ShiftlockCursor.Size = UDim2.new(0.03,0,0.03,0)
-ShiftlockCursor.Position = UDim2.new(0.5,0,0.5,0)
-ShiftlockCursor.AnchorPoint = Vector2.new(0.5,0.5)
+ShiftlockCursor.Size = UDim2.new(0.03, 0, 0.03, 0)
+ShiftlockCursor.Position = UDim2.new(0.5, 0, 0.5, 0)
+ShiftlockCursor.AnchorPoint = Vector2.new(0.5, 0.5)
 ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftlockCursor.BackgroundTransparency = 1
-ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255,0,0)
+ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 ShiftlockCursor.Visible = false
 local SL_MaxLength = 900000
-local SL_EnabledOffset = CFrame.new(1.7,0,0)
-local SL_DisabledOffset = CFrame.new(-1.7,0,0)
+local SL_EnabledOffset = CFrame.new(1.7, 0, 0)
+local SL_DisabledOffset = CFrame.new(-1.7, 0, 0)
 local SL_Active = nil
 ShiftLockButton.MouseButton1Click:Connect(function()
 	if not SL_Active then
@@ -522,7 +573,7 @@ ShiftLockButton.MouseButton1Click:Connect(function()
 				hum.AutoRotate = false
 				ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_on@2x.png"
 				ShiftlockCursor.Visible = true
-				root.CFrame = CFrame.new(root.Position,Vector3.new(Workspace.CurrentCamera.CFrame.LookVector.X*SL_MaxLength,root.Position.Y,Workspace.CurrentCamera.CFrame.LookVector.Z*SL_MaxLength))
+				root.CFrame = CFrame.new(root.Position, Vector3.new(Workspace.CurrentCamera.CFrame.LookVector.X * SL_MaxLength, root.Position.Y, Workspace.CurrentCamera.CFrame.LookVector.Z * SL_MaxLength))
 				Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_EnabledOffset
 			end
 		end)
@@ -533,36 +584,26 @@ ShiftLockButton.MouseButton1Click:Connect(function()
 		ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
 		Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
 		ShiftlockCursor.Visible = false
-		if SL_Active then
-			SL_Active:Disconnect()
-			SL_Active = nil
-		end
+		if SL_Active then SL_Active:Disconnect() SL_Active = nil end
 	end
 end)
 
--- UI Visibility Toggle via Chat (/e command) that toggles both PlayerGui and CoreGui Orion UI
 local allUIVisible = true
+local function updateAllUI()
+	local hidden = not allUIVisible
+	updateUIVisibility(hidden)
+end
+
 LocalPlayer.Chatted:Connect(function(msg)
 	if string.lower(msg) == "/e" then
 		allUIVisible = not allUIVisible
-		-- Toggle mobile UI (PlayerGui)
-		if mobileGui then mobileGui.Enabled = allUIVisible end
-		-- Toggle OrionLib windows in both PlayerGui and CoreGui
-		local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-		for _, child in pairs(playerGui:GetChildren()) do
-			if child.Name:match("Orion") then
-				if child:IsA("ScreenGui") then child.Enabled = allUIVisible end
-			end
-		end
-		local coreGui = game:GetService("CoreGui")
-		for _, child in pairs(coreGui:GetChildren()) do
-			if child.Name:match("Orion") then
-				if child:IsA("ScreenGui") then child.Enabled = allUIVisible end
-			end
-		end
-		-- Toggle ShiftLock UI (assumed in CoreGui)
-		if ShiftLockScreenGui then ShiftLockScreenGui.Enabled = allUIVisible end
+		updateAllUI()
 	end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(character)
+	wait(2)
+	updateAllUI()
 end)
 
 print("Bomb AI, Anti-Slippery, Shiftlock, Auto Pass, and UI Toggle systems loaded. Menu and features active.")
