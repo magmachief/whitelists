@@ -601,7 +601,7 @@ end
 
 -- Chat command /e toggles UI invisibility but still interactive.
 LocalPlayer.Chatted:Connect(function(msg)
-	if string.lower(msg) == "/e" then
+	if string.lower(msg) == "e" then
 		allUIHidden = not allUIHidden
 		updateAllUI()
 	end
