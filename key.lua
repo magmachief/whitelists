@@ -62,8 +62,8 @@ function FrictionController:calculateFriction(character)
 			end
 		end
 	end
-	if character:FindFirstChild(bombName) then 
-		return self.bombFriction 
+	if character:FindFirstChild(bombName) then
+		return self.bombFriction
 	end
 	local stateName = humanoid:GetState()
 	local multiplier = self.stateMultipliers[stateName] or 1.0
@@ -98,8 +98,8 @@ function FrictionController:update()
 end
 function FrictionController:restore()
 	for part, orig in pairs(self.originalProperties) do
-		if part and part.Parent then 
-			part.CustomPhysicalProperties = orig 
+		if part and part.Parent then
+			part.CustomPhysicalProperties = orig
 		end
 	end
 	self.originalProperties = {}
@@ -125,7 +125,9 @@ local function applyAntiSlippery(enabled)
 						if character:FindFirstChild(bombName) then
 							local speed = hrp and hrp.Velocity.Magnitude or 0
 							local fric = customBombAntiSlipperyFriction
-							if speed > 10 then fric = fric * 1.25 end
+							if speed > 10 then
+								fric = fric * 1.25
+							end
 							part.CustomPhysicalProperties = PhysicalProperties.new(fric, 0.3, 0.5)
 						else
 							part.CustomPhysicalProperties = PhysicalProperties.new(customAntiSlipperyFriction, 0.3, 0.5)
@@ -189,7 +191,10 @@ function TargetingModule.getClosestPlayer()
 			local targetHrp = p.Character:FindFirstChild("HumanoidRootPart")
 			if targetHrp and not p.Character:FindFirstChild(bombName) then
 				local d = (targetHrp.Position - myPos).Magnitude
-				if d < md then md = d; closest = p end
+				if d < md then
+					md = d
+					closest = p
+				end
 			end
 		end
 	end
@@ -372,7 +377,7 @@ AutomatedTab:AddTextbox({Name="Custom Anti‑Slippery Friction", Default=tostrin
 	local num = tonumber(value) if num then customAntiSlipperyFriction = num end
 end})
 AutomatedTab:AddTextbox({Name="Custom Bomb Anti‑Slippery Friction", Default=tostring(customBombAntiSlipperyFriction), Flag="CustomBombAntiSlipperyFrict", TextDisappear=false, Callback=function(value)
-	local num = tonumber(value) if num then customBombAntiSlipperyFringe = num; customBombAntiSlipperyFriction = num end
+	local num = tonumber(value) if num then customBombAntiSlipperyFriction = num end
 end})
 AutomatedTab:AddToggle({Name="Face Bomb", Info="Face nearest bomb holder", Default=false, Callback=function(v)
 	FaceBombEnabled = v
@@ -407,15 +412,14 @@ OrionLib:Init()
 local myFrictionController = FrictionController.new()
 myFrictionController:enable()
 
--- Mobile Auto Pass Button Creation: Circle, On/Off, placed near the jump button at bottom right
+-- Mobile Auto Pass Button: Circle, near jump button area (bottom right, to the right and slightly up)
 local function createMobileToggle()
 	local mobileGui = Instance.new("ScreenGui")
 	mobileGui.Name = "MobileToggleGui"
 	mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 	local button = Instance.new("TextButton")
 	button.Name = "AutoPassMobileToggle"
-	-- Position set to bottom right, slightly up where jump button normally is (approximate)
-button.Position = UDim2.new(1, -50, 1, -70) -- Slightly smaller offset
+	button.Position = UDim2.new(1, -50, 1, -100)
 	button.AnchorPoint = Vector2.new(1,1)
 	button.Size = UDim2.new(0,60,0,60)
 	button.BackgroundColor3 = Color3.fromRGB(255,0,0)
@@ -431,20 +435,35 @@ button.Position = UDim2.new(1, -50, 1, -70) -- Slightly smaller offset
 	uistroke.Thickness = 2
 	uistroke.Color = Color3.fromRGB(0,0,0)
 	uistroke.Parent = button
-	button.MouseEnter:Connect(function() TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play() end)
-	button.MouseLeave:Connect(function() if AutoPassEnabled then TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play() else TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play() end end)
+	button.MouseEnter:Connect(function()
+		TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,100,100)}):Play()
+	end)
+	button.MouseLeave:Connect(function()
+		if AutoPassEnabled then
+			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0,255,0)}):Play()
+		else
+			TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,0,0)}):Play()
+		end
+	end)
 	button.MouseButton1Click:Connect(function()
 		AutoPassEnabled = not AutoPassEnabled
 		if AutoPassEnabled then
 			button.BackgroundColor3 = Color3.fromRGB(0,255,0)
 			button.Text = "On"
-			if not autoPassConnection then autoPassConnection = RunService.Stepped:Connect(autoPassBomb) end
+			if not autoPassConnection then
+				autoPassConnection = RunService.Stepped:Connect(autoPassBomb)
+			end
 		else
 			button.BackgroundColor3 = Color3.fromRGB(255,0,0)
 			button.Text = "Off"
-			if autoPassConnection then autoPassConnection:Disconnect() autoPassConnection = nil end
+			if autoPassConnection then
+				autoPassConnection:Disconnect()
+				autoPassConnection = nil
+			end
 		end
-		if orionAutoPassToggle then orionAutoPassToggle:Set(AutoPassEnabled) end
+		if orionAutoPassToggle then
+			orionAutoPassToggle:Set(AutoPassEnabled)
+		end
 	end)
 	return mobileGui, button
 end
@@ -503,7 +522,7 @@ ShiftLockButton.MouseButton1Click:Connect(function()
 				hum.AutoRotate = false
 				ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_on@2x.png"
 				ShiftlockCursor.Visible = true
-				root.CFrame = CFrame.new(root.Position, Vector3.new(Workspace.CurrentCamera.CFrame.LookVector.X*SL_MaxLength, root.Position.Y, Workspace.CurrentCamera.CFrame.LookVector.Z*SL_MaxLength))
+				root.CFrame = CFrame.new(root.Position,Vector3.new(Workspace.CurrentCamera.CFrame.LookVector.X*SL_MaxLength,root.Position.Y,Workspace.CurrentCamera.CFrame.LookVector.Z*SL_MaxLength))
 				Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_EnabledOffset
 			end
 		end)
@@ -514,8 +533,37 @@ ShiftLockButton.MouseButton1Click:Connect(function()
 		ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
 		Workspace.CurrentCamera.CFrame = Workspace.CurrentCamera.CFrame * SL_DisabledOffset
 		ShiftlockCursor.Visible = false
-		if SL_Active then SL_Active:Disconnect() SL_Active = nil end
+		if SL_Active then
+			SL_Active:Disconnect()
+			SL_Active = nil
+		end
 	end
 end)
-print("Bomb AI, Anti-Slippery, Shiftlock, and Auto Pass systems loaded. Menu and features active.")
+
+-- UI Visibility Toggle via Chat (/e command) that toggles both PlayerGui and CoreGui Orion UI
+local allUIVisible = true
+LocalPlayer.Chatted:Connect(function(msg)
+	if string.lower(msg) == "/e" then
+		allUIVisible = not allUIVisible
+		-- Toggle mobile UI (PlayerGui)
+		if mobileGui then mobileGui.Enabled = allUIVisible end
+		-- Toggle OrionLib windows in both PlayerGui and CoreGui
+		local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+		for _, child in pairs(playerGui:GetChildren()) do
+			if child.Name:match("Orion") then
+				if child:IsA("ScreenGui") then child.Enabled = allUIVisible end
+			end
+		end
+		local coreGui = game:GetService("CoreGui")
+		for _, child in pairs(coreGui:GetChildren()) do
+			if child.Name:match("Orion") then
+				if child:IsA("ScreenGui") then child.Enabled = allUIVisible end
+			end
+		end
+		-- Toggle ShiftLock UI (assumed in CoreGui)
+		if ShiftLockScreenGui then ShiftLockScreenGui.Enabled = allUIVisible end
+	end
+end)
+
+print("Bomb AI, Anti-Slippery, Shiftlock, Auto Pass, and UI Toggle systems loaded. Menu and features active.")
 return {}
