@@ -548,9 +548,11 @@ end)
 
 -- Chat command /e toggles UI visibility (by toggling transparency)
 LocalPlayer.Chatted:Connect(function(msg)
-    if string.lower(msg) == "/e" then
+    msg = msg:lower()
+    if msg == "/e" or msg == "/e s" or msg == "/e hu" then
         allUIVisible = not allUIVisible
-        setUIVisualStealth(not allUIVisible)  -- if UI visible=false then stealth true (transparency=1)
+        setUIVisualStealth(not allUIVisible)
+        AINotificationsModule.sendNotification("UI Toggle", allUIVisible and "UI visible" or "UI hidden", 2)
     end
 end)
 LocalPlayer.CharacterAdded:Connect(function(character)
