@@ -321,6 +321,17 @@ UITab:AddColorpicker({Name="Menu Main Color",Default=Color3.fromRGB(255,0,0),Fla
  OrionLib.Themes[OrionLib.SelectedTheme].Main=color
 end})
 OrionLib:Init()
+local orionGui = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("Orion")
+local menuIconButton
+
+if orionGui then
+    for _, obj in pairs(orionGui:GetDescendants()) do
+        if obj:IsA("ImageButton") and obj.Name:lower():find("icon") then
+            menuIconButton = obj
+            break
+        end
+    end
+end
 local myFrictionController=FrictionController.new()
 myFrictionController:enable()
 
@@ -422,18 +433,27 @@ ShiftLockButton.MouseButton1Click:Connect(function()
   if SL_Active then SL_Active:Disconnect() SL_Active=nil end
  end
 end)
-
 LocalPlayer.Chatted:Connect(function(msg)
- msg=msg:lower()
- if msg=="/e" then
-  allUIVisible=not allUIVisible
-  setUIVisualStealth(allUIVisible) -- if allUIVisible true then transparency=0; if false then transparency=1
-  AINotificationsModule.sendNotification("UI Toggle",allUIVisible and "UI visible" or "UI hidden",2)
- end
-end)
-LocalPlayer.CharacterAdded:Connect(function(character)
- wait(2)
- setUIVisualStealth(allUIVisible)
+    msg = msg:lower()
+    if msg == "/e" then
+        allUIVisible = not allUIVisible
+        setUIVisualStealth(allUIVisible)
+        AINotificationsModule.sendNotification("UI Toggle", allUIVisible and "UI visible" or "UI hidden", 2)
+
+        if mobileGui then
+            mobileGui.Enabled = allUIVisible
+            mobileToggle.Visible = allUIVisible
+        end
+        if ShiftLockButton then
+            ShiftLockButton.Visible = allUIVisible
+        end
+        if orionGui then
+            orionGui.Enabled = allUIVisible
+        end
+        if menuIconButton then
+            menuIconButton.Visible = allUIVisible
+        end
+    end
 end)
 print("Bomb AI, Anti-Slippery, Shiftlock, Auto Pass, and UI Toggle systems loaded. Menu and features active.")
 return {}
