@@ -1,8 +1,3 @@
---[[
-    @author depso (depthso)
-    @description Grow a Garden auto-farm script
-    https://www.roblox.com/games/126884695634066
-]]
 
 --// Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
