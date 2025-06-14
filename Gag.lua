@@ -170,7 +170,45 @@ local function GetSeedInfo(Seed: Tool): number?
 	if not PlantName then return end
 	return PlantName.Value, Count.Value
 end
+local EggStock = {}
 
+local function GetEggStock(IgnoreNoStock: boolean?): table
+	local EggShop = PlayerGui:FindFirstChild("Egg_Shop")
+	if not EggShop then
+		warn("[GetEggStock] Egg_Shop UI not found in PlayerGui.")
+		return {}
+	end
+
+	-- Attempt to find any egg item (fallback name)
+	local referenceItem = EggShop:FindFirstChildWhichIsA("Frame", true)
+	if not referenceItem then
+		warn("[GetEggStock] No reference egg item found.")
+		return {}
+	end
+
+	local Items = referenceItem.Parent
+	local NewList = {}
+
+	for _, Item in pairs(Items:GetChildren()) do
+		local MainFrame = Item:FindFirstChild("Main_Frame")
+		if not MainFrame then continue end
+
+		local StockLabel = MainFrame:FindFirstChild("Stock_Text")
+		if not StockLabel then continue end
+
+		local stockText = StockLabel.Text
+		local stockCount = tonumber(stockText:match("%d+"))
+
+		if IgnoreNoStock then
+			if stockCount <= 0 then continue end
+			NewList[Item.Name] = stockCount
+		else
+			EggStock[Item.Name] = stockCount
+		end
+	end
+
+	return IgnoreNoStock and NewList or EggStock
+end
 local function GetGearInfo(Gear: Tool)
 	local GearName = Gear:FindFirstChild("Gear_Name") or Gear:FindFirstChild("ItemName") or Gear:FindFirstChild("Name")
 	local Quantity = Gear:FindFirstChild("Quantity") or Gear:FindFirstChild("Amount") or Gear:FindFirstChild("Count")
