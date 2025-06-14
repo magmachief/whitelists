@@ -47,6 +47,8 @@ ReGui:DefineTheme("GardenTheme", {
 
 --// Dicts
 local SeedStock = {}
+-- Add egg-selected table at top
+local SelectedEggs = {}
 local OwnedSeeds = {}
 local HarvestIgnores = {
 	Normal = false,
@@ -121,7 +123,15 @@ end
 local function BuySeed(Seed: string)
 	GameEvents.BuySeedStock:FireServer(Seed)
 end
-
+local function BuyEgg(egg: string)
+    local eggEvent = GameEvents:FindFirstChild("BuyPetEgg") or GameEvents:FindFirstChild("PetEggService")
+    if eggEvent then
+        print("[BuyEgg] Buying egg:", egg)
+        eggEvent:FireServer(egg)
+    else
+        warn("[BuyEgg] Egg purchase event not found in GameEvents")
+    end
+end
 local function BuyGear(gear: string)
 	local gearEvent = GameEvents:FindFirstChild("BuyGearStock") or GameEvents:FindFirstChild("buyGearStock")
 	if gearEvent then
@@ -456,6 +466,15 @@ local function StartServices()
 			end
 		end
 	end)
+-- inside StartServices()
+MakeLoop(AutoBuyEggs, function()
+    for eggName, selected in pairs(SelectedEggs) do
+        if selected then
+            BuyEgg(eggName)
+            wait(0.2)
+        end
+    end
+end)
 	--// Get stocks periodically
 	while wait(.1) do
 		GetSeedStock()
@@ -506,7 +525,29 @@ AutoHarvest = HarvestNode:Checkbox({
 })
 HarvestNode:Separator({Text="Ignores:"})
 CreateCheckboxes(HarvestNode, HarvestIgnores)
-
+--// Auto-Eggs
+local EggNode = Window:TreeNode({ Title = "Auto-Eggs 🥚" })
+-- Populate checkboxes based on available stock
+for eggName, _ in pairs(GetEggStock(false)) do
+    EggNode:Checkbox({
+        Value = false,
+        Label = eggName,
+        Callback = function(_, val)
+            SelectedEggs[eggName] = val
+        end
+    })
+end
+local AutoBuyEggs = EggNode:Checkbox({ Value = false, Label = "Enabled Auto Buy Eggs" })
+EggNode:Button({
+    Text = "Buy Selected Eggs Now",
+    Callback = function()
+        for eggName, selected in pairs(SelectedEggs) do
+            if selected then
+                for i = 1, 3 do BuyEgg(eggName); wait(0.2) end
+            end
+        end
+    end
+})
 --// Auto-Buy for Seeds
 local BuyNode = Window:TreeNode({Title="Auto-Buy 🥕"})
 local OnlyShowStock
