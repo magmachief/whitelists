@@ -121,6 +121,26 @@ local function BuySeed(Seed: string)
 	GameEvents.BuySeedStock:FireServer(Seed)
 end
 
+local function BuyGear(gear: string)
+	local gearEvent = GameEvents:FindFirstChild("BuyGearStock") or GameEvents:FindFirstChild("buyGearStock")
+	if gearEvent then
+		print("[BuyGear] Buying gear:", gear)
+		gearEvent:FireServer(gear)
+	else
+		warn("[BuyGear] Gear purchase event not found in GameEvents.")
+	end
+end
+local function BuyAllSelectedGears()
+	local gear = SelectedGear.Selected
+	if not gear or gear == "" then
+		warn("[BuyAllSelectedGears] No gear selected.")
+		return
+	end
+	for i = 1, 3 do -- Adjust number of times to buy (e.g., 3 times)
+		BuyGear(gear)
+		wait(0.2)
+	end
+end
 local function BuyAllSelectedSeeds()
     local Seed = SelectedSeedStock.Selected
     local Stock = SeedStock[Seed]
@@ -138,6 +158,19 @@ local function GetSeedInfo(Seed: Tool): number?
 	if not PlantName then return end
 
 	return PlantName.Value, Count.Value
+end
+local function GetGearInfo(Gear: Tool)
+	local GearName = Gear:FindFirstChild("Gear_Name") or Gear:FindFirstChild("ItemName") or Gear:FindFirstChild("Name")
+	local Quantity = Gear:FindFirstChild("Quantity") or Gear:FindFirstChild("Amount") or Gear:FindFirstChild("Count")
+
+	if not GearName then
+		warn("[GetGearInfo] Missing gear name value.")
+		return
+	end
+
+	local name = GearName.Value
+	local count = Quantity and Quantity.Value or 1 -- default to 1 if no count field
+	return name, count
 end
 
 local function CollectSeedsFromParent(Parent, Seeds: table)
@@ -294,7 +327,45 @@ local function GetSeedStock(IgnoreNoStock: boolean?): table
 
 	return IgnoreNoStock and NewList or SeedStock
 end
+local GearStock = {}
 
+local function GetGearStock(IgnoreNoStock: boolean?): table
+	local GearShop = PlayerGui:FindFirstChild("Gear_Shop")
+	if not GearShop then
+		warn("[GetGearStock] Gear_Shop UI not found in PlayerGui.")
+		return {}
+	end
+
+	-- Use a reference gear (e.g., "Watering Can") to find the container
+	local referenceItem = GearShop:FindFirstChild("Watering Can", true)
+	if not referenceItem then
+		warn("[GetGearStock] Reference gear item not found.")
+		return {}
+	end
+
+	local Items = referenceItem.Parent
+	local NewList = {}
+
+	for _, Item in pairs(Items:GetChildren()) do
+		local MainFrame = Item:FindFirstChild("Main_Frame")
+		if not MainFrame then continue end
+
+		local StockTextLabel = MainFrame:FindFirstChild("Stock_Text")
+		if not StockTextLabel then continue end
+
+		local StockText = StockTextLabel.Text
+		local StockCount = tonumber(StockText:match("%d+"))
+
+		if IgnoreNoStock then
+			if StockCount <= 0 then continue end
+			NewList[Item.Name] = StockCount
+		else
+			GearStock[Item.Name] = StockCount
+		end
+	end
+
+	return IgnoreNoStock and NewList or GearStock
+end
 local function CanHarvest(Plant): boolean?
     local Prompt = Plant:FindFirstChild("ProximityPrompt", true)
 	if not Prompt then return end
