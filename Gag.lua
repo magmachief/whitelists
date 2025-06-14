@@ -120,6 +120,15 @@ end
 local function BuySeed(Seed: string)
 	GameEvents.BuySeedStock:FireServer(Seed)
 end
+local function BuyPetEgg(egg: string)
+	local eggEvent = GameEvents:FindFirstChild("BuyPetEgg") or GameEvents:FindFirstChild("buyPetEgg")
+	if eggEvent then
+		print("[BuyEgg] Buying Egg:", egg)
+		eggEvent:FireServer(egg)
+	else
+		warn("[BuyEgg] Egg purchase event not found in GameEvents.")
+	end
+end
 
 local function BuyGear(gear: string)
 	local gearEvent = GameEvents:FindFirstChild("BuyGearStock") or GameEvents:FindFirstChild("buyGearStock")
@@ -130,14 +139,14 @@ local function BuyGear(gear: string)
 		warn("[BuyGear] Gear purchase event not found in GameEvents.")
 	end
 end
-local function BuyAllSelectedGears()
-	local gear = SelectedGear.Selected
-	if not gear or gear == "" then
-		warn("[BuyAllSelectedGears] No gear selected.")
+local function BuyAllSelectedEggs()
+	local egg = SelectedEgg.Selected
+	if not egg or egg == "" then
+		warn("[BuyAllSelectedEggs] No egg selected.")
 		return
 	end
-	for i = 1, 3 do -- Adjust number of times to buy (e.g., 3 times)
-		BuyGear(gear)
+	for i = 1, 3 do -- Adjust to desired quantity
+		BuyPetEgg(egg)
 		wait(0.2)
 	end
 end
@@ -158,6 +167,19 @@ local function GetSeedInfo(Seed: Tool): number?
 	if not PlantName then return end
 
 	return PlantName.Value, Count.Value
+end
+local function GetEggInfo(Egg: Tool)
+	local EggName = Egg:FindFirstChild("Egg_Name") or Egg:FindFirstChild("Name") or Egg:FindFirstChild("Item_String")
+	local Count = Egg:FindFirstChild("Numbers") or Egg:FindFirstChild("Count")
+
+	if not EggName then
+		warn("[GetEggInfo] Could not find egg name in tool:", Egg.Name)
+		return
+	end
+
+	local name = EggName.Value
+	local amount = Count and Count.Value or 1
+	return name, amount
 end
 local function GetGearInfo(Gear: Tool)
 	local GearName = Gear:FindFirstChild("Gear_Name") or Gear:FindFirstChild("ItemName") or Gear:FindFirstChild("Name")
@@ -365,6 +387,45 @@ local function GetGearStock(IgnoreNoStock: boolean?): table
 	end
 
 	return IgnoreNoStock and NewList or GearStock
+end
+local EggStock = {}
+
+local function GetEggStock(IgnoreNoStock: boolean?): table
+	local EggShop = PlayerGui:FindFirstChild("Egg_Shop")
+	if not EggShop then
+		warn("[GetEggStock] Egg_Shop UI not found in PlayerGui.")
+		return {}
+	end
+
+	-- Use a reference item (e.g., "Legendary Egg") to find the container
+	local referenceItem = EggShop:FindFirstChild("Legendary Egg", true)
+	if not referenceItem then
+		warn("[GetEggStock] Reference egg item not found.")
+		return {}
+	end
+
+	local Items = referenceItem.Parent
+	local NewList = {}
+
+	for _, Item in pairs(Items:GetChildren()) do
+		local MainFrame = Item:FindFirstChild("Main_Frame")
+		if not MainFrame then continue end
+
+		local StockTextLabel = MainFrame:FindFirstChild("Stock_Text")
+		if not StockTextLabel then continue end
+
+		local StockText = StockTextLabel.Text
+		local StockCount = tonumber(StockText:match("%d+"))
+
+		if IgnoreNoStock then
+			if StockCount <= 0 then continue end
+			NewList[Item.Name] = StockCount
+		else
+			EggStock[Item.Name] = StockCount
+		end
+	end
+
+	return IgnoreNoStock and NewList or EggStock
 end
 local function CanHarvest(Plant): boolean?
     local Prompt = Plant:FindFirstChild("ProximityPrompt", true)
