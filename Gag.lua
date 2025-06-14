@@ -123,15 +123,7 @@ end
 local function BuySeed(Seed: string)
 	GameEvents.BuySeedStock:FireServer(Seed)
 end
-local function BuyEgg(egg: string)
-    local eggEvent = GameEvents:FindFirstChild("BuyPetEgg") or GameEvents:FindFirstChild("PetEggService")
-    if eggEvent then
-        print("[BuyEgg] Buying egg:", egg)
-        eggEvent:FireServer(egg)
-    else
-        warn("[BuyEgg] Egg purchase event not found in GameEvents")
-    end
-end
+
 local function BuyGear(gear: string)
 	local gearEvent = GameEvents:FindFirstChild("BuyGearStock") or GameEvents:FindFirstChild("buyGearStock")
 	if gearEvent then
@@ -163,51 +155,47 @@ local function BuyAllSelectedGears()
 		end
 	end
 end
+local function GetEggStandNames()
+    local stands = {}
+    for _, stand in ipairs(workspace:GetDescendants()) do
+        if stand.Name == "Pet Stand" and stand:IsA("Model") then
+            -- Name the dropdown after the type label inside the stand
+            local nameLabel = stand:FindFirstChild("NameTag", true)
+            if nameLabel and nameLabel:IsA("TextLabel") then
+                local eggName = nameLabel.Text
+                stands[eggName] = stand
+            end
+        end
+    end
+    return stands
+end
+local function BuyEggFromPetStand(eggName)
+    local stands = GetEggStandNames()
+    local stand = stands[eggName]
+    if not stand then
+        warn("[BuyEgg] Couldn't find Pet Stand for:", eggName)
+        return
+    end
 
+    local prompt = stand:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if prompt then
+        print("[BuyEgg] Triggering prompt on:", eggName)
+        fireproximityprompt(prompt)
+    else
+        warn("[BuyEgg] No prompt found inside stand for:", eggName)
+    end
+end
 local function GetSeedInfo(Seed: Tool): number?
 	local PlantName = Seed:FindFirstChild("Plant_Name")
 	local Count = Seed:FindFirstChild("Numbers")
 	if not PlantName then return end
 	return PlantName.Value, Count.Value
 end
-local EggStock = {}
-
-local function GetEggStock(IgnoreNoStock: boolean?): table
-	local EggShop = PlayerGui:FindFirstChild("Egg_Shop")
-	if not EggShop then
-		warn("[GetEggStock] Egg_Shop UI not found in PlayerGui.")
-		return {}
+local function BuyAllSelectedEggs()
+	local egg = SelectedEgg.Selected
+	if egg and egg ~= "" then
+		BuyEggFromPetStand(egg)
 	end
-
-	-- Attempt to find any egg item (fallback name)
-	local referenceItem = EggShop:FindFirstChildWhichIsA("Frame", true)
-	if not referenceItem then
-		warn("[GetEggStock] No reference egg item found.")
-		return {}
-	end
-
-	local Items = referenceItem.Parent
-	local NewList = {}
-
-	for _, Item in pairs(Items:GetChildren()) do
-		local MainFrame = Item:FindFirstChild("Main_Frame")
-		if not MainFrame then continue end
-
-		local StockLabel = MainFrame:FindFirstChild("Stock_Text")
-		if not StockLabel then continue end
-
-		local stockText = StockLabel.Text
-		local stockCount = tonumber(stockText:match("%d+"))
-
-		if IgnoreNoStock then
-			if stockCount <= 0 then continue end
-			NewList[Item.Name] = stockCount
-		else
-			EggStock[Item.Name] = stockCount
-		end
-	end
-
-	return IgnoreNoStock and NewList or EggStock
 end
 local function GetGearInfo(Gear: Tool)
 	local GearName = Gear:FindFirstChild("Gear_Name") or Gear:FindFirstChild("ItemName") or Gear:FindFirstChild("Name")
@@ -505,12 +493,11 @@ local function StartServices()
 		end
 	end)
 -- inside StartServices()
-MakeLoop(AutoBuyEggs, function()
-    for eggName, selected in pairs(SelectedEggs) do
-        if selected then
-            BuyEgg(eggName)
-            wait(0.2)
-        end
+MakeLoop(AutoBuyEgg, function()
+    local egg = SelectedEgg.Selected
+    if egg and egg ~= "" then
+        BuyEggFromPetStand(egg)
+        wait(0.3)
     end
 end)
 	--// Get stocks periodically
@@ -563,28 +550,27 @@ AutoHarvest = HarvestNode:Checkbox({
 })
 HarvestNode:Separator({Text="Ignores:"})
 CreateCheckboxes(HarvestNode, HarvestIgnores)
---// Auto-Eggs
-local EggNode = Window:TreeNode({ Title = "Auto-Eggs 🥚" })
--- Populate checkboxes based on available stock
-for eggName, _ in pairs(GetEggStock(false)) do
-    EggNode:Checkbox({
-        Value = false,
-        Label = eggName,
-        Callback = function(_, val)
-            SelectedEggs[eggName] = val
+local EggNode = Window:TreeNode({Title="Auto-Eggs 🥚"})
+
+SelectedEgg = EggNode:Combo({
+    Label = "Select Egg",
+    Selected = "",
+    GetItems = function()
+        local stands = GetEggStandNames()
+        local list = {}
+        for name in pairs(stands) do
+            table.insert(list, name)
         end
-    })
-end
-local AutoBuyEggs = EggNode:Checkbox({ Value = false, Label = "Enabled Auto Buy Eggs" })
+        return list
+    end
+})
+AutoBuyEgg = EggNode:Checkbox({
+    Value = false,
+    Label = "Enabled Auto Buy Eggs"
+})
 EggNode:Button({
     Text = "Buy Selected Eggs Now",
-    Callback = function()
-        for eggName, selected in pairs(SelectedEggs) do
-            if selected then
-                for i = 1, 3 do BuyEgg(eggName); wait(0.2) end
-            end
-        end
-    end
+    Callback = BuyAllSelectedEggs
 })
 --// Auto-Buy for Seeds
 local BuyNode = Window:TreeNode({Title="Auto-Buy 🥕"})
