@@ -20,7 +20,9 @@ local AutoPassEnabled=false
 local antiSlippery=false
 local RemoveHitboxEnabled=false
 local AI_AssistanceEnabled=false
-local allUIVisible=true
+local allUIVisible=true\
+local originalHitboxSizes = {}
+
 
 local FrictionController={}
 FrictionController.__index=FrictionController
@@ -190,14 +192,27 @@ function AINotificationsModule.sendNotification(title,text,dur)
  pcall(function() StarterGui:SetCore("SendNotification",{Title=title,Text=text,Duration=dur or 5}) end)
 end
 
+
 local function applyRemoveHitbox(enable)
- local char=LocalPlayer.Character; if not char then return end
- for _,p in pairs(char:GetDescendants()) do
-  if p:IsA("BasePart") and p.Name=="Hitbox" then
-   if enable then p.Transparency=1; p.CanCollide=false; p.Size=Vector3.new(customHitboxSize,customHitboxSize,customHitboxSize)
-   else p.Transparency=0; p.CanCollide=true; p.Size=Vector3.new(1,1,1) end
-  end
- end
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name == "Hitbox" then
+            if enable then
+                if not originalHitboxSizes[part] then
+                    originalHitboxSizes[part] = part.Size
+                end
+                part.Transparency = 1
+                part.CanCollide = false
+                part.Size = Vector3.new(customHitboxSize, customHitboxSize, customHitboxSize)
+            else
+                part.Transparency = 0
+                part.CanCollide = true
+                part.Size = originalHitboxSizes[part] or Vector3.new(1,1,1)
+            end
+        end
+    end
 end
 
 local currentTargetMarker,currentTargetPlayer=nil,nil
@@ -303,9 +318,22 @@ AutomatedTab:AddToggle({Name="Remove Hitbox",Default=RemoveHitboxEnabled,Flag="R
  RemoveHitboxEnabled=value
  applyRemoveHitbox(value)
 end})
-AutomatedTab:AddTextbox({Name="Custom Hitbox Size",Default=tostring(customHitboxSize),Flag="CustomHitboxSize",TextDisappear=false,Callback=function(value)
- local num=tonumber(value) if num then customHitboxSize=num end
-end})
+AutomatedTab:AddTextbox({
+    Name="Custom Hitbox Size",
+    Default=tostring(customHitboxSize),
+    Flag="CustomHitboxSize",
+    TextDisappear=false,
+    Callback=function(value)
+        local num = tonumber(value)
+        if num then
+            customHitboxSize = num
+            if RemoveHitboxEnabled then
+                applyRemoveHitbox(true)
+            end
+        end
+    end
+})
+
 AITab:AddLabel("== Targeting Settings ==",15)
 AITab:AddToggle({Name="AI Assistance",Default=false,Flag="AIAssistance",Callback=function(value) AI_AssistanceEnabled=value end})
 AITab:AddTextbox({Name="Bomb Pass Distance",Default=tostring(bombPassDistance),Flag="BombPassDistance",TextDisappear=false,Callback=function(value)
