@@ -20,7 +20,7 @@ local AutoPassEnabled=false
 local antiSlippery=false
 local RemoveHitboxEnabled=false
 local AI_AssistanceEnabled=false
-local allUIVisible=true\
+local allUIVisible=true
 local originalHitboxSizes = {}
 
 
