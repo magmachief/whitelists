@@ -399,7 +399,7 @@ local function createMobileToggle()
 
  -- BIGGER BUTTON (this is what actually changes size)
  button.Size=UDim2.new(0,140,0,140)
- button.Position=UDim2.new(1,-170,1,-210)
+ button.Position=UDim2.new(1,-120,1,-210)
  button.AnchorPoint=Vector2.new(1,1)
 
  button.BackgroundColor3=Color3.fromRGB(255,0,0)
