@@ -389,29 +389,68 @@ end
 local function createMobileToggle()
  local mobileGui=Instance.new("ScreenGui")
  mobileGui.Name="MobileToggleGui"
+ mobileGui.ResetOnSpawn=false
  mobileGui.Parent=LocalPlayer:WaitForChild("PlayerGui")
+
  local button=Instance.new("TextButton")
  button.Name="AutoPassMobileToggle"
- button.Position=UDim2.new(1,-60,1,-110) button.AnchorPoint=Vector2.new(1,1)
- button.Size=UDim2.new(0,60,0,60)
+
+ -- ✅ ACTUALLY BIGGER BUTTON (and stays big)
+ button.Size=UDim2.new(0,140,0,140)
+ button.Position=UDim2.new(1,-170,1,-200)
+ button.AnchorPoint=Vector2.new(1,1)
+ button.SizeConstraint=Enum.SizeConstraint.AbsoluteXY
+
  button.BackgroundColor3=Color3.fromRGB(255,0,0)
- button.Text="Off" button.TextScaled=true button.Font=Enum.Font.SourceSansBold
- button.ZIndex=999 button.Parent=mobileGui
- local uicorner=Instance.new("UICorner") uicorner.CornerRadius=UDim.new(1,0) uicorner.Parent=button
- local uistroke=Instance.new("UIStroke") uistroke.Thickness=3 uistroke.Color=Color3.fromRGB(0,0,0) uistroke.Parent=button
- button.MouseEnter:Connect(function() TweenService:Create(button,TweenInfo.new(0.2),{BackgroundColor3=Color3.fromRGB(255,100,100)}):Play() end)
- button.MouseLeave:Connect(function() if AutoPassEnabled then TweenService:Create(button,TweenInfo.new(0.2),{BackgroundColor3=Color3.fromRGB(0,255,0)}):Play() else TweenService:Create(button,TweenInfo.new(0.2),{BackgroundColor3=Color3.fromRGB(255,0,0)}):Play() end end)
+ button.Text="Off"
+ button.TextScaled=true
+ button.Font=Enum.Font.SourceSansBold
+ button.ZIndex=9999
+ button.Parent=mobileGui
+
+ local uicorner=Instance.new("UICorner")
+ uicorner.CornerRadius=UDim.new(1,0)
+ uicorner.Parent=button
+
+ local uistroke=Instance.new("UIStroke")
+ uistroke.Thickness=6
+ uistroke.Color=Color3.fromRGB(0,0,0)
+ uistroke.Parent=button
+
+ button.MouseEnter:Connect(function()
+  TweenService:Create(button,TweenInfo.new(0.2),{BackgroundColor3=Color3.fromRGB(255,100,100)}):Play()
+ end)
+
+ button.MouseLeave:Connect(function()
+  TweenService:Create(button,TweenInfo.new(0.2),{
+   BackgroundColor3=AutoPassEnabled and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,0,0)
+  }):Play()
+ end)
+
  button.MouseButton1Click:Connect(function()
   AutoPassEnabled=not AutoPassEnabled
-  if AutoPassEnabled then button.BackgroundColor3=Color3.fromRGB(0,255,0) button.Text="On" if not autoPassConnection then autoPassConnection=RunService.Stepped:Connect(autoPassBomb) end
-  else button.BackgroundColor3=Color3.fromRGB(255,0,0) button.Text="Off" if autoPassConnection then autoPassConnection:Disconnect() autoPassConnection=nil end end
+  button.Text=AutoPassEnabled and "On" or "Off"
+  button.BackgroundColor3=AutoPassEnabled and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,0,0)
+  if AutoPassEnabled then
+   if not autoPassConnection then autoPassConnection=RunService.Stepped:Connect(autoPassBomb) end
+  else
+   if autoPassConnection then autoPassConnection:Disconnect() autoPassConnection=nil end
+  end
   if orionAutoPassToggle then orionAutoPassToggle:Set(AutoPassEnabled) end
  end)
- return mobileGui, button
+
+ return mobileGui,button
 end
+
 local mobileGui,mobileToggle=createMobileToggle()
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
- if child.Name=="MobileToggleGui" then wait(1) if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then mobileGui,mobileToggle=createMobileToggle() setUIVisualStealth(not allUIVisible) end end
+ if child.Name=="MobileToggleGui" then
+  task.wait(1)
+  if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
+   mobileGui,mobileToggle=createMobileToggle()
+   setUIVisualStealth(not allUIVisible)
+  end
+ end
 end)
 
 local ShiftLockScreenGui=Instance.new("ScreenGui")
