@@ -385,35 +385,32 @@ local function setUIVisualStealth(enabled)
   if gui:IsA("ScreenGui") and gui.Name:match("Orion") then rec(gui) end
  end
 end
-
 local function createMobileToggle()
  local mobileGui=Instance.new("ScreenGui")
  mobileGui.Name="MobileToggleGui"
- mobileGui.ResetOnSpawn=false
  mobileGui.Parent=LocalPlayer:WaitForChild("PlayerGui")
 
  local button=Instance.new("TextButton")
  button.Name="AutoPassMobileToggle"
+ button.Parent=mobileGui
 
- -- ✅ ACTUALLY BIGGER BUTTON (and stays big)
- button.Size=UDim2.new(0,140,0,140)
- button.Position=UDim2.new(1,-170,1,-200)
+ -- BIGGER but SAME LOGIC (this was the issue)
+ button.Size=UDim2.new(0,120,0,120)
+ button.Position=UDim2.new(1,-150,1,-190)
  button.AnchorPoint=Vector2.new(1,1)
- button.SizeConstraint=Enum.SizeConstraint.AbsoluteXY
 
  button.BackgroundColor3=Color3.fromRGB(255,0,0)
  button.Text="Off"
  button.TextScaled=true
  button.Font=Enum.Font.SourceSansBold
- button.ZIndex=9999
- button.Parent=mobileGui
+ button.ZIndex=999
 
  local uicorner=Instance.new("UICorner")
  uicorner.CornerRadius=UDim.new(1,0)
  uicorner.Parent=button
 
  local uistroke=Instance.new("UIStroke")
- uistroke.Thickness=6
+ uistroke.Thickness=3
  uistroke.Color=Color3.fromRGB(0,0,0)
  uistroke.Parent=button
 
@@ -429,20 +426,30 @@ local function createMobileToggle()
 
  button.MouseButton1Click:Connect(function()
   AutoPassEnabled=not AutoPassEnabled
-  button.Text=AutoPassEnabled and "On" or "Off"
-  button.BackgroundColor3=AutoPassEnabled and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,0,0)
   if AutoPassEnabled then
-   if not autoPassConnection then autoPassConnection=RunService.Stepped:Connect(autoPassBomb) end
+   button.Text="On"
+   button.BackgroundColor3=Color3.fromRGB(0,255,0)
+   if not autoPassConnection then
+    autoPassConnection=RunService.Stepped:Connect(autoPassBomb)
+   end
   else
-   if autoPassConnection then autoPassConnection:Disconnect() autoPassConnection=nil end
+   button.Text="Off"
+   button.BackgroundColor3=Color3.fromRGB(255,0,0)
+   if autoPassConnection then
+    autoPassConnection:Disconnect()
+    autoPassConnection=nil
+   end
   end
-  if orionAutoPassToggle then orionAutoPassToggle:Set(AutoPassEnabled) end
+  if orionAutoPassToggle then
+   orionAutoPassToggle:Set(AutoPassEnabled)
+  end
  end)
 
  return mobileGui,button
 end
 
 local mobileGui,mobileToggle=createMobileToggle()
+
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
  if child.Name=="MobileToggleGui" then
   task.wait(1)
