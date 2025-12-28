@@ -385,44 +385,38 @@ local function setUIVisualStealth(enabled)
   if gui:IsA("ScreenGui") and gui.Name:match("Orion") then rec(gui) end
  end
 end
+
+-- REPLACE your ENTIRE createMobileToggle() with this one
 local function createMobileToggle()
  local mobileGui=Instance.new("ScreenGui")
  mobileGui.Name="MobileToggleGui"
+ mobileGui.ResetOnSpawn=false
  mobileGui.Parent=LocalPlayer:WaitForChild("PlayerGui")
 
  local button=Instance.new("TextButton")
  button.Name="AutoPassMobileToggle"
  button.Parent=mobileGui
 
- -- BIGGER but SAME LOGIC (this was the issue)
- button.Size=UDim2.new(0,120,0,120)
- button.Position=UDim2.new(1,-150,1,-190)
+ -- BIGGER BUTTON (this is what actually changes size)
+ button.Size=UDim2.new(0,140,0,140)
+ button.Position=UDim2.new(1,-170,1,-210)
  button.AnchorPoint=Vector2.new(1,1)
 
  button.BackgroundColor3=Color3.fromRGB(255,0,0)
  button.Text="Off"
  button.TextScaled=true
  button.Font=Enum.Font.SourceSansBold
- button.ZIndex=999
+ button.ZIndex=1000
+ button.AutoButtonColor=false
 
  local uicorner=Instance.new("UICorner")
  uicorner.CornerRadius=UDim.new(1,0)
  uicorner.Parent=button
 
  local uistroke=Instance.new("UIStroke")
- uistroke.Thickness=3
+ uistroke.Thickness=4
  uistroke.Color=Color3.fromRGB(0,0,0)
  uistroke.Parent=button
-
- button.MouseEnter:Connect(function()
-  TweenService:Create(button,TweenInfo.new(0.2),{BackgroundColor3=Color3.fromRGB(255,100,100)}):Play()
- end)
-
- button.MouseLeave:Connect(function()
-  TweenService:Create(button,TweenInfo.new(0.2),{
-   BackgroundColor3=AutoPassEnabled and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,0,0)
-  }):Play()
- end)
 
  button.MouseButton1Click:Connect(function()
   AutoPassEnabled=not AutoPassEnabled
@@ -447,17 +441,9 @@ local function createMobileToggle()
 
  return mobileGui,button
 end
-
 local mobileGui,mobileToggle=createMobileToggle()
-
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
- if child.Name=="MobileToggleGui" then
-  task.wait(1)
-  if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then
-   mobileGui,mobileToggle=createMobileToggle()
-   setUIVisualStealth(not allUIVisible)
-  end
- end
+ if child.Name=="MobileToggleGui" then wait(1) if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then mobileGui,mobileToggle=createMobileToggle() setUIVisualStealth(not allUIVisible) end end
 end)
 
 local ShiftLockScreenGui=Instance.new("ScreenGui")
