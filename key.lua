@@ -396,9 +396,9 @@ local function createMobileToggle()
  button.Size=UDim2.new(0,60,0,60)
  button.BackgroundColor3=Color3.fromRGB(255,0,0)
  button.Text="Off" button.TextScaled=true button.Font=Enum.Font.SourceSansBold
- button.ZIndex=100 button.Parent=mobileGui
+ button.ZIndex=999 button.Parent=mobileGui
  local uicorner=Instance.new("UICorner") uicorner.CornerRadius=UDim.new(1,0) uicorner.Parent=button
- local uistroke=Instance.new("UIStroke") uistroke.Thickness=2 uistroke.Color=Color3.fromRGB(0,0,0) uistroke.Parent=button
+ local uistroke=Instance.new("UIStroke") uistroke.Thickness=3 uistroke.Color=Color3.fromRGB(0,0,0) uistroke.Parent=button
  button.MouseEnter:Connect(function() TweenService:Create(button,TweenInfo.new(0.2),{BackgroundColor3=Color3.fromRGB(255,100,100)}):Play() end)
  button.MouseLeave:Connect(function() if AutoPassEnabled then TweenService:Create(button,TweenInfo.new(0.2),{BackgroundColor3=Color3.fromRGB(0,255,0)}):Play() else TweenService:Create(button,TweenInfo.new(0.2),{BackgroundColor3=Color3.fromRGB(255,0,0)}):Play() end end)
  button.MouseButton1Click:Connect(function()
