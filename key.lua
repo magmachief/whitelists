@@ -445,7 +445,7 @@ local mobileGui,mobileToggle=createMobileToggle()
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
  if child.Name=="MobileToggleGui" then wait(1) if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then mobileGui,mobileToggle=createMobileToggle() setUIVisualStealth(not allUIVisible) end end
 end)
--- ====== END PS5 CONTROLLER BINDINGS ======
+
 local ShiftLockScreenGui=Instance.new("ScreenGui")
 ShiftLockScreenGui.Name="Shiftlock (CoreGui)"
 ShiftLockScreenGui.Parent=game:GetService("CoreGui")
