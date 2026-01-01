@@ -445,25 +445,6 @@ local mobileGui,mobileToggle=createMobileToggle()
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
  if child.Name=="MobileToggleGui" then wait(1) if not LocalPlayer.PlayerGui:FindFirstChild("MobileToggleGui") then mobileGui,mobileToggle=createMobileToggle() setUIVisualStealth(not allUIVisible) end end
 end)
--- ====== PS5 CONTROLLER BINDINGS ======
-local function onShiftLockAction(actionName, inputState, inputObject)
-    if inputState == Enum.UserInputState.Begin then
-        if ShiftLockButton then
-            ShiftLockButton:Activate()
-        end
-    end
-end
-
-local function onAutoPassAction(actionName, inputState, inputObject)
-    if inputState == Enum.UserInputState.Begin then
-        if mobileToggle then
-            mobileToggle:Activate()
-        end
-    end
-end
-
-ContextActionService:BindAction("ShiftLockR2", onShiftLockAction, false, Enum.KeyCode.ButtonR2)
-ContextActionService:BindAction("AutoPassO", onAutoPassAction, false, Enum.KeyCode.ButtonCircle)
 -- ====== END PS5 CONTROLLER BINDINGS ======
 local ShiftLockScreenGui=Instance.new("ScreenGui")
 ShiftLockScreenGui.Name="Shiftlock (CoreGui)"
