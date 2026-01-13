@@ -343,46 +343,10 @@ local function autoPassBomb()
     end)
 end
 
--- Left Click Auto Pass Function
+-- Left Click triggers normal auto pass
 local function handleLeftClickAutoPass(input)
-    if not LeftClickAutoPassEnabled or input.UserInputType ~= Enum.UserInputType.MouseButton1 then
-        return
-    end
-    
-    local character = LocalPlayer.Character
-    if not character then
-        return
-    end
-    
-    pcall(function()
-        local Bomb = character:FindFirstChild(bombName)
-        if Bomb then
-            local BombEvent = Bomb:FindFirstChild("RemoteEvent")
-            local closestPlayer = getClosestPlayer()
-            if closestPlayer and closestPlayer.Character then
-                local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
-                local myHrp = character:FindFirstChild("HumanoidRootPart")
-                
-                if targetHrp and myHrp then
-                    local targetPos = targetHrp.Position
-                    local dist = (targetPos - myHrp.Position).Magnitude
-                    if dist <= bombPassDistance then
-                        BombEvent:FireServer(
-                            closestPlayer.Character,
-                            closestPlayer.Character:FindFirstChild("CollisionPart")
-                        )
-                        AINotificationsModule.sendNotification("Bomb Passed", "Bomb passed to " .. closestPlayer.Name, 2)
-                    else
-                        AINotificationsModule.sendNotification("Too Far", "Target is too far to pass bomb", 2)
-                    end
-                end
-            else
-                AINotificationsModule.sendNotification("No Target", "No valid target found", 2)
-            end
-        else
-            AINotificationsModule.sendNotification("No Bomb", "You don't have the bomb", 2)
-        end
-    end)
+    if not LeftClickAutoPassEnabled or input.UserInputType~=Enum.UserInputType.MouseButton1 then return end
+    autoPassBomb()
 end
 
 -- =====================================================================
