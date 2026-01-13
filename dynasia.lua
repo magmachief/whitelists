@@ -343,10 +343,46 @@ local function autoPassBomb()
     end)
 end
 
--- Left Click triggers normal auto pass
+-- Left Click Auto Pass Function
 local function handleLeftClickAutoPass(input)
-    if not LeftClickAutoPassEnabled or input.UserInputType~=Enum.UserInputType.MouseButton1 then return end
-    autoPassBomb()
+    if not LeftClickAutoPassEnabled or input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+        return
+    end
+    
+    local character = LocalPlayer.Character
+    if not character then
+        return
+    end
+    
+    pcall(function()
+        local Bomb = character:FindFirstChild(bombName)
+        if Bomb then
+            local BombEvent = Bomb:FindFirstChild("RemoteEvent")
+            local closestPlayer = getClosestPlayer()
+            if closestPlayer and closestPlayer.Character then
+                local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
+                local myHrp = character:FindFirstChild("HumanoidRootPart")
+                
+                if targetHrp and myHrp then
+                    local targetPos = targetHrp.Position
+                    local dist = (targetPos - myHrp.Position).Magnitude
+                    if dist <= bombPassDistance then
+                        BombEvent:FireServer(
+                            closestPlayer.Character,
+                            closestPlayer.Character:FindFirstChild("CollisionPart")
+                        )
+                        AINotificationsModule.sendNotification("Bomb Passed", "Bomb passed to " .. closestPlayer.Name, 2)
+                    else
+                        AINotificationsModule.sendNotification("Too Far", "Target is too far to pass bomb", 2)
+                    end
+                end
+            else
+                AINotificationsModule.sendNotification("No Target", "No valid target found", 2)
+            end
+        else
+            AINotificationsModule.sendNotification("No Bomb", "You don't have the bomb", 2)
+        end
+    end)
 end
 
 -- =====================================================================
@@ -424,7 +460,7 @@ closeCorner.Parent = closeButton
 
 closeButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
-    AINotificationsModule.sendNotification("Menu", "Press RightShift to reopen", 2)
+    AINotificationsModule.sendNotification("Menu", "Press = to reopen", 2)  -- Fixed message
 end)
 
 -- Minimize Button
@@ -781,7 +817,7 @@ hideMenuCorner.Parent = hideMenuBtn
 
 hideMenuBtn.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
-    AINotificationsModule.sendNotification("Menu", "Press Equal to reopen", 2)
+    AINotificationsModule.sendNotification("Menu", "Press = to reopen", 2)  -- Fixed message
 end)
 
 hideMenuBtn.Parent = scrollFrame
@@ -794,7 +830,7 @@ hideMenuBtn.Parent = scrollFrame
 myFrictionController = FrictionController.new()
 myFrictionController:enable()
 
--- Change from RightShift to Equals key (=)
+-- EQUALS KEY (=) TO TOGGLE MENU
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and input.KeyCode == Enum.KeyCode.Equals then
         mainFrame.Visible = not mainFrame.Visible
@@ -862,17 +898,17 @@ print("- Remove Hitbox: Make hitboxes smaller")
 print("- AI Assistance: Smart targeting system")
 print("")
 print("Controls:")
-print("- RightShift: Toggle Menu")
+print("- = (Equals Key): Toggle Menu")  -- Fixed message
 print("- Left Click: Pass bomb (if enabled)")
 print("")
 print("Menu is fully clickable and draggable!")
 
-AINotificationsModule.sendNotification("Yon Menu PC", "Loaded Successfully! Press RightShift to open/close", 5)
+AINotificationsModule.sendNotification("Yon Menu PC", "Loaded Successfully! Press = to open/close", 5)  -- Fixed message
 
 -- Add a test to verify menu works
 spawn(function()
     wait(2)
-    print("Menu test: Press RightShift to open menu")
+    print("Menu test: Press = to open menu")
     print("Menu GUI exists:", menuGui and "Yes" or "No")
     print("Main Frame exists:", mainFrame and "Yes" or "No")
     print("Menu is currently:", mainFrame.Visible and "Visible" or "Hidden")
