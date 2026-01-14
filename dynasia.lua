@@ -24,14 +24,12 @@ local AutoPassEnabled = false
 local antiSlippery = false
 local RemoveHitboxEnabled = false
 local AI_AssistanceEnabled = false
-local LeftClickAutoPassEnabled = false
 local FaceBombEnabled = false
 local originalHitboxSizes = {}
 
 -- Store connections
 local autoPassConnection = nil
 local faceBombConnection = nil
-local leftClickConnection = nil
 local menuVisible = true
 local myFrictionController = nil
 
@@ -343,46 +341,28 @@ local function autoPassBomb()
     end)
 end
 
--- Left Click Auto Pass Function
-local function handleLeftClickAutoPass(input)
-    if not LeftClickAutoPassEnabled or input.UserInputType ~= Enum.UserInputType.MouseButton1 then
-        return
-    end
+-- Function to toggle auto pass with Shift key
+local function toggleAutoPass()
+    AutoPassEnabled = not AutoPassEnabled
     
-    local character = LocalPlayer.Character
-    if not character then
-        return
-    end
-    
-    pcall(function()
-        local Bomb = character:FindFirstChild(bombName)
-        if Bomb then
-            local BombEvent = Bomb:FindFirstChild("RemoteEvent")
-            local closestPlayer = getClosestPlayer()
-            if closestPlayer and closestPlayer.Character then
-                local targetHrp = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
-                local myHrp = character:FindFirstChild("HumanoidRootPart")
-                
-                if targetHrp and myHrp then
-                    local targetPos = targetHrp.Position
-                    local dist = (targetPos - myHrp.Position).Magnitude
-                    if dist <= bombPassDistance then
-                        BombEvent:FireServer(
-                            closestPlayer.Character,
-                            closestPlayer.Character:FindFirstChild("CollisionPart")
-                        )
-                        AINotificationsModule.sendNotification("Bomb Passed", "Bomb passed to " .. closestPlayer.Name, 2)
-                    else
-                        AINotificationsModule.sendNotification("Too Far", "Target is too far to pass bomb", 2)
-                    end
-                end
-            else
-                AINotificationsModule.sendNotification("No Target", "No valid target found", 2)
-            end
-        else
-            AINotificationsModule.sendNotification("No Bomb", "You don't have the bomb", 2)
+    if AutoPassEnabled then
+        if not autoPassConnection then
+            autoPassConnection = RunService.Stepped:Connect(autoPassBomb)
         end
-    end)
+        AINotificationsModule.sendNotification("Auto Pass", "Enabled", 2)
+    else
+        if autoPassConnection then
+            autoPassConnection:Disconnect()
+            autoPassConnection = nil
+        end
+        AINotificationsModule.sendNotification("Auto Pass", "Disabled", 2)
+    end
+    
+    -- Update the toggle button in menu if it exists
+    if autoPassToggleBtn then
+        autoPassToggleBtn.Text = AutoPassEnabled and "ON" or "OFF"
+        autoPassToggleBtn.BackgroundColor3 = AutoPassEnabled and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(170, 0, 0)
+    end
 end
 
 -- =====================================================================
@@ -460,7 +440,7 @@ closeCorner.Parent = closeButton
 
 closeButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
-    AINotificationsModule.sendNotification("Menu", "Press = to reopen", 2)  -- Fixed message
+    AINotificationsModule.sendNotification("Menu", "Press = to reopen", 2)
 end)
 
 -- Minimize Button
@@ -678,24 +658,6 @@ local autoPassToggleBtn = createToggle("Auto Pass Bomb", AutoPassEnabled, functi
     end
 end)
 
--- Left Click Auto Pass Toggle
-local leftClickToggleBtn = createToggle("Left Click Auto Pass", LeftClickAutoPassEnabled, function(value)
-    LeftClickAutoPassEnabled = value
-    if value then
-        if leftClickConnection then
-            leftClickConnection:Disconnect()
-        end
-        leftClickConnection = UserInputService.InputBegan:Connect(handleLeftClickAutoPass)
-        AINotificationsModule.sendNotification("Left Click Pass", "Enabled - Left click to pass bomb", 3)
-    else
-        if leftClickConnection then
-            leftClickConnection:Disconnect()
-            leftClickConnection = nil
-        end
-        AINotificationsModule.sendNotification("Left Click Pass", "Disabled", 2)
-    end
-end)
-
 -- Bomb Pass Distance
 createTextBox("Bomb Pass Distance", bombPassDistance, function(value)
     local num = tonumber(value)
@@ -817,7 +779,7 @@ hideMenuCorner.Parent = hideMenuBtn
 
 hideMenuBtn.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
-    AINotificationsModule.sendNotification("Menu", "Press = to reopen", 2)  -- Fixed message
+    AINotificationsModule.sendNotification("Menu", "Press = to reopen", 2)
 end)
 
 hideMenuBtn.Parent = scrollFrame
@@ -837,6 +799,13 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if mainFrame.Visible then
             AINotificationsModule.sendNotification("Menu", "Menu Opened", 2)
         end
+    end
+end)
+
+-- SHIFT KEY TO TOGGLE AUTO PASS
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+if not gameProcessed and input.UserInputType == Enum.UserInputType.MouseButton1 then
+        toggleAutoPass()
     end
 end)
 
@@ -864,11 +833,6 @@ local function cleanup()
         faceBombConnection = nil
     end
     
-    if leftClickConnection then
-        leftClickConnection:Disconnect()
-        leftClickConnection = nil
-    end
-    
     if myFrictionController then
         myFrictionController:disable()
     end
@@ -890,28 +854,29 @@ end)
 
 print("=== YON MENU PC EDITION LOADED ===")
 print("Features:")
-print("- Auto Pass Bomb: Automatically passes bomb to closest player")
-print("- Left Click Auto Pass: Click to pass bomb (PC Exclusive)")
+print("- Auto Pass Bomb: Continuous automatic bomb passing")
 print("- Anti-Slippery: Adjust character friction")
 print("- Face Bomb: Automatically face bomb holder")
 print("- Remove Hitbox: Make hitboxes smaller")
 print("- AI Assistance: Smart targeting system")
 print("")
 print("Controls:")
-print("- = (Equals Key): Toggle Menu")  -- Fixed message
-print("- Left Click: Pass bomb (if enabled)")
+print("- = (Equals Key): Toggle Menu")
+print("- Shift Key: Toggle Continuous Auto Pass On/Off")
 print("")
 print("Menu is fully clickable and draggable!")
 
-AINotificationsModule.sendNotification("Yon Menu PC", "Loaded Successfully! Press = to open/close", 5)  -- Fixed message
+AINotificationsModule.sendNotification("Yon Menu PC", "Loaded Successfully! Press = for menu, Shift to toggle auto pass", 5)
 
 -- Add a test to verify menu works
 spawn(function()
     wait(2)
     print("Menu test: Press = to open menu")
+    print("Auto Pass test: Press Shift to toggle auto pass")
     print("Menu GUI exists:", menuGui and "Yes" or "No")
     print("Main Frame exists:", mainFrame and "Yes" or "No")
     print("Menu is currently:", mainFrame.Visible and "Visible" or "Hidden")
+    print("Auto Pass is currently:", AutoPassEnabled and "Enabled" or "Disabled")
 end)
 
 return {}
