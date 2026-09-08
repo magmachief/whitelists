@@ -1,15 +1,10 @@
--- Complete replacement script. Run fresh; do not layer over a previous version.
--- What's new in this version:
---  * Shift Lock button and Auto Pass button are both DRAGGABLE (press and drag anywhere on them).
---      A drag never triggers the button; a clean tap/click does.
---  * Auto Pass state is synchronized everywhere: Orion toggle, mobile panel, and the
---      on-screen AUTO button always show the same state no matter which one you use.
---  * Last-second (Late) mode now truly works even when the Bomb tool has no
---      BombStartTime/BombDuration/BombState attributes: a configurable assumed fuse
---      length (default 30s) is counted from the first time each bomb is seen
---      (unequipping and re-equipping the same bomb does not reset the countdown).
---  * Flick is now a camera "glance": look at the receiver for ~0.18s like a quick
---      shift-lock peek, then look back. Your body is never locked or teleported.
+-- Complete replacement based on your latest attached script; run once in a fresh session.
+-- Preserves the supplied nearest-player selection and Bomb.RemoteEvent pass arguments.
+-- NORMAL passes immediately in the configured range; LATE requires a real fuse and <=6 studs.
+-- Optional FLICK: face target, short sideways follow-through, resume movement/shift-lock facing.
+-- Flick never directly writes camera, movement input, speed, or velocity; body contacts can change.
+-- Uses real bomb attributes only. No assumed fuse from pickup time.
+-- Retains your draggable AUTO/shift-lock buttons and other existing menu features.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -43,6 +38,7 @@ local orionAutoPassToggle, orionLatePassToggle, orionFlickToggle
 local FaceBombEnabled, faceBombConnection
 local AutoPassButton
 local refreshMobileButtons = function() end
+local updateAutoPassButton = function() end
 
 local FrictionController = {}
 FrictionController.__index = FrictionController
@@ -422,8 +418,8 @@ function PassController.eligible(mode, remaining, distance, config)
             and remaining <= config.LateWindow and distance <= 6
     end
     if mode ~= "Normal" then return false end
-    -- Keep the original immediate mode usable on builds with no timer attributes.
-    return (remaining == nil or remaining > 0) and distance <= config.NormalDistance
+    -- Normal mode preserves the supplied immediate method; only Late gates on fuse time.
+    return distance <= config.NormalDistance
 end
 
 local function isBomb(instance)
@@ -446,7 +442,6 @@ function PassController.new(services, config, hooks)
         Services = services, Config = config, Hooks = hooks,
         Pending = nil, Flick = nil, NextRequest = 0, NextFlick = 0,
         LastStatus = "", HeldBomb = nil, HeldCharacter = nil,
-        BombSeenAt = setmetatable({}, {__mode = "k"}),
     }, PassController)
 end
 
@@ -472,27 +467,28 @@ function PassController:GetBomb(character, now)
     return first
 end
 
-function PassController:GetTarget(root)
-    local closest, targetCharacter, closestRoot, collision, minimum = nil, nil, nil, nil, math.huge
-    for _, player in ipairs(self.Services.Players:GetPlayers()) do
-        if player ~= self.Services.LocalPlayer then
-            local character = player.Character
-            local targetRoot = livingParts(character)
-            local targetCollision = character and character:FindFirstChild("CollisionPart")
-            local carrying = false
-            if targetRoot and targetCollision and targetCollision:IsA("BasePart") then
-                for _, child in ipairs(character:GetChildren()) do
-                    if isBomb(child) then carrying = true; break end
-                end
-                local distance = (root.Position - targetRoot.Position).Magnitude
-                if not carrying and distance < minimum then
-                    closest, targetCharacter, closestRoot, collision, minimum =
-                        player, character, targetRoot, targetCollision, distance
-                end
+-- Preserve the supplied nearest-root selection. Do not silently choose a farther
+-- target because the nearest player has a bomb or a missing CollisionPart.
+local function getClosestPlayer(players, localPlayer, root)
+    local closest, nd = nil, math.huge
+    for _, p in ipairs(players:GetPlayers()) do
+        if p ~= localPlayer and p.Character then
+            local targetRoot = p.Character:FindFirstChild("HumanoidRootPart")
+            if targetRoot and targetRoot:IsA("BasePart") then
+                local d = (targetRoot.Position - root.Position).Magnitude
+                if d < nd then closest, nd = p, d end
             end
         end
     end
-    return closest, targetCharacter, closestRoot, collision, minimum
+    return closest, nd
+end
+
+function PassController:GetTarget(root)
+    local player, distance = getClosestPlayer(self.Services.Players, self.Services.LocalPlayer, root)
+    local character = player and player.Character
+    local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
+    if not targetRoot then return nil, nil, nil, nil, math.huge end
+    return player, character, targetRoot, character:FindFirstChild("CollisionPart"), distance
 end
 
 function PassController:ClearPending()
@@ -511,50 +507,101 @@ function PassController:ObserveTransfer(pending)
     end
 end
 
+local function flatDirection(vector)
+    local flat = Vector3.new(vector.X, 0, vector.Z)
+    return flat.Magnitude > 0.001 and flat.Unit or nil
+end
+
+local function canTurn(humanoid)
+    if humanoid.Health <= 0 or humanoid.Sit or humanoid.PlatformStand then return false end
+    local state = humanoid:GetState()
+    return state ~= Enum.HumanoidStateType.Dead and state ~= Enum.HumanoidStateType.Physics
+        and state ~= Enum.HumanoidStateType.Ragdoll and state ~= Enum.HumanoidStateType.Swimming
+        and state ~= Enum.HumanoidStateType.Climbing
+end
+
 function PassController:IsFlicking()
     return self.Flick ~= nil
 end
 
--- The flick is a camera glance, like shift-locking for a split second to look at
--- the receiver and then un-shift-locking: the body is never locked, rotated or
--- teleported, and the camera position is never moved -- only where it looks.
+function PassController:ReturnRotation(flick)
+    local direction
+    if self.Hooks.shiftLocked() then
+        local camera = self.Services.Workspace.CurrentCamera
+        direction = camera and flatDirection(camera.CFrame.LookVector)
+    elseif flick.OriginalAutoRotate then
+        direction = flatDirection(flick.Humanoid.MoveDirection)
+    end
+    return direction and CFrame.lookAt(Vector3.zero, direction) or flick.OriginalRotation
+end
+
 function PassController:EndFlick(restoreFacing)
     local flick = self.Flick
     if not flick then return end
     self.Flick = nil
     if flick.Connection then flick.Connection:Disconnect() end
-    local camera = flick.Camera
-    if restoreFacing and camera and camera.Parent then
-        local look = flick.OriginalLook
-        if look and look.Magnitude > 0.001 then
-            camera.CFrame = CFrame.lookAt(camera.CFrame.Position, camera.CFrame.Position + look.Unit)
+    if flick.Humanoid.Parent then
+        if restoreFacing and self.Services.LocalPlayer.Character == flick.Character
+            and flick.Root.Parent and not flick.Root.Anchored and canTurn(flick.Humanoid) then
+            -- Always retain the current position. Never restore an old position or velocity.
+            flick.Root.CFrame = CFrame.new(flick.Root.Position) * self:ReturnRotation(flick)
+        end
+        if self.Hooks.shiftLocked() then
+            flick.Humanoid.AutoRotate = false
+        else
+            flick.Humanoid.AutoRotate = flick.OriginalAutoRotate
         end
     end
 end
 
+local function smoothstep(alpha)
+    return alpha * alpha * (3 - 2 * alpha)
+end
+
 function PassController:StartFlick(character, root, humanoid, targetRoot, now)
-    if not self.Config.FlickEnabled or now < self.NextFlick or self.Flick then return end
-    local camera = self.Services.Workspace.CurrentCamera
-    if not camera then return end
+    if not self.Config.FlickEnabled or now < self.NextFlick or self.Flick
+        or root.Anchored or not canTurn(humanoid) then return end
+    local direction = flatDirection(targetRoot.Position - root.Position)
+    if not direction then return end
     local flick = {
-        Camera = camera, Started = now,
-        OriginalLook = camera.CFrame.LookVector, TargetRoot = targetRoot,
+        Character = character, Root = root, Humanoid = humanoid,
+        OriginalAutoRotate = humanoid.AutoRotate, OriginalRotation = root.CFrame.Rotation,
+        TargetRotation = CFrame.lookAt(Vector3.zero, direction), Started = now,
+        Duration = math.clamp(self.Config.FlickDuration, 0.14, 0.4),
     }
+    local resumeDirection = self:ReturnRotation(flick).LookVector
+    local crossY = direction.Z * resumeDirection.X - direction.X * resumeDirection.Z
+    local sign = crossY < 0 and -1 or 1
+    flick.SweepRotation = flick.TargetRotation
+        * CFrame.Angles(0, sign * math.rad(math.clamp(self.Config.FlickAngle, 30, 140)), 0)
     self.Flick = flick
-    self.NextFlick = now + 0.6
-    -- Glance at the receiver for about a fifth of a second, then look back.
+    self.NextFlick = now + math.max(0.6, flick.Duration + 0.15)
+    humanoid.AutoRotate = false
+    -- Face, sweep sideways, then give facing back. Keep existing position/input.
+    -- No delay before FireServer, and no camera writes in this controller.
+    root.CFrame = CFrame.new(root.Position) * flick.TargetRotation
     flick.Connection = self.Services.RunService.PreSimulation:Connect(function()
         if self.Flick ~= flick then return end
         if not self.Config.Enabled or not self.Config.FlickEnabled
-            or not camera.Parent then
+            or self.Services.LocalPlayer.Character ~= character or not root.Parent
+            or root.Anchored or not humanoid.Parent or not canTurn(humanoid) then
             self:EndFlick(true)
             return
         end
         local elapsed = self.Services.Workspace:GetServerTimeNow() - flick.Started
-        if elapsed >= 0.18 then self:EndFlick(true); return end
-        if targetRoot.Parent then
-            camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetRoot.Position)
+        local progress = math.max(0, elapsed / flick.Duration)
+        if progress >= 1 then self:EndFlick(true); return end
+        local rotation
+        if progress < 0.20 then
+            rotation = flick.TargetRotation
+        elseif progress < 0.55 then
+            rotation = flick.TargetRotation:Lerp(flick.SweepRotation,
+                smoothstep((progress - 0.20) / 0.35))
+        else
+            rotation = flick.SweepRotation:Lerp(self:ReturnRotation(flick),
+                smoothstep((progress - 0.55) / 0.45))
         end
+        root.CFrame = CFrame.new(root.Position) * rotation
     end)
 end
 
@@ -597,16 +644,7 @@ function PassController:Step()
         self.HeldBomb, self.HeldCharacter = bomb, character
         self.NextRequest, self.NextFlick = 0, 0
     end
-    -- First time this specific bomb tool is seen; re-equipping does not restart it.
-    if not self.BombSeenAt[bomb] then self.BombSeenAt[bomb] = now end
     local remaining, timerReason = self.remaining(bomb, now)
-    -- Fallback so Late mode works on games whose Bomb tool carries no timer
-    -- attributes: count down from when this bomb was first seen using AssumedFuse.
-    if remaining == nil and self.Config.Mode == "Late"
-        and finiteNumber(self.Config.AssumedFuse) and self.Config.AssumedFuse > 0 then
-        local seenAt = self.BombSeenAt[bomb]
-        if seenAt then remaining = seenAt + self.Config.AssumedFuse - now end
-    end
     local remote = bomb:FindFirstChild("RemoteEvent")
     if not remote or not remote:IsA("RemoteEvent") then
         self:Status("Unsupported: Bomb.RemoteEvent missing")
@@ -616,7 +654,9 @@ function PassController:Step()
         self:Status(timerReason)
         return
     end
-    if remaining and remaining <= 0 then self:Status("Bomb deadline reached"); return end
+    if self.Config.Mode == "Late" and remaining and remaining <= 0 then
+        self:Status("Bomb deadline reached"); return
+    end
     local target, targetCharacter, targetRoot, collision, distance = self:GetTarget(root)
     local timeText = remaining and string.format("%.2fs", math.max(0, remaining)) or "Timer unknown"
     if not target then self:Status(timeText .. " | No valid target"); return end
@@ -626,16 +666,27 @@ function PassController:Step()
 
     -- Revalidate identity and range immediately before sending.
     if bomb.Parent ~= character or target.Character ~= targetCharacter
-        or not collision:IsDescendantOf(targetCharacter) then return end
+        or targetCharacter:FindFirstChild("HumanoidRootPart") ~= targetRoot then return end
     local currentDistance = (root.Position - targetRoot.Position).Magnitude
+    -- Read the deadline again at the final gate; earlier work may have taken time.
+    remaining = self.remaining(bomb, self.Services.Workspace:GetServerTimeNow())
     if not self.eligible(self.Config.Mode, remaining, currentDistance, self.Config) then return end
     pending = {Bomb = bomb, Character = character, Target = target,
         TargetCharacter = targetCharacter, SentAt = now}
     self.Pending = pending
     pending.Connection = bomb.AncestryChanged:Connect(function() self:ObserveTransfer(pending) end)
     self.NextRequest = now + self.Config.RequestCooldown
-    self:StartFlick(character, root, humanoid, targetRoot, now)
-    local ok, err = pcall(function() remote:FireServer(targetCharacter, collision) end)
+    local flickOK, flickError = pcall(function()
+        self:StartFlick(character, root, humanoid, targetRoot, now)
+    end)
+    if not flickOK then
+        pcall(function() self:EndFlick(false) end)
+        warn("[Pass Flick] " .. tostring(flickError))
+    end
+    -- This is the same passing endpoint and argument lookup supplied by the user.
+    local ok, err = pcall(function()
+        remote:FireServer(targetCharacter, targetCharacter:FindFirstChild("CollisionPart"))
+    end)
     if not ok then
         self:ClearPending()
         self:EndFlick(true)
@@ -650,10 +701,11 @@ local passConfig = {
     Mode = "Normal", -- "Normal" = original immediate mode; "Late" = timed, within 6 studs.
     NormalDistance = bombPassDistance,
     LateWindow = 0.60, -- Request when this many seconds remain. This is not arrival time.
-    AssumedFuse = 30, -- Used by Late mode when the Bomb tool has no timer attributes.
     FlickEnabled = false,
-    RequestCooldown = 0.20,
-    AckTimeout = 0.25,
+    FlickAngle = 90,
+    FlickDuration = 0.22,
+    RequestCooldown = 0.10,
+    AckTimeout = 0.10,
 }
 
 passCore = PassController.new({
@@ -679,6 +731,7 @@ local function autoPassBomb()
         end
         passCore:Status("Auto pass stopped: see console")
         refreshMobileButtons()
+        updateAutoPassButton()
         warn("[Auto Pass] " .. tostring(err))
     end
 end
@@ -693,9 +746,9 @@ local function syncToggle(toggle, value)
     end
 end
 
-local function updateAutoPassButton()
+updateAutoPassButton = function()
     if not AutoPassButton then return end
-    AutoPassButton.Text = AutoPassEnabled and "AUTO ON" or "AUTO OFF"
+    AutoPassButton.Text = AutoPassEnabled and "AUTO\nON" or "AUTO\nOFF"
     AutoPassButton.BackgroundColor3 = AutoPassEnabled
         and Color3.fromRGB(25, 128, 77) or Color3.fromRGB(115, 52, 64)
 end
@@ -778,9 +831,9 @@ orionLatePassToggle = AutomatedTab:AddToggle({
     Callback = setLatePassEnabled,
 })
 orionFlickToggle = AutomatedTab:AddToggle({
-    Name = "Camera glance on pass",
+    Name = "Body sweep flick on pass",
     Default = false,
-    Flag = "BodyFlickOnPass",
+    Flag = "BodySweepOnPassV2",
     Callback = setPassFlickEnabled,
 })
 AutomatedTab:AddTextbox({
@@ -795,19 +848,26 @@ AutomatedTab:AddTextbox({
     end,
 })
 AutomatedTab:AddTextbox({
-    Name = "Assumed fuse length in seconds (fallback)",
-    Default = tostring(passConfig.AssumedFuse),
-    Flag = "AssumedFuseLength",
+    Name = "Flick sweep angle (30 to 140 degrees)",
+    Default = tostring(passConfig.FlickAngle),
     TextDisappear = false,
     Callback = function(value)
         local number = tonumber(value)
-        if number and number == number then
-            passConfig.AssumedFuse = math.clamp(number, 3, 300)
-        end
+        if finiteNumber(number) then passConfig.FlickAngle = math.clamp(number, 30, 140) end
     end,
 })
+AutomatedTab:AddTextbox({
+    Name = "Flick duration (0.14 to 0.4 seconds)",
+    Default = tostring(passConfig.FlickDuration),
+    TextDisappear = false,
+    Callback = function(value)
+        local number = tonumber(value)
+        if finiteNumber(number) then passConfig.FlickDuration = math.clamp(number, 0.14, 0.4) end
+    end,
+})
+
 AutomatedTab:AddLabel("Normal uses your distance setting. Late always uses 6 studs.", 13)
-AutomatedTab:AddLabel("If the bomb has no timer, Late counts down the assumed fuse from pickup.", 13)
+AutomatedTab:AddLabel("Late requires real bomb timer attributes; no guessed pickup timer.", 13)
 
 AutomatedTab:AddLabel("== Character Settings ==", 15)
 
@@ -909,7 +969,7 @@ AITab:AddTextbox({
     TextDisappear = false,
     Callback = function(value)
         local num = tonumber(value)
-        if num then
+        if finiteNumber(num) and num > 0 then
             bombPassDistance = num
         end
     end
@@ -1060,7 +1120,7 @@ local function createMobileToggle()
         modeButton.Text = passConfig.Mode == "Late" and "MODE: LATE · 6" or "MODE: NORMAL"
         modeButton.BackgroundColor3 = passConfig.Mode == "Late"
             and Color3.fromRGB(127, 73, 172) or Color3.fromRGB(51, 80, 122)
-        flickButton.Text = passConfig.FlickEnabled and "GLANCE: ON" or "GLANCE: OFF"
+        flickButton.Text = passConfig.FlickEnabled and "FLICK: ON" or "FLICK: OFF"
         flickButton.BackgroundColor3 = passConfig.FlickEnabled
             and Color3.fromRGB(37, 103, 177) or Color3.fromRGB(63, 70, 84)
     end
@@ -1122,42 +1182,76 @@ end)
 -- activates the button; only a clean tap/click does.
 -- ============================================================================
 
--- Makes a GuiObject draggable. Returns a table whose .moved flag is true when
--- the current/last gesture was a drag (checked and consumed by Activated).
 local function makeDraggable(element)
-    local state = {dragInput = nil, dragStart = nil, startPos = nil, moved = false}
-    local parent = element.Parent
+    local state = {dragInput = nil, moved = false}
+    local parent = element.Parent -- a real Frame with explicit safe-area bounds
+    local screen = element:FindFirstAncestorOfClass("ScreenGui")
+    local connections = {}
+    local function connect(signal, callback)
+        local connection = signal:Connect(callback)
+        table.insert(connections, connection)
+    end
+    local function enabled()
+        return element.Parent == parent and parent.Parent
+            and element.Visible and (not screen or screen.Enabled)
+    end
+    local function place(x, y)
+        local bounds, size = parent.AbsoluteSize, element.AbsoluteSize
+        if bounds.X <= 0 or bounds.Y <= 0 then return end
+        element.AnchorPoint = Vector2.new(0, 0)
+        element.Position = UDim2.fromOffset(
+            math.clamp(x, 4, math.max(4, bounds.X - size.X - 4)),
+            math.clamp(y, 4, math.max(4, bounds.Y - size.Y - 4)))
+    end
+    local function clampPosition()
+        if not element.Parent then return end
+        local position = element.AbsolutePosition - parent.AbsolutePosition
+        place(position.X, position.Y)
+    end
+    local function update(input)
+        if not state.dragInput or not enabled() then return end
+        if input ~= state.dragInput and not
+            (state.dragInput.UserInputType == Enum.UserInputType.MouseButton1
+            and input.UserInputType == Enum.UserInputType.MouseMovement) then return end
+        local delta = input.Position - state.dragStart
+        if delta.X * delta.X + delta.Y * delta.Y >= 100 then state.moved = true end
+        -- Finger jitter during a tap must not move the button.
+        if state.moved then place(state.startPos.X + delta.X, state.startPos.Y + delta.Y) end
+    end
     element.Active = true
-    element.InputBegan:Connect(function(input)
+    connect(element.InputBegan, function(input)
+        if state.dragInput or not enabled() then return end
         if input.UserInputType == Enum.UserInputType.Touch
             or input.UserInputType == Enum.UserInputType.MouseButton1 then
             state.dragInput, state.dragStart, state.moved = input, input.Position, false
-            -- Convert to top-left offset positioning in the same frame, using the
-            -- position captured before the anchor change, so the button never jumps.
-            local topLeft = element.AbsolutePosition - parent.AbsolutePosition
-            element.AnchorPoint = Vector2.new(0, 0)
-            element.Position = UDim2.fromOffset(topLeft.X, topLeft.Y)
-            state.startPos = topLeft
+            state.startPos = element.AbsolutePosition - parent.AbsolutePosition
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
-        if not state.dragInput or not element.Parent then return end
-        if input == state.dragInput or (state.dragInput.UserInputType == Enum.UserInputType.MouseButton1
-            and input.UserInputType == Enum.UserInputType.MouseMovement) then
-            local delta = input.Position - state.dragStart
-            if not state.moved and (delta.X * delta.X + delta.Y * delta.Y) > 36 then
-                state.moved = true
-            end
-            local bounds = parent.AbsoluteSize
-            local size = element.AbsoluteSize
-            local x = math.clamp(state.startPos.X + delta.X, 0, math.max(0, bounds.X - size.X))
-            local y = math.clamp(state.startPos.Y + delta.Y, 0, math.max(0, bounds.Y - size.Y))
-            element.Position = UDim2.fromOffset(x, y)
+    connect(UserInputService.InputChanged, update)
+    connect(UserInputService.InputEnded, function(input)
+        if input == state.dragInput then
+            update(input)
+            state.dragInput = nil
+            -- Keep moved until the next pointer-down: Activated may run after InputEnded.
         end
     end)
-    UserInputService.InputEnded:Connect(function(input)
-        if input == state.dragInput then state.dragInput = nil end
+    connect(parent:GetPropertyChangedSignal("AbsoluteSize"), function() task.defer(clampPosition) end)
+    if screen then
+        connect(screen:GetPropertyChangedSignal("Enabled"), function()
+            if not screen.Enabled then state.dragInput = nil; state.moved = true end
+        end)
+    end
+    element.Destroying:Connect(function()
+        for _, connection in ipairs(connections) do connection:Disconnect() end
+        state.dragInput = nil
     end)
+    function state:ShouldActivate(input)
+        if not enabled() then return false end
+        if input and input.UserInputType ~= Enum.UserInputType.Touch
+            and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return true end
+        return not self.moved
+    end
+    task.defer(clampPosition)
     return state
 end
 
@@ -1166,10 +1260,17 @@ ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
 ShiftLockScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ShiftLockScreenGui.ResetOnSpawn = false
+ShiftLockScreenGui.IgnoreGuiInset = false
+ShiftLockScreenGui.DisplayOrder = 51
+local touchButtonArea = Instance.new("Frame")
+touchButtonArea.Name = "TouchButtonSafeArea"
+touchButtonArea.Size = UDim2.fromScale(1, 1)
+touchButtonArea.BackgroundTransparency = 1
+touchButtonArea.Parent = ShiftLockScreenGui
 
 -- Shift Lock Button (default near the right edge; drag it wherever you want)
 ShiftLockButton = Instance.new("ImageButton")
-ShiftLockButton.Parent = ShiftLockScreenGui
+ShiftLockButton.Parent = touchButtonArea
 ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 ShiftLockButton.BackgroundTransparency = 1
 ShiftLockButton.AnchorPoint = Vector2.new(1, 0.5)
@@ -1188,13 +1289,13 @@ shiftLockUIStroke.Parent = ShiftLockButton
 -- AutoPass Toggle Button (default above the shift lock; also draggable)
 AutoPassButton = Instance.new("TextButton")
 AutoPassButton.Name = "AutoPassToggle"
-AutoPassButton.Parent = ShiftLockScreenGui
+AutoPassButton.Parent = touchButtonArea
 AutoPassButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 AutoPassButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 AutoPassButton.Font = Enum.Font.GothamBold
 AutoPassButton.TextSize = 18
 AutoPassButton.AnchorPoint = Vector2.new(1, 0.5)
-AutoPassButton.Position = UDim2.new(1, -120, 0.62, 0)
+AutoPassButton.Position = UDim2.new(1, -120, 0.72, -94)
 AutoPassButton.Size = UDim2.fromOffset(80, 80)
 AutoPassButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
 local apCorner = Instance.new("UICorner")
@@ -1210,8 +1311,8 @@ local autoPassDrag = makeDraggable(AutoPassButton)
 updateAutoPassButton()
 
 -- Click actions: a drag is consumed and never toggles the feature.
-AutoPassButton.Activated:Connect(function()
-    if autoPassDrag.moved then autoPassDrag.moved = false return end
+AutoPassButton.Activated:Connect(function(input)
+    if not autoPassDrag:ShouldActivate(input) then return end
     setAutoPassEnabled(not AutoPassEnabled)
 end)
 
@@ -1237,12 +1338,15 @@ local function takeShiftLock(humanoid)
     if shiftLockHumanoid ~= humanoid then
         shiftLockHumanoid = humanoid
         shiftLockOriginalAutoRotate = humanoid.AutoRotate
+        if passCore.Flick and passCore.Flick.Humanoid == humanoid then
+            shiftLockOriginalAutoRotate = passCore.Flick.OriginalAutoRotate
+        end
     end
     humanoid.AutoRotate = false
 end
 
-ShiftLockButton.Activated:Connect(function()
-    if shiftLockDrag.moved then shiftLockDrag.moved = false return end
+ShiftLockButton.Activated:Connect(function(input)
+    if not shiftLockDrag:ShouldActivate(input) then return end
     if not SL_Active then
         SL_Active = true
         ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_on@2x.png"
@@ -1270,7 +1374,11 @@ ShiftLockButton.Activated:Connect(function()
         SL_Active = nil
         RunService:UnbindFromRenderStep(shiftLockRenderName)
         if shiftLockHumanoid and shiftLockHumanoid.Parent then
-            shiftLockHumanoid.AutoRotate = shiftLockOriginalAutoRotate
+            if passCore.Flick and passCore.Flick.Humanoid == shiftLockHumanoid then
+                passCore.Flick.OriginalAutoRotate = shiftLockOriginalAutoRotate
+            else
+                shiftLockHumanoid.AutoRotate = shiftLockOriginalAutoRotate
+            end
         end
         shiftLockHumanoid = nil
         ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
@@ -1310,5 +1418,5 @@ LocalPlayer.Chatted:Connect(
     end
 )
 setUIVisualStealth(not allUIVisible)
-print("Auto pass ready: NORMAL / LATE (6 studs, with assumed-fuse fallback), camera glance flick, draggable shift lock + AUTO buttons.")
+print("Auto pass ready: confirmed nearest-player method, NORMAL/LATE (6 studs), body sweep flick, draggable iPad controls.")
 return {}
