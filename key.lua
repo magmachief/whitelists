@@ -1,10 +1,10 @@
--- Complete replacement based on your latest attached script; run once in a fresh session.
--- Preserves the supplied nearest-player selection and Bomb.RemoteEvent pass arguments.
--- NORMAL passes immediately in the configured range; LATE requires a real fuse and <=6 studs.
--- Optional FLICK: face target, short sideways follow-through, resume movement/shift-lock facing.
--- Flick never directly writes camera, movement input, speed, or velocity; body contacts can change.
--- Uses real bomb attributes only. No assumed fuse from pickup time.
--- Retains your draggable AUTO/shift-lock buttons and other existing menu features.
+-- Complete replacement. Run once in a fresh session.
+-- Live timer: BombStartTime + BombDuration - Workspace:GetServerTimeNow().
+-- Active states: Running/Fused. The dedicated timer stays active with Auto Pass off.
+-- Normal keeps your confirmed nearest-player pass call; Late remains <=6 studs.
+-- Natural flick defaults to a short target-facing turn with no forced sideways sweep.
+-- Controls start LOCKED. Tap LAYOUT to edit positions, then lock again to save.
+-- Other original menu/movement features remain as supplied.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -34,7 +34,8 @@ local originalHitboxSizes = {}
 -- setAutoPassEnabled (defined earlier in the file) can see it as an upvalue.
 local autoPassConnection, mobileGui, mobileToggle, mobileModeToggle, flickToggle, mobileStatus
 local ShiftLockScreenGui, ShiftLockButton, SL_Active, passCore
-local orionAutoPassToggle, orionLatePassToggle, orionFlickToggle
+local orionAutoPassToggle, orionLatePassToggle, orionFlickToggle, orionLayoutToggle
+local mobileTimer
 local FaceBombEnabled, faceBombConnection
 local AutoPassButton
 local refreshMobileButtons = function() end
@@ -400,15 +401,15 @@ end
 function PassController.remaining(bomb, now)
     local state = bomb:GetAttribute("BombState")
     if state ~= "Running" and state ~= "Fused" then
-        return nil, "Timer state unavailable"
+        return nil, "State: " .. tostring(state or "missing")
     end
-    local start = bomb:GetAttribute("BombStartTime")
+    local startTime = bomb:GetAttribute("BombStartTime")
     local duration = bomb:GetAttribute("BombDuration")
-    if not finiteNumber(start) or not finiteNumber(duration) or duration <= 0 then
-        return nil, "Timer attributes unavailable"
-    end
-    -- Use the Tool's existing deadline; receiving it must not restart the fuse.
-    return start + duration - now
+    if not finiteNumber(startTime) then return nil, "BombStartTime missing or invalid" end
+    if not finiteNumber(duration) or duration <= 0 then return nil, "BombDuration missing or invalid" end
+    if not finiteNumber(now) then return nil, "Server time unavailable" end
+    -- Same fractional deadline as the game's BombClient; never round before gating.
+    return startTime + duration - now
 end
 
 function PassController.eligible(mode, remaining, distance, config)
@@ -441,7 +442,7 @@ function PassController.new(services, config, hooks)
     return setmetatable({
         Services = services, Config = config, Hooks = hooks,
         Pending = nil, Flick = nil, NextRequest = 0, NextFlick = 0,
-        LastStatus = "", HeldBomb = nil, HeldCharacter = nil,
+        LastStatus = "", HeldBomb = nil, HeldCharacter = nil, FlickedForPossession = false,
     }, PassController)
 end
 
@@ -453,6 +454,8 @@ function PassController:Status(message)
 end
 
 function PassController:GetBomb(character, now)
+    local named = character:FindFirstChild("Bomb")
+    if self.Config.Mode ~= "Late" and named and isBomb(named) then return named end
     local first, earliest, earliestTime
     for _, child in ipairs(character:GetChildren()) do
         if isBomb(child) then
@@ -502,6 +505,11 @@ function PassController:ObserveTransfer(pending)
     if pending.Target.Character == pending.TargetCharacter
         and pending.Bomb.Parent == pending.TargetCharacter then
         pending.Confirmed = true
+        local flick = self.Flick
+        if flick and not flick.ReleaseAt and flick.Character == pending.Character and flick.Root.Parent then
+            flick.ReleaseAt = self.Services.Workspace:GetServerTimeNow()
+            flick.ReleaseRotation = flick.Root.CFrame.Rotation
+        end
     elseif pending.Bomb.Parent ~= pending.Character then
         pending.LeftCharacter = true
     end
@@ -559,7 +567,7 @@ local function smoothstep(alpha)
 end
 
 function PassController:StartFlick(character, root, humanoid, targetRoot, now)
-    if not self.Config.FlickEnabled or now < self.NextFlick or self.Flick
+    if not self.Config.FlickEnabled or self.FlickedForPossession or now < self.NextFlick or self.Flick
         or root.Anchored or not canTurn(humanoid) then return end
     local direction = flatDirection(targetRoot.Position - root.Position)
     if not direction then return end
@@ -567,17 +575,19 @@ function PassController:StartFlick(character, root, humanoid, targetRoot, now)
         Character = character, Root = root, Humanoid = humanoid,
         OriginalAutoRotate = humanoid.AutoRotate, OriginalRotation = root.CFrame.Rotation,
         TargetRotation = CFrame.lookAt(Vector3.zero, direction), Started = now,
-        Duration = math.clamp(self.Config.FlickDuration, 0.14, 0.4),
+        Duration = math.clamp(self.Config.FlickDuration, 0.10, 0.30),
     }
     local resumeDirection = self:ReturnRotation(flick).LookVector
     local crossY = direction.Z * resumeDirection.X - direction.X * resumeDirection.Z
     local sign = crossY < 0 and -1 or 1
     flick.SweepRotation = flick.TargetRotation
-        * CFrame.Angles(0, sign * math.rad(math.clamp(self.Config.FlickAngle, 30, 140)), 0)
+        * CFrame.Angles(0, sign * math.rad(math.clamp(self.Config.FlickAngle, 0, 60)), 0)
     self.Flick = flick
-    self.NextFlick = now + math.max(0.6, flick.Duration + 0.15)
+    self.FlickedForPossession = true
+    self.NextFlick = now + 0.70
     humanoid.AutoRotate = false
-    -- Face, sweep sideways, then give facing back. Keep existing position/input.
+    -- Brief target-facing turn; optional follow-through is zero by default.
+    -- Only one flick per possession, with a cooldown across rapid transfers.
     -- No delay before FireServer, and no camera writes in this controller.
     root.CFrame = CFrame.new(root.Position) * flick.TargetRotation
     flick.Connection = self.Services.RunService.PreSimulation:Connect(function()
@@ -588,11 +598,16 @@ function PassController:StartFlick(character, root, humanoid, targetRoot, now)
             self:EndFlick(true)
             return
         end
-        local elapsed = self.Services.Workspace:GetServerTimeNow() - flick.Started
+        local currentTime = self.Services.Workspace:GetServerTimeNow()
+        local elapsed = currentTime - flick.Started
         local progress = math.max(0, elapsed / flick.Duration)
         if progress >= 1 then self:EndFlick(true); return end
         local rotation
-        if progress < 0.20 then
+        if flick.ReleaseAt then
+            local alpha = math.clamp((currentTime - flick.ReleaseAt) / math.max(0.04, flick.Duration * 0.45), 0, 1)
+            if alpha >= 1 then self:EndFlick(true); return end
+            rotation = flick.ReleaseRotation:Lerp(self:ReturnRotation(flick), smoothstep(alpha))
+        elseif progress < 0.20 then
             rotation = flick.TargetRotation
         elseif progress < 0.55 then
             rotation = flick.TargetRotation:Lerp(flick.SweepRotation,
@@ -609,6 +624,7 @@ function PassController:Reset()
     self:ClearPending()
     self:EndFlick(true)
     self.HeldBomb, self.HeldCharacter = nil, nil
+    self.FlickedForPossession = false
     self.NextRequest, self.NextFlick = 0, 0
 end
 
@@ -626,6 +642,8 @@ function PassController:Step()
         else
             self:ObserveTransfer(pending)
             if pending.Confirmed then
+                self.HeldBomb = nil
+                self.FlickedForPossession = false
                 self:Status("Transfer observed: " .. pending.Target.Name)
                 self:ClearPending()
                 return
@@ -639,10 +657,17 @@ function PassController:Step()
     end
 
     local bomb = self:GetBomb(character, now)
-    if not bomb then self.HeldBomb = nil; self:Status("No equipped bomb"); return end
+    if not bomb then
+        self.HeldBomb = nil
+        self.FlickedForPossession = false
+        self:Status("No equipped bomb")
+        return
+    end
     if self.HeldBomb ~= bomb or self.HeldCharacter ~= character then
         self.HeldBomb, self.HeldCharacter = bomb, character
-        self.NextRequest, self.NextFlick = 0, 0
+        self.NextRequest = 0
+        self.FlickedForPossession = false
+        -- Keep NextFlick across possession changes so rapid hand-backs do not spin you.
     end
     local remaining, timerReason = self.remaining(bomb, now)
     local remote = bomb:FindFirstChild("RemoteEvent")
@@ -658,9 +683,8 @@ function PassController:Step()
         self:Status("Bomb deadline reached"); return
     end
     local target, targetCharacter, targetRoot, collision, distance = self:GetTarget(root)
-    local timeText = remaining and string.format("%.2fs", math.max(0, remaining)) or "Timer unknown"
-    if not target then self:Status(timeText .. " | No valid target"); return end
-    self:Status(timeText .. string.format(" | %.1f studs", distance))
+    if not target then self:Status("No nearby target"); return end
+    self:Status(string.format("%s | %.1f studs", self.Config.Mode, distance))
     if not self.eligible(self.Config.Mode, remaining, distance, self.Config)
         or now < self.NextRequest then return end
 
@@ -702,8 +726,8 @@ local passConfig = {
     NormalDistance = bombPassDistance,
     LateWindow = 0.60, -- Request when this many seconds remain. This is not arrival time.
     FlickEnabled = false,
-    FlickAngle = 90,
-    FlickDuration = 0.22,
+    FlickAngle = 0,
+    FlickDuration = 0.14,
     RequestCooldown = 0.10,
     AckTimeout = 0.10,
 }
@@ -787,6 +811,204 @@ end
 
 LocalPlayer.CharacterRemoving:Connect(function() passCore:Reset() end)
 
+-- A passive timer view, independent of Auto Pass, targets, remotes and pass messages.
+local timerElapsed = 0
+local timerLastError
+local timerConnection = RunService.RenderStepped:Connect(function(deltaTime)
+    timerElapsed = timerElapsed + deltaTime
+    if timerElapsed < 1 / 30 then return end
+    timerElapsed = 0
+    if not mobileTimer or not mobileTimer.Parent then return end
+    local ok, err = pcall(function()
+        local now = Workspace:GetServerTimeNow()
+        local character = LocalPlayer.Character
+        local bomb = character and passCore:GetBomb(character, now)
+        local stowed = false
+        if not bomb then
+            local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+            bomb = backpack and passCore:GetBomb(backpack, now)
+            stowed = bomb ~= nil
+        end
+        if not bomb then
+            mobileTimer.Text = "YOUR BOMB: --\nNot carrying a Bomb Tool"
+            mobileTimer.TextColor3 = Color3.fromRGB(190, 202, 220)
+            return
+        end
+        local remaining, reason = PassController.remaining(bomb, now)
+        if remaining == nil then
+            mobileTimer.Text = "BOMB TIMER UNAVAILABLE\n" .. reason
+            mobileTimer.TextColor3 = Color3.fromRGB(255, 200, 100)
+            return
+        end
+        local heading = stowed and "STOWED BOMB" or "YOUR BOMB"
+        mobileTimer.Text = heading .. string.format(": %.3f s\n", math.max(0, remaining))
+            .. tostring(bomb:GetAttribute("BombState"))
+        mobileTimer.TextColor3 = remaining <= passConfig.LateWindow
+            and Color3.fromRGB(255, 132, 119) or Color3.fromRGB(215, 233, 250)
+    end)
+    if not ok then
+        mobileTimer.Text = "BOMB TIMER: read error"
+        if tostring(err) ~= timerLastError then warn("[Bomb Timer] " .. tostring(err)) end
+        timerLastError = tostring(err)
+    else
+        timerLastError = nil
+    end
+end)
+
+-- Layout edits are opt-in. Gameplay taps never reposition a locked control.
+local layoutEditing = false
+local layoutPositions = {}
+local layoutBindings = {}
+local layoutPlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local layoutHttp = game:GetService("HttpService")
+local layoutAttribute = "YonPassLayoutV3"
+local layoutFile = "YonMenu_Advanced/ipad-layout-v3.json"
+
+local function decodeLayout(text)
+    if type(text) ~= "string" then return false end
+    local ok, data = pcall(function() return layoutHttp:JSONDecode(text) end)
+    if not ok or type(data) ~= "table" or data.version ~= 3 or type(data.positions) ~= "table" then
+        return false
+    end
+    for _, key in ipairs({"panel", "auto", "shift"}) do
+        local point = data.positions[key]
+        if type(point) == "table" and finiteNumber(point.x) and finiteNumber(point.y) then
+            layoutPositions[key] = {x = math.clamp(point.x, 0, 1), y = math.clamp(point.y, 0, 1)}
+        end
+    end
+    return true
+end
+
+local loadedLayout = decodeLayout(layoutPlayerGui:GetAttribute(layoutAttribute))
+if not loadedLayout and type(readfile) == "function" then
+    local ok, text = pcall(function() return readfile(layoutFile) end)
+    if ok then decodeLayout(text) end
+end
+
+local function saveLayout()
+    local ok, text = pcall(function()
+        return layoutHttp:JSONEncode({version = 3, positions = layoutPositions})
+    end)
+    if not ok then return end
+    layoutPlayerGui:SetAttribute(layoutAttribute, text)
+    -- Optional persistence between launches when supported by the existing runtime.
+    if type(writefile) == "function" then
+        if type(makefolder) == "function" then pcall(makefolder, "YonMenu_Advanced") end
+        pcall(function() writefile(layoutFile, text) end)
+    end
+end
+
+local function setLayoutEditing(value)
+    layoutEditing = value == true
+    if not layoutEditing then
+        for binding in pairs(layoutBindings) do binding:CancelGesture() end
+        saveLayout()
+    end
+    refreshMobileButtons()
+    syncToggle(orionLayoutToggle, layoutEditing)
+end
+
+local function makeDraggable(element, handle, key)
+    handle = handle or element
+    local state = {dragInput = nil, moved = false}
+    local parent = element.Parent
+    local screen = element:FindFirstAncestorOfClass("ScreenGui")
+    local connections = {}
+    local function connect(signal, callback)
+        table.insert(connections, signal:Connect(callback))
+    end
+    local function enabled()
+        return element.Parent == parent and parent.Parent and element.Visible
+            and (not screen or screen.Enabled)
+    end
+    local function ranges()
+        local bounds, size = parent.AbsoluteSize, element.AbsoluteSize
+        if bounds.X <= 0 or bounds.Y <= 0 then return nil end
+        return math.max(0, bounds.X - size.X - 8), math.max(0, bounds.Y - size.Y - 8)
+    end
+    local function place(x, y, remember)
+        local maxX, maxY = ranges()
+        if not maxX then return end
+        x, y = math.clamp(x, 4, 4 + maxX), math.clamp(y, 4, 4 + maxY)
+        element.AnchorPoint = Vector2.new(0, 0)
+        element.Position = UDim2.fromOffset(x, y)
+        if remember then
+            layoutPositions[key] = {
+                x = maxX > 0 and (x - 4) / maxX or 0,
+                y = maxY > 0 and (y - 4) / maxY or 0,
+            }
+        end
+    end
+    local function restorePosition()
+        if not element.Parent then return end
+        local maxX, maxY = ranges()
+        if not maxX then return end
+        local point = layoutPositions[key]
+        if point then
+            place(4 + point.x * maxX, 4 + point.y * maxY, false)
+        else
+            local current = element.AbsolutePosition - parent.AbsolutePosition
+            place(current.X, current.Y, true)
+        end
+    end
+    function state:CancelGesture()
+        if self.dragInput then self.moved = true end
+        self.dragInput = nil
+    end
+    local function update(input)
+        if not layoutEditing or not state.dragInput or not enabled() then return end
+        if input ~= state.dragInput and not
+            (state.dragInput.UserInputType == Enum.UserInputType.MouseButton1
+            and input.UserInputType == Enum.UserInputType.MouseMovement) then return end
+        local delta = input.Position - state.dragStart
+        if delta.X * delta.X + delta.Y * delta.Y >= 100 then state.moved = true end
+        if state.moved then place(state.startPos.X + delta.X, state.startPos.Y + delta.Y, true) end
+    end
+    handle.Active = true
+    connect(handle.InputBegan, function(input)
+        if state.dragInput or not enabled() then return end
+        if input.UserInputType == Enum.UserInputType.Touch
+            or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            state.moved = false
+            -- A locked button still accepts clean taps, but never starts a drag.
+            if not layoutEditing then return end
+            state.dragInput, state.dragStart = input, input.Position
+            state.startPos = element.AbsolutePosition - parent.AbsolutePosition
+        end
+    end)
+    connect(UserInputService.InputChanged, update)
+    connect(UserInputService.InputEnded, function(input)
+        if input == state.dragInput then
+            update(input)
+            state.dragInput = nil
+        end
+    end)
+    connect(parent:GetPropertyChangedSignal("AbsoluteSize"), function()
+        state:CancelGesture()
+        task.defer(restorePosition)
+    end)
+    if screen then
+        connect(screen:GetPropertyChangedSignal("Enabled"), function()
+            if not screen.Enabled then state:CancelGesture() end
+        end)
+    end
+    element.Destroying:Connect(function()
+        for _, connection in ipairs(connections) do connection:Disconnect() end
+        layoutBindings[state] = nil
+        state.dragInput = nil
+    end)
+    function state:ShouldActivate(input)
+        if not enabled() then return false end
+        if input and input.UserInputType ~= Enum.UserInputType.Touch
+            and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return true end
+        return not self.moved
+    end
+    layoutBindings[state] = true
+    task.defer(restorePosition)
+    return state
+end
+
+
 local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
 local Window = OrionLib:MakeWindow({
     Name = "Yon Menu - Advanced (Auto Pass Bomb)",
@@ -831,9 +1053,9 @@ orionLatePassToggle = AutomatedTab:AddToggle({
     Callback = setLatePassEnabled,
 })
 orionFlickToggle = AutomatedTab:AddToggle({
-    Name = "Body sweep flick on pass",
+    Name = "Natural body flick on pass",
     Default = false,
-    Flag = "BodySweepOnPassV2",
+    Flag = "NaturalBodyFlickV3",
     Callback = setPassFlickEnabled,
 })
 AutomatedTab:AddTextbox({
@@ -848,21 +1070,21 @@ AutomatedTab:AddTextbox({
     end,
 })
 AutomatedTab:AddTextbox({
-    Name = "Flick sweep angle (30 to 140 degrees)",
+    Name = "Optional follow-through (0 to 60 degrees)",
     Default = tostring(passConfig.FlickAngle),
     TextDisappear = false,
     Callback = function(value)
         local number = tonumber(value)
-        if finiteNumber(number) then passConfig.FlickAngle = math.clamp(number, 30, 140) end
+        if finiteNumber(number) then passConfig.FlickAngle = math.clamp(number, 0, 60) end
     end,
 })
 AutomatedTab:AddTextbox({
-    Name = "Flick duration (0.14 to 0.4 seconds)",
+    Name = "Flick duration (0.10 to 0.30 seconds)",
     Default = tostring(passConfig.FlickDuration),
     TextDisappear = false,
     Callback = function(value)
         local number = tonumber(value)
-        if finiteNumber(number) then passConfig.FlickDuration = math.clamp(number, 0.14, 0.4) end
+        if finiteNumber(number) then passConfig.FlickDuration = math.clamp(number, 0.10, 0.30) end
     end,
 })
 
@@ -1011,7 +1233,12 @@ UITab:AddColorpicker({
         OrionLib.Themes[OrionLib.SelectedTheme].Main = color
     end
 })
-UITab:AddLabel("The shift lock and AUTO buttons on screen can be dragged anywhere.", 13)
+orionLayoutToggle = UITab:AddToggle({
+    Name = "Edit button positions",
+    Default = false,
+    Callback = setLayoutEditing,
+})
+UITab:AddLabel("Unlock layout, position the controls, then lock it to save.", 13)
 
 -- Initialize the library
 OrionLib:Init()
@@ -1051,7 +1278,6 @@ local function createMobileToggle()
     gui.DisplayOrder = 50
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.Enabled = allUIVisible
-
     local safeArea = Instance.new("Frame")
     safeArea.Size = UDim2.fromScale(1, 1)
     safeArea.BackgroundTransparency = 1
@@ -1059,8 +1285,8 @@ local function createMobileToggle()
 
     local panel = Instance.new("Frame")
     panel.Name = "TouchPanel"
-    panel.Size = UDim2.fromOffset(188, 272)
-    panel.Position = UDim2.new(1, -210, 0.42, -136)
+    panel.Size = UDim2.fromOffset(208, 388)
+    panel.Position = UDim2.new(1, -230, 0.43, -194)
     panel.BackgroundColor3 = Color3.fromRGB(20, 23, 30)
     panel.BackgroundTransparency = 0.08
     panel.BorderSizePixel = 0
@@ -1072,18 +1298,16 @@ local function createMobileToggle()
     local handle = Instance.new("TextLabel")
     handle.Name = "DragHandle"
     handle.Size = UDim2.new(1, 0, 0, 38)
-    handle.Text = "BOMB PASS  ·  DRAG"
     handle.TextSize = 14
     handle.Font = Enum.Font.GothamBold
     handle.TextColor3 = Color3.fromRGB(204, 214, 230)
     handle.BackgroundTransparency = 1
-    handle.Active = true
     handle.Parent = panel
 
-    local function button(name, top)
+    local function button(name, top, height)
         local item = Instance.new("TextButton")
         item.Name = name
-        item.Size = UDim2.new(1, -16, 0, 52)
+        item.Size = UDim2.new(1, -16, 0, height or 52)
         item.Position = UDim2.fromOffset(8, top)
         item.TextSize = 17
         item.Font = Enum.Font.GothamBold
@@ -1095,19 +1319,33 @@ local function createMobileToggle()
         rounding.Parent = item
         return item
     end
+    local autoButton = button("AutoPassMobileToggle", 40)
+    local modeButton = button("PassModeMobileToggle", 100)
+    local flickButton = button("PassFlickMobileToggle", 160)
+    local layoutButton = button("LayoutLockToggle", 220, 48)
 
-    local autoButton = button("AutoPassMobileToggle", 38)
-    local modeButton = button("PassModeMobileToggle", 98)
-    local flickButton = button("PassFlickMobileToggle", 158)
+    local timer = Instance.new("TextLabel")
+    timer.Name = "ActualBombTimer"
+    timer.Size = UDim2.new(1, -16, 0, 56)
+    timer.Position = UDim2.fromOffset(8, 276)
+    timer.BackgroundTransparency = 1
+    timer.TextWrapped = true
+    timer.TextSize = 15
+    timer.Font = Enum.Font.GothamBold
+    timer.TextColor3 = Color3.fromRGB(215, 233, 250)
+    timer.Text = "YOUR BOMB: --"
+    timer.Parent = panel
+    mobileTimer = timer
+
     local status = Instance.new("TextLabel")
     status.Name = "PassStatus"
-    status.Size = UDim2.new(1, -16, 0, 48)
-    status.Position = UDim2.fromOffset(8, 217)
+    status.Size = UDim2.new(1, -16, 0, 40)
+    status.Position = UDim2.fromOffset(8, 340)
     status.BackgroundTransparency = 1
     status.TextWrapped = true
-    status.TextSize = 13
+    status.TextSize = 12
     status.Font = Enum.Font.Gotham
-    status.TextColor3 = Color3.fromRGB(220, 227, 239)
+    status.TextColor3 = Color3.fromRGB(190, 202, 220)
     status.Text = passCore.LastStatus ~= "" and passCore.LastStatus or "Auto pass off"
     status.Parent = panel
     mobileStatus = status
@@ -1123,47 +1361,21 @@ local function createMobileToggle()
         flickButton.Text = passConfig.FlickEnabled and "FLICK: ON" or "FLICK: OFF"
         flickButton.BackgroundColor3 = passConfig.FlickEnabled
             and Color3.fromRGB(37, 103, 177) or Color3.fromRGB(63, 70, 84)
+        layoutButton.Text = layoutEditing and "LAYOUT: EDITING" or "LAYOUT: LOCKED"
+        layoutButton.BackgroundColor3 = layoutEditing
+            and Color3.fromRGB(20, 115, 130) or Color3.fromRGB(63, 70, 84)
+        handle.Text = layoutEditing and "DRAG HEADER TO MOVE" or "BOMB PASS"
     end
     autoButton.Activated:Connect(function() setAutoPassEnabled(not AutoPassEnabled) end)
     modeButton.Activated:Connect(function() setLatePassEnabled(passConfig.Mode ~= "Late") end)
     flickButton.Activated:Connect(function() setPassFlickEnabled(not passConfig.FlickEnabled) end)
-
-    -- Only the handle drags; tapping a toggle cannot accidentally move the panel.
-    local dragInput, dragStart, panelStart
-    local function place(x, y)
-        local bounds = safeArea.AbsoluteSize
-        if bounds.X <= 0 or bounds.Y <= 0 then return end
-        panel.Position = UDim2.fromOffset(
-            math.clamp(x, 8, math.max(8, bounds.X - 196)),
-            math.clamp(y, 8, math.max(8, bounds.Y - 280)))
-    end
-    handle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-            or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragInput, dragStart = input, input.Position
-            panelStart = panel.AbsolutePosition - safeArea.AbsolutePosition
-        end
-    end)
-    local moveConnection = UserInputService.InputChanged:Connect(function(input)
-        if not gui.Enabled or not dragInput then return end
-        if input == dragInput or (dragInput.UserInputType == Enum.UserInputType.MouseButton1
-            and input.UserInputType == Enum.UserInputType.MouseMovement) then
-            local delta = input.Position - dragStart
-            place(panelStart.X + delta.X, panelStart.Y + delta.Y)
-        end
-    end)
-    local endConnection = UserInputService.InputEnded:Connect(function(input)
-        if input == dragInput then dragInput = nil end
-    end)
-    safeArea:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-        local position = panel.AbsolutePosition - safeArea.AbsolutePosition
-        place(position.X, position.Y)
-    end)
-    gui.Destroying:Connect(function() moveConnection:Disconnect(); endConnection:Disconnect() end)
+    layoutButton.Activated:Connect(function() setLayoutEditing(not layoutEditing) end)
     gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    makeDraggable(panel, handle, "panel")
     refreshMobileButtons()
     return gui, autoButton, modeButton, flickButton
 end
+
 
 mobileGui, mobileToggle, mobileModeToggle, flickToggle = createMobileToggle()
 LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
@@ -1182,78 +1394,7 @@ end)
 -- activates the button; only a clean tap/click does.
 -- ============================================================================
 
-local function makeDraggable(element)
-    local state = {dragInput = nil, moved = false}
-    local parent = element.Parent -- a real Frame with explicit safe-area bounds
-    local screen = element:FindFirstAncestorOfClass("ScreenGui")
-    local connections = {}
-    local function connect(signal, callback)
-        local connection = signal:Connect(callback)
-        table.insert(connections, connection)
-    end
-    local function enabled()
-        return element.Parent == parent and parent.Parent
-            and element.Visible and (not screen or screen.Enabled)
-    end
-    local function place(x, y)
-        local bounds, size = parent.AbsoluteSize, element.AbsoluteSize
-        if bounds.X <= 0 or bounds.Y <= 0 then return end
-        element.AnchorPoint = Vector2.new(0, 0)
-        element.Position = UDim2.fromOffset(
-            math.clamp(x, 4, math.max(4, bounds.X - size.X - 4)),
-            math.clamp(y, 4, math.max(4, bounds.Y - size.Y - 4)))
-    end
-    local function clampPosition()
-        if not element.Parent then return end
-        local position = element.AbsolutePosition - parent.AbsolutePosition
-        place(position.X, position.Y)
-    end
-    local function update(input)
-        if not state.dragInput or not enabled() then return end
-        if input ~= state.dragInput and not
-            (state.dragInput.UserInputType == Enum.UserInputType.MouseButton1
-            and input.UserInputType == Enum.UserInputType.MouseMovement) then return end
-        local delta = input.Position - state.dragStart
-        if delta.X * delta.X + delta.Y * delta.Y >= 100 then state.moved = true end
-        -- Finger jitter during a tap must not move the button.
-        if state.moved then place(state.startPos.X + delta.X, state.startPos.Y + delta.Y) end
-    end
-    element.Active = true
-    connect(element.InputBegan, function(input)
-        if state.dragInput or not enabled() then return end
-        if input.UserInputType == Enum.UserInputType.Touch
-            or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            state.dragInput, state.dragStart, state.moved = input, input.Position, false
-            state.startPos = element.AbsolutePosition - parent.AbsolutePosition
-        end
-    end)
-    connect(UserInputService.InputChanged, update)
-    connect(UserInputService.InputEnded, function(input)
-        if input == state.dragInput then
-            update(input)
-            state.dragInput = nil
-            -- Keep moved until the next pointer-down: Activated may run after InputEnded.
-        end
-    end)
-    connect(parent:GetPropertyChangedSignal("AbsoluteSize"), function() task.defer(clampPosition) end)
-    if screen then
-        connect(screen:GetPropertyChangedSignal("Enabled"), function()
-            if not screen.Enabled then state.dragInput = nil; state.moved = true end
-        end)
-    end
-    element.Destroying:Connect(function()
-        for _, connection in ipairs(connections) do connection:Disconnect() end
-        state.dragInput = nil
-    end)
-    function state:ShouldActivate(input)
-        if not enabled() then return false end
-        if input and input.UserInputType ~= Enum.UserInputType.Touch
-            and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return true end
-        return not self.moved
-    end
-    task.defer(clampPosition)
-    return state
-end
+
 
 ShiftLockScreenGui = Instance.new("ScreenGui")
 ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
@@ -1306,8 +1447,8 @@ apStroke.Thickness = 2
 apStroke.Color = Color3.fromRGB(0, 0, 0)
 apStroke.Parent = AutoPassButton
 
-local shiftLockDrag = makeDraggable(ShiftLockButton)
-local autoPassDrag = makeDraggable(AutoPassButton)
+local shiftLockDrag = makeDraggable(ShiftLockButton, nil, "shift")
+local autoPassDrag = makeDraggable(AutoPassButton, nil, "auto")
 updateAutoPassButton()
 
 -- Click actions: a drag is consumed and never toggles the feature.
@@ -1418,5 +1559,5 @@ LocalPlayer.Chatted:Connect(
     end
 )
 setUIVisualStealth(not allUIVisible)
-print("Auto pass ready: confirmed nearest-player method, NORMAL/LATE (6 studs), body sweep flick, draggable iPad controls.")
+print("Auto pass v3 ready: live fractional timer, natural flick, and LOCKED button layout. Use LAYOUT to edit positions.")
 return {}
