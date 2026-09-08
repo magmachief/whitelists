@@ -2,7 +2,7 @@
 -- Live timer: BombStartTime + BombDuration - Workspace:GetServerTimeNow().
 -- Active states: Running/Fused. The dedicated timer stays active with Auto Pass off.
 -- Normal keeps your confirmed nearest-player pass call; Late remains <=6 studs.
--- Natural flick defaults to a short target-facing turn with no forced sideways sweep.
+-- Adaptive flick eases in/out, yields to manual turns, and skips already-aligned targets.
 -- Controls start LOCKED. Tap LAYOUT to edit positions, then lock again to save.
 -- Other original menu/movement features remain as supplied.
 
@@ -506,9 +506,8 @@ function PassController:ObserveTransfer(pending)
         and pending.Bomb.Parent == pending.TargetCharacter then
         pending.Confirmed = true
         local flick = self.Flick
-        if flick and not flick.ReleaseAt and flick.Character == pending.Character and flick.Root.Parent then
-            flick.ReleaseAt = self.Services.Workspace:GetServerTimeNow()
-            flick.ReleaseRotation = flick.Root.CFrame.Rotation
+        if flick and not flick.ConfirmedAt and flick.Character == pending.Character and flick.Root.Parent then
+            flick.ConfirmedAt = self.Services.Workspace:GetServerTimeNow()
         end
     elseif pending.Bomb.Parent ~= pending.Character then
         pending.LeftCharacter = true
@@ -532,11 +531,19 @@ function PassController:IsFlicking()
     return self.Flick ~= nil
 end
 
+function PassController:CameraRelative()
+    return self.Hooks.shiftLocked()
+        or (self.Hooks.cameraRelative and self.Hooks.cameraRelative() == true)
+        or false
+end
+
 function PassController:ReturnRotation(flick)
     local direction
-    if self.Hooks.shiftLocked() then
+    if self:CameraRelative() then
         local camera = self.Services.Workspace.CurrentCamera
-        direction = camera and flatDirection(camera.CFrame.LookVector)
+        if camera and camera.CameraSubject == flick.Humanoid then
+            direction = flatDirection(camera.CFrame.LookVector)
+        end
     elseif flick.OriginalAutoRotate then
         direction = flatDirection(flick.Humanoid.MoveDirection)
     end
@@ -551,7 +558,7 @@ function PassController:EndFlick(restoreFacing)
     if flick.Humanoid.Parent then
         if restoreFacing and self.Services.LocalPlayer.Character == flick.Character
             and flick.Root.Parent and not flick.Root.Anchored and canTurn(flick.Humanoid) then
-            -- Always retain the current position. Never restore an old position or velocity.
+            -- Never rewind position, velocity, camera or joystick input.
             flick.Root.CFrame = CFrame.new(flick.Root.Position) * self:ReturnRotation(flick)
         end
         if self.Hooks.shiftLocked() then
@@ -566,57 +573,131 @@ local function smoothstep(alpha)
     return alpha * alpha * (3 - 2 * alpha)
 end
 
+-- Pure timing helper: larger turns take a little longer, never a fixed 180-degree snap.
+function PassController.flickProfile(turnDegrees, preferredDuration)
+    if not finiteNumber(turnDegrees) then turnDegrees = 0 end
+    if not finiteNumber(preferredDuration) then preferredDuration = 0.18 end
+    local scale = math.clamp(math.abs(turnDegrees) / 90, 0.60, 1.35)
+    local total = math.clamp(math.clamp(preferredDuration, 0.10, 0.30) * scale, 0.10, 0.30)
+    return {Total = total, Turn = total * 0.40, Follow = total * 0.10, Return = total * 0.50}
+end
+
+function PassController:BeginFlickReturn(flick, atTime, duration, rotation)
+    flick.ReleaseAt = atTime
+    flick.ReleaseDuration = duration
+    flick.ReleaseRotation = rotation or flick.Root.CFrame.Rotation
+end
+
+function PassController:ManualTurnDetected(flick)
+    local cameraRelative = self:CameraRelative()
+    if self.Hooks.shiftLocked() ~= flick.InitialShiftLocked
+        or cameraRelative ~= flick.InitialCameraRelative then return true end
+    if cameraRelative then
+        local camera = self.Services.Workspace.CurrentCamera
+        if camera ~= flick.Camera then return true end
+        local direction = camera and flatDirection(camera.CFrame.LookVector)
+        -- Camera translation and pitch alone do not cancel a horizontal body turn.
+        return direction ~= nil and flick.InitialCameraDirection ~= nil
+            and direction:Dot(flick.InitialCameraDirection) < math.cos(math.rad(10))
+    end
+    if flick.OriginalAutoRotate then
+        local movement = flatDirection(flick.Humanoid.MoveDirection)
+        if (movement == nil) ~= (flick.InitialMoveDirection == nil) then return true end
+        return movement ~= nil and flick.InitialMoveDirection ~= nil
+            and movement:Dot(flick.InitialMoveDirection) < math.cos(math.rad(50))
+    end
+    return false
+end
+
+function PassController:UpdateFlick(flick)
+    if self.Flick ~= flick then return end
+    local root, humanoid = flick.Root, flick.Humanoid
+    if not self.Config.Enabled or not self.Config.FlickEnabled
+        or self.Services.LocalPlayer.Character ~= flick.Character or not root.Parent
+        or root.Anchored or not humanoid.Parent or not canTurn(humanoid) then
+        self:EndFlick(true)
+        return
+    end
+    local now = self.Services.Workspace:GetServerTimeNow()
+    local elapsed = math.max(0, now - flick.Started)
+    -- Do not replay a stale turn after a large frame hitch.
+    if elapsed >= flick.Profile.Total + 0.08 then self:EndFlick(true); return end
+
+    if not flick.InputYielded and self:ManualTurnDetected(flick) then
+        flick.InputYielded = true
+        self:BeginFlickReturn(flick, now, math.min(0.06, flick.Profile.Return))
+    end
+
+    local rotation
+    if not flick.ReleaseAt then
+        local turnEnd = flick.Started + flick.Profile.Turn
+        local releaseAt = turnEnd + flick.Profile.Follow
+        if flick.ConfirmedAt then
+            -- A fast acknowledgement must not cut the target turn down to one frame.
+            releaseAt = math.min(releaseAt, math.max(turnEnd, flick.ConfirmedAt))
+        end
+        if now < turnEnd then
+            local alpha = math.clamp(elapsed / flick.Profile.Turn, 0, 1)
+            rotation = flick.OriginalRotation:Lerp(flick.TargetRotation, smoothstep(alpha))
+        elseif now < releaseAt then
+            local alpha = math.clamp((now - turnEnd) / flick.Profile.Follow, 0, 1)
+            rotation = flick.TargetRotation:Lerp(flick.SweepRotation, smoothstep(alpha))
+        else
+            local alpha = math.clamp((releaseAt - turnEnd) / flick.Profile.Follow, 0, 1)
+            local peak = flick.TargetRotation:Lerp(flick.SweepRotation, smoothstep(alpha))
+            self:BeginFlickReturn(flick, releaseAt, flick.Profile.Return, peak)
+        end
+    end
+    if flick.ReleaseAt then
+        local alpha = math.clamp((now - flick.ReleaseAt) / flick.ReleaseDuration, 0, 1)
+        if alpha >= 1 then self:EndFlick(true); return end
+        -- Return to LIVE camera/movement intent, not the heading captured at pickup.
+        rotation = flick.ReleaseRotation:Lerp(self:ReturnRotation(flick), smoothstep(alpha))
+    end
+    root.CFrame = CFrame.new(root.Position) * rotation
+end
+
 function PassController:StartFlick(character, root, humanoid, targetRoot, now)
     if not self.Config.FlickEnabled or self.FlickedForPossession or now < self.NextFlick or self.Flick
         or root.Anchored or not canTurn(humanoid) then return end
     local direction = flatDirection(targetRoot.Position - root.Position)
-    if not direction then return end
+    local facing = flatDirection(root.CFrame.LookVector)
+    if not direction or not facing then return end
+    local camera = self.Services.Workspace.CurrentCamera
+    if camera and (camera.CameraType ~= Enum.CameraType.Custom or camera.CameraSubject ~= humanoid) then return end
+
+    local turnDegrees = math.deg(math.acos(math.clamp(facing:Dot(direction), -1, 1)))
+    -- Consume this possession's visual attempt even when already facing the target.
+    -- Passing retries should not manufacture a new flick after you start moving.
+    self.FlickedForPossession = true
+    if turnDegrees < 6 then return end
+
     local flick = {
         Character = character, Root = root, Humanoid = humanoid,
         OriginalAutoRotate = humanoid.AutoRotate, OriginalRotation = root.CFrame.Rotation,
         TargetRotation = CFrame.lookAt(Vector3.zero, direction), Started = now,
-        Duration = math.clamp(self.Config.FlickDuration, 0.10, 0.30),
+        Profile = self.flickProfile(turnDegrees, self.Config.FlickDuration),
+        Camera = camera, InitialCameraDirection = camera and flatDirection(camera.CFrame.LookVector),
+        InitialMoveDirection = flatDirection(humanoid.MoveDirection),
+        InitialShiftLocked = self.Hooks.shiftLocked(), InitialCameraRelative = self:CameraRelative(),
     }
     local resumeDirection = self:ReturnRotation(flick).LookVector
     local crossY = direction.Z * resumeDirection.X - direction.X * resumeDirection.Z
     local sign = crossY < 0 and -1 or 1
+    local followAngle = finiteNumber(self.Config.FlickAngle) and self.Config.FlickAngle or 0
     flick.SweepRotation = flick.TargetRotation
-        * CFrame.Angles(0, sign * math.rad(math.clamp(self.Config.FlickAngle, 0, 60)), 0)
+        * CFrame.Angles(0, sign * math.rad(math.clamp(followAngle, 0, 60)), 0)
     self.Flick = flick
-    self.FlickedForPossession = true
     self.NextFlick = now + 0.70
     humanoid.AutoRotate = false
-    -- Brief target-facing turn; optional follow-through is zero by default.
-    -- Only one flick per possession, with a cooldown across rapid transfers.
-    -- No delay before FireServer, and no camera writes in this controller.
-    root.CFrame = CFrame.new(root.Position) * flick.TargetRotation
+    -- No instant target snap and no waiting before the unchanged FireServer call.
+    -- Only current-position body rotation is animated; the camera stays under your control.
     flick.Connection = self.Services.RunService.PreSimulation:Connect(function()
-        if self.Flick ~= flick then return end
-        if not self.Config.Enabled or not self.Config.FlickEnabled
-            or self.Services.LocalPlayer.Character ~= character or not root.Parent
-            or root.Anchored or not humanoid.Parent or not canTurn(humanoid) then
-            self:EndFlick(true)
-            return
+        local ok, err = pcall(function() self:UpdateFlick(flick) end)
+        if not ok then
+            pcall(function() self:EndFlick(false) end)
+            warn("[Pass Flick] " .. tostring(err))
         end
-        local currentTime = self.Services.Workspace:GetServerTimeNow()
-        local elapsed = currentTime - flick.Started
-        local progress = math.max(0, elapsed / flick.Duration)
-        if progress >= 1 then self:EndFlick(true); return end
-        local rotation
-        if flick.ReleaseAt then
-            local alpha = math.clamp((currentTime - flick.ReleaseAt) / math.max(0.04, flick.Duration * 0.45), 0, 1)
-            if alpha >= 1 then self:EndFlick(true); return end
-            rotation = flick.ReleaseRotation:Lerp(self:ReturnRotation(flick), smoothstep(alpha))
-        elseif progress < 0.20 then
-            rotation = flick.TargetRotation
-        elseif progress < 0.55 then
-            rotation = flick.TargetRotation:Lerp(flick.SweepRotation,
-                smoothstep((progress - 0.20) / 0.35))
-        else
-            rotation = flick.SweepRotation:Lerp(self:ReturnRotation(flick),
-                smoothstep((progress - 0.55) / 0.45))
-        end
-        root.CFrame = CFrame.new(root.Position) * rotation
     end)
 end
 
@@ -727,7 +808,7 @@ local passConfig = {
     LateWindow = 0.60, -- Request when this many seconds remain. This is not arrival time.
     FlickEnabled = false,
     FlickAngle = 0,
-    FlickDuration = 0.14,
+    FlickDuration = 0.18, -- Reference duration for a 90-degree turn; scales with angle.
     RequestCooldown = 0.10,
     AckTimeout = 0.10,
 }
@@ -737,6 +818,13 @@ passCore = PassController.new({
     Workspace = Workspace, RunService = RunService,
 }, passConfig, {
     shiftLocked = function() return SL_Active ~= nil end,
+    cameraRelative = function()
+        -- Read the standard mode only. Never toggle the game's own shift-lock setting.
+        local ok, rotationType = pcall(function()
+            return UserSettings():GetService("UserGameSettings").RotationType
+        end)
+        return ok and rotationType == Enum.RotationType.CameraRelative
+    end,
     status = function(message)
         if mobileStatus and mobileStatus.Parent then mobileStatus.Text = message end
     end,
@@ -1053,9 +1141,9 @@ orionLatePassToggle = AutomatedTab:AddToggle({
     Callback = setLatePassEnabled,
 })
 orionFlickToggle = AutomatedTab:AddToggle({
-    Name = "Natural body flick on pass",
+    Name = "Adaptive body flick on pass",
     Default = false,
-    Flag = "NaturalBodyFlickV3",
+    Flag = "NaturalBodyFlickV4",
     Callback = setPassFlickEnabled,
 })
 AutomatedTab:AddTextbox({
@@ -1079,7 +1167,7 @@ AutomatedTab:AddTextbox({
     end,
 })
 AutomatedTab:AddTextbox({
-    Name = "Flick duration (0.10 to 0.30 seconds)",
+    Name = "Flick base duration (0.10 to 0.30 seconds)",
     Default = tostring(passConfig.FlickDuration),
     TextDisappear = false,
     Callback = function(value)
@@ -1559,5 +1647,5 @@ LocalPlayer.Chatted:Connect(
     end
 )
 setUIVisualStealth(not allUIVisible)
-print("Auto pass v3 ready: live fractional timer, natural flick, and LOCKED button layout. Use LAYOUT to edit positions.")
+print("Auto pass v4 ready: adaptive body flick, live fractional timer, and LOCKED button layout. Use LAYOUT to edit positions.")
 return {}
