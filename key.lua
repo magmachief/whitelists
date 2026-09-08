@@ -710,6 +710,10 @@ local function syncToggle(toggle, value)
     end
 end
 
+-- We'll redefine setAutoPassEnabled later to also update the new button.
+-- For now, store the original implementation and we'll override after creating the button.
+local originalSetAutoPass = nil
+
 local function setAutoPassEnabled(value)
     AutoPassEnabled = value == true
     passConfig.Enabled = AutoPassEnabled
@@ -725,6 +729,11 @@ local function setAutoPassEnabled(value)
     end
     refreshMobileButtons()
     syncToggle(orionAutoPassToggle, AutoPassEnabled)
+    -- Update the new button if it exists (defined later)
+    if AutoPassButton then
+        AutoPassButton.Text = AutoPassEnabled and "AUTO ON" or "AUTO OFF"
+        AutoPassButton.BackgroundColor3 = AutoPassEnabled and Color3.fromRGB(25,128,77) or Color3.fromRGB(115,52,64)
+    end
 end
 
 local function setLatePassEnabled(value)
@@ -754,20 +763,20 @@ local Window = OrionLib:MakeWindow({
 
 -- Create Tabs
 local AutomatedTab = Window:MakeTab({
-    Name = "Automated Settings", 
-    Icon = "rbxassetid://4483345998", 
+    Name = "Automated Settings",
+    Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
 
 local AITab = Window:MakeTab({
-    Name = "AI Based Settings", 
-    Icon = "rbxassetid://7072720870", 
+    Name = "AI Based Settings",
+    Icon = "rbxassetid://7072720870",
     PremiumOnly = false
 })
 
 local UITab = Window:MakeTab({
-    Name = "UI Elements", 
-    Icon = "rbxassetid://4483345998", 
+    Name = "UI Elements",
+    Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
 
@@ -890,9 +899,9 @@ AutomatedTab:AddTextbox({
 AITab:AddLabel("== Targeting Settings ==", 15)
 
 AITab:AddToggle({
-    Name = "AI Assistance", 
-    Default = false, 
-    Flag = "AIAssistance", 
+    Name = "AI Assistance",
+    Default = false,
+    Flag = "AIAssistance",
     Callback = function(value)
         AI_AssistanceEnabled = value
     end
@@ -1111,18 +1120,24 @@ LocalPlayer:WaitForChild("PlayerGui").ChildRemoved:Connect(function(child)
     end
 end)
 
+-- ============================================================================
+-- MODIFIED UI SECTION – Shift Lock enlarged & moved left + AutoPass button added
+-- ============================================================================
+
 ShiftLockScreenGui = Instance.new("ScreenGui")
 ShiftLockScreenGui.Name = "Shiftlock (CoreGui)"
 ShiftLockScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 ShiftLockScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ShiftLockScreenGui.ResetOnSpawn = false
+
+-- Shift Lock Button – enlarged and moved left (adjust Position X to set distance from right edge)
 ShiftLockButton = Instance.new("ImageButton")
 ShiftLockButton.Parent = ShiftLockScreenGui
 ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 ShiftLockButton.BackgroundTransparency = 1
 ShiftLockButton.AnchorPoint = Vector2.new(1, 0.5)
-ShiftLockButton.Position = UDim2.new(1, -24, 0.72, 0)
-ShiftLockButton.Size = UDim2.fromOffset(56, 56)
+ShiftLockButton.Position = UDim2.new(1, -120, 0.72, 0)   -- 120px from right; change to move left/right
+ShiftLockButton.Size = UDim2.fromOffset(80, 80)           -- bigger (was 56)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
 local shiftLockUICorner = Instance.new("UICorner")
@@ -1132,6 +1147,48 @@ local shiftLockUIStroke = Instance.new("UIStroke")
 shiftLockUIStroke.Thickness = 2
 shiftLockUIStroke.Color = Color3.fromRGB(0, 0, 0)
 shiftLockUIStroke.Parent = ShiftLockButton
+
+-- AutoPass Toggle Button – placed above shift lock (adjust Position to set location)
+local AutoPassButton = Instance.new("TextButton")
+AutoPassButton.Name = "AutoPassToggle"
+AutoPassButton.Parent = ShiftLockScreenGui
+AutoPassButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+AutoPassButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoPassButton.Font = Enum.Font.GothamBold
+AutoPassButton.TextSize = 18
+AutoPassButton.AnchorPoint = Vector2.new(1, 0.5)
+AutoPassButton.Position = UDim2.new(1, -120, 0.62, 0)    -- 120px from right, above shift lock (Y 0.62)
+AutoPassButton.Size = UDim2.fromOffset(80, 80)
+AutoPassButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
+-- Add corner & stroke for consistency
+local apCorner = Instance.new("UICorner")
+apCorner.CornerRadius = UDim.new(0.2, 0)
+apCorner.Parent = AutoPassButton
+local apStroke = Instance.new("UIStroke")
+apStroke.Thickness = 2
+apStroke.Color = Color3.fromRGB(0, 0, 0)
+apStroke.Parent = AutoPassButton
+
+-- Update function for the new button
+local function updateAutoPassButton()
+    if not AutoPassButton then return end
+    AutoPassButton.Text = AutoPassEnabled and "AUTO ON" or "AUTO OFF"
+    AutoPassButton.BackgroundColor3 = AutoPassEnabled and Color3.fromRGB(25,128,77) or Color3.fromRGB(115,52,64)
+end
+updateAutoPassButton()
+
+-- Click action
+AutoPassButton.Activated:Connect(function()
+    setAutoPassEnabled(not AutoPassEnabled)
+    -- updateAutoPassButton is called inside setAutoPassEnabled now
+end)
+
+-- Override setAutoPassEnabled to also update the new button (we already modified it above)
+-- But we must ensure the update function is called. We already added the update call inside setAutoPassEnabled.
+-- Additionally, we need to make the button respond to the /e toggle.
+-- We'll add its visibility later in the /e handler.
+
+-- Shift lock cursor
 local ShiftlockCursor = Instance.new("ImageLabel")
 ShiftlockCursor.Name = "Shiftlock Cursor"
 ShiftlockCursor.Parent = ShiftLockScreenGui
@@ -1143,7 +1200,8 @@ ShiftlockCursor.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftlockCursor.BackgroundTransparency = 1
 ShiftlockCursor.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 ShiftlockCursor.Visible = false
--- One rotation owner at a time: shift lock yields body rotation during the flick.
+
+-- Shift lock logic (unchanged)
 local shiftLockHumanoid
 local shiftLockOriginalAutoRotate
 local shiftLockRenderName = "YonAdvancedShiftLock"
@@ -1199,6 +1257,10 @@ ShiftLockButton.Activated:Connect(function()
     end
 end)
 
+-- ============================================================================
+-- /e command toggle – now also hides the new AutoPassButton
+-- ============================================================================
+
 LocalPlayer.Chatted:Connect(
     function(msg)
         msg = msg:lower()
@@ -1213,6 +1275,9 @@ LocalPlayer.Chatted:Connect(
             end
             if ShiftLockButton then
                 ShiftLockButton.Visible = allUIVisible
+            end
+            if AutoPassButton then
+                AutoPassButton.Visible = allUIVisible
             end
             if orionGui then
                 orionGui.Enabled = allUIVisible
