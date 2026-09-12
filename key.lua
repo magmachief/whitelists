@@ -487,7 +487,23 @@ local function getClosestPlayer(players, localPlayer, root)
 end
 
 function PassController:GetTarget(root)
-    local player, distance = getClosestPlayer(self.Services.Players, self.Services.LocalPlayer, root)
+    local player, distance
+    if self.Config.Mode == "Late" then
+        -- A dead/respawning character may be closer than the live receiver.
+        -- Timed mode must not spend the remaining fuse sending to that character.
+        distance = math.huge
+        for _, candidate in ipairs(self.Services.Players:GetPlayers()) do
+            if candidate ~= self.Services.LocalPlayer then
+                local targetRoot = livingParts(candidate.Character)
+                if targetRoot then
+                    local current = (targetRoot.Position - root.Position).Magnitude
+                    if current < distance then player, distance = candidate, current end
+                end
+            end
+        end
+    else
+        player, distance = getClosestPlayer(self.Services.Players, self.Services.LocalPlayer, root)
+    end
     local character = player and player.Character
     local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
     if not targetRoot then return nil, nil, nil, nil, math.huge end
@@ -764,8 +780,18 @@ function PassController:Step()
         self:Status("Bomb deadline reached"); return
     end
     local target, targetCharacter, targetRoot, collision, distance = self:GetTarget(root)
-    if not target then self:Status("No nearby target"); return end
-    self:Status(string.format("%s | %.1f studs", self.Config.Mode, distance))
+    if not target then self:Status("Waiting for a living target"); return end
+    if self.Config.Mode == "Late" then
+        if distance > 6 then
+            self:Status(string.format("OUT OF RANGE: %.1f / 6 studs", distance))
+        elseif remaining > self.Config.LateWindow then
+            self:Status(string.format("ARMED: %.2f s > %.2f s | %.1f studs", remaining, self.Config.LateWindow, distance))
+        else
+            self:Status(string.format("SENDING: %.3f s | %s | %.1f studs", remaining, target.Name, distance))
+        end
+    else
+        self:Status(string.format("NORMAL | %s | %.1f studs", target.Name, distance))
+    end
     if not self.eligible(self.Config.Mode, remaining, distance, self.Config)
         or now < self.NextRequest then return end
 
@@ -870,7 +896,8 @@ local function setAutoPassEnabled(value)
     passConfig.Enabled = AutoPassEnabled
     if AutoPassEnabled then
         if not autoPassConnection then
-            autoPassConnection = RunService.Heartbeat:Connect(autoPassBomb)
+            -- Evaluate on each simulation frame using the shared fractional timer.
+            autoPassConnection = RunService.PreSimulation:Connect(autoPassBomb)
         end
     else
         if autoPassConnection then autoPassConnection:Disconnect(); autoPassConnection = nil end
@@ -886,6 +913,8 @@ end
 local function setLatePassEnabled(value)
     local mode = value and "Late" or "Normal"
     if passConfig.Mode ~= mode then passCore:Reset(); passConfig.Mode = mode end
+    passCore:Status(AutoPassEnabled and (mode == "Late" and "Timed mode armed; waiting for a bomb" or "Normal mode ready")
+        or "AUTO IS OFF — enable Auto to pass")
     refreshMobileButtons()
     syncToggle(orionLatePassToggle, mode == "Late")
 end
@@ -946,6 +975,10 @@ end)
 -- Layout edits are opt-in. Gameplay taps never reposition a locked control.
 local layoutEditing = false
 local layoutPositions = {}
+local buttonSizes = {
+    auto = UserInputService.TouchEnabled and 72 or 52,
+    shift = UserInputService.TouchEnabled and 72 or 52,
+}
 local layoutBindings = {}
 local layoutPlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local layoutHttp = game:GetService("HttpService")
@@ -958,10 +991,17 @@ local function decodeLayout(text)
     if not ok or type(data) ~= "table" or data.version ~= 3 or type(data.positions) ~= "table" then
         return false
     end
-    for _, key in ipairs({"panel", "auto", "shift"}) do
+    for _, key in ipairs({"panel", "auto", "shift", "settings"}) do
         local point = data.positions[key]
         if type(point) == "table" and finiteNumber(point.x) and finiteNumber(point.y) then
             layoutPositions[key] = {x = math.clamp(point.x, 0, 1), y = math.clamp(point.y, 0, 1)}
+        end
+    end
+    if type(data.sizes) == "table" then
+        for _, key in ipairs({"auto", "shift"}) do
+            if finiteNumber(data.sizes[key]) then
+                buttonSizes[key] = math.clamp(math.floor(data.sizes[key] + 0.5), 44, 160)
+            end
         end
     end
     return true
@@ -975,15 +1015,38 @@ end
 
 local function saveLayout()
     local ok, text = pcall(function()
-        return layoutHttp:JSONEncode({version = 3, positions = layoutPositions})
+        return layoutHttp:JSONEncode({
+            version = 3,
+            positions = layoutPositions,
+            sizes = buttonSizes
+        })
     end)
+
     if not ok then return end
     layoutPlayerGui:SetAttribute(layoutAttribute, text)
-    -- Optional persistence between launches when supported by the existing runtime.
+
     if type(writefile) == "function" then
-        if type(makefolder) == "function" then pcall(makefolder, "YonMenu_Advanced") end
-        pcall(function() writefile(layoutFile, text) end)
+        if type(makefolder) == "function" then
+            pcall(makefolder, "YonMenu_Advanced")
+        end
+
+        pcall(function()
+            writefile(layoutFile, text)
+        end)
     end
+end
+
+local function setButtonSize(key, value)
+    local number = tonumber(value)
+    if not finiteNumber(number) then return end
+    local size = math.clamp(math.floor(number + 0.5), 44, 160)
+    buttonSizes[key] = size
+    local button = key == "auto" and AutoPassButton or ShiftLockButton
+    if button then
+        button.Size = UDim2.fromOffset(size, size)
+        if key == "auto" then button.TextSize = math.clamp(math.floor(size * 0.26), 12, 28) end
+    end
+    saveLayout()
 end
 
 local function setLayoutEditing(value)
@@ -1071,6 +1134,7 @@ local function makeDraggable(element, handle, key)
             state.dragInput = nil
         end
     end)
+    connect(element:GetPropertyChangedSignal("AbsoluteSize"), restorePosition)
     connect(parent:GetPropertyChangedSignal("AbsoluteSize"), function()
         state:CancelGesture()
         task.defer(restorePosition)
@@ -1097,9 +1161,132 @@ local function makeDraggable(element, handle, key)
 end
 
 
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/magmachief/Library-Ui/main/Orion%20Lib%20Transparent%20%20.lua"))()
+-- Native responsive settings adapter; existing feature callbacks are reused below.
+local OrionLib = {Themes={Default={Main=Color3.fromRGB(111,104,244)}},SelectedTheme="Default"}
+local function uiNew(class,properties,parent)
+    local item=Instance.new(class)
+    for key,value in pairs(properties) do item[key]=value end
+    item.Parent=parent
+    return item
+end
+local function uiRound(item,radius)
+    uiNew("UICorner",{CornerRadius=UDim.new(0,radius or 10)},item)
+end
+local settingsGui=uiNew("ScreenGui",{Name="OrionBombSettingsV5",ResetOnSpawn=false,
+    IgnoreGuiInset=false,DisplayOrder=70,ZIndexBehavior=Enum.ZIndexBehavior.Sibling},LocalPlayer:WaitForChild("PlayerGui"))
+local settingsArea=uiNew("Frame",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1},settingsGui)
+local settingsPanel=uiNew("Frame",{Name="Settings",Size=UDim2.fromOffset(540,540),
+    Position=UDim2.fromOffset(24,100),BackgroundColor3=Color3.fromRGB(20,23,34),BorderSizePixel=0,Visible=false},settingsArea)
+uiRound(settingsPanel,16)
+uiNew("UIStroke",{Color=Color3.fromRGB(70,77,100),Transparency=.3},settingsPanel)
+local settingsHeading=uiNew("TextLabel",{Text="BOMB PASS  /  SETTINGS",Font=Enum.Font.GothamBold,
+    TextSize=18,TextColor3=Color3.fromRGB(237,240,255),BackgroundTransparency=1,
+    TextXAlignment=Enum.TextXAlignment.Left,Position=UDim2.fromOffset(18,0),Size=UDim2.new(1,-82,0,54)},settingsPanel)
+local closeSettings=uiNew("TextButton",{Text="×",TextSize=26,Font=Enum.Font.Gotham,
+    TextColor3=Color3.fromRGB(227,231,248),BackgroundTransparency=1,
+    Size=UDim2.fromOffset(48,48),Position=UDim2.new(1,-52,0,3)},settingsPanel)
+closeSettings.Activated:Connect(function() settingsPanel.Visible=false end)
+local tabStrip=uiNew("Frame",{Position=UDim2.fromOffset(12,58),Size=UDim2.new(1,-24,0,44),BackgroundTransparency=1},settingsPanel)
+uiNew("UIListLayout",{FillDirection=Enum.FillDirection.Horizontal,Padding=UDim.new(0,6),SortOrder=Enum.SortOrder.LayoutOrder},tabStrip)
+local pages={}
+local function resizeSettings()
+    local size=settingsArea.AbsoluteSize
+    if size.X<=0 or size.Y<=0 then return end
+    settingsPanel.Size=UDim2.fromOffset(math.min(540,size.X-24),math.min(570,size.Y-28))
+    local pos=settingsPanel.Position
+    settingsPanel.Position=UDim2.fromOffset(math.clamp(pos.X.Offset,12,math.max(12,size.X-settingsPanel.AbsoluteSize.X-12)),
+        math.clamp(pos.Y.Offset,12,math.max(12,size.Y-settingsPanel.AbsoluteSize.Y-12)))
+end
+settingsArea:GetPropertyChangedSignal("AbsoluteSize"):Connect(resizeSettings)
+task.defer(resizeSettings)
+makeDraggable(settingsPanel,settingsHeading,"settings")
+local function toggleSettings() settingsPanel.Visible=not settingsPanel.Visible;resizeSettings() end
+UserInputService.InputBegan:Connect(function(input,processed)
+    if processed or UserInputService:GetFocusedTextBox() then return end
+    if input.KeyCode==Enum.KeyCode.RightControl then toggleSettings() end
+end)
+function OrionLib:MakeWindow(options)
+    local window={}
+    function window:MakeTab(spec)
+        local names={['Automated Settings']='Passing',['AI Based Settings']='Targeting',['UI Elements']='Appearance'}
+        local tabButton=uiNew("TextButton",{Text=names[spec.Name] or spec.Name,Font=Enum.Font.GothamMedium,TextSize=14,
+            TextColor3=Color3.fromRGB(229,233,247),BackgroundColor3=Color3.fromRGB(35,40,56),BorderSizePixel=0,
+            Size=UDim2.new(1/3,-4,1,0),LayoutOrder=#pages+1},tabStrip)
+        uiRound(tabButton,9)
+        local page=uiNew("ScrollingFrame",{Position=UDim2.fromOffset(12,112),Size=UDim2.new(1,-24,1,-126),
+            BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=4,CanvasSize=UDim2.new(),
+            AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollingDirection=Enum.ScrollingDirection.Y,Visible=#pages==0},settingsPanel)
+        uiNew("UIListLayout",{Padding=UDim.new(0,8),SortOrder=Enum.SortOrder.LayoutOrder},page)
+        uiNew("UIPadding",{PaddingBottom=UDim.new(0,12),PaddingRight=UDim.new(0,6)},page)
+        pages[#pages+1]={page=page,button=tabButton}
+        local function selectPage()
+            for _,entry in ipairs(pages) do
+                entry.page.Visible=entry.page==page
+                entry.button.BackgroundColor3=entry.page==page and OrionLib.Themes.Default.Main or Color3.fromRGB(35,40,56)
+            end
+        end
+        tabButton.Activated:Connect(selectPage)
+        if #pages==1 then selectPage() end
+        local tab={order=0}
+        local function row(label)
+            tab.order=tab.order+1
+            local frame=uiNew("Frame",{Size=UDim2.new(1,0,0,60),BackgroundColor3=Color3.fromRGB(29,34,48),
+                BorderSizePixel=0,LayoutOrder=tab.order},page)
+            uiRound(frame,10)
+            uiNew("TextLabel",{Text=label,Font=Enum.Font.GothamMedium,TextSize=15,TextWrapped=true,
+                TextColor3=Color3.fromRGB(231,235,250),TextXAlignment=Enum.TextXAlignment.Left,
+                Position=UDim2.fromOffset(12,4),Size=UDim2.new(1,-130,1,-8),BackgroundTransparency=1},frame)
+            return frame
+        end
+        function tab:AddLabel(label)
+            tab.order=tab.order+1
+            return uiNew("TextLabel",{Text=label:gsub('==',''),Font=Enum.Font.Gotham,TextSize=13,TextWrapped=true,
+                TextXAlignment=Enum.TextXAlignment.Left,TextColor3=Color3.fromRGB(165,178,206),BackgroundTransparency=1,
+                Size=UDim2.new(1,-8,0,42),LayoutOrder=tab.order},page)
+        end
+        function tab:AddToggle(specification)
+            local frame=row(specification.Name)
+            local button=uiNew("TextButton",{Size=UDim2.fromOffset(98,44),Position=UDim2.new(1,-106,.5,-22),
+                TextSize=15,Font=Enum.Font.GothamBold,TextColor3=Color3.new(1,1,1),BorderSizePixel=0},frame)
+            uiRound(button,9)
+            local control={Value=specification.Default==true}
+            function control:Set(value)
+                self.Value=value==true
+                button.Text=self.Value and "ON" or "OFF"
+                button.BackgroundColor3=self.Value and OrionLib.Themes.Default.Main or Color3.fromRGB(61,67,85)
+            end
+            button.Activated:Connect(function()
+                control:Set(not control.Value)
+                if specification.Callback then specification.Callback(control.Value) end
+            end)
+            control:Set(control.Value)
+            return control
+        end
+        function tab:AddTextbox(specification)
+            local frame=row(specification.Name)
+            local box=uiNew("TextBox",{Size=UDim2.fromOffset(98,44),Position=UDim2.new(1,-106,.5,-22),
+                Text=tostring(specification.Default or ""),ClearTextOnFocus=false,Font=Enum.Font.GothamMedium,TextSize=16,
+                TextColor3=Color3.fromRGB(230,237,255),BackgroundColor3=Color3.fromRGB(43,49,68),BorderSizePixel=0},frame)
+            uiRound(box,9)
+            box.FocusLost:Connect(function() if specification.Callback then specification.Callback(box.Text) end end)
+            return box
+        end
+        function tab:AddColorpicker(specification)
+            return self:AddTextbox({Name=specification.Name.." (HEX)",Default=OrionLib.Themes.Default.Main:ToHex(),Callback=function(value)
+                local hex=value:gsub('#','')
+                if #hex~=6 or not hex:match('^%x+$') then return end
+                local color=Color3.fromHex(hex)
+                if specification.Callback then specification.Callback(color) end
+                for _,entry in ipairs(pages) do if entry.page.Visible then entry.button.BackgroundColor3=color end end
+            end})
+        end
+        return tab
+    end
+    return window
+end
+function OrionLib:Init() end
 local Window = OrionLib:MakeWindow({
-    Name = "Yon Menu - Advanced (Auto Pass Bomb)",
+    Name = "Bomb Pass — PC + iPad",
     HidePremium = false,
     SaveConfig = true,
     ConfigFolder = "YonMenu_Advanced",
@@ -1146,7 +1333,7 @@ orionFlickToggle = AutomatedTab:AddToggle({
     Flag = "NaturalBodyFlickV4",
     Callback = setPassFlickEnabled,
 })
-AutomatedTab:AddTextbox({
+local timedThresholdSettings = AutomatedTab:AddTextbox({
     Name = "Late request: seconds remaining (0.2 to 2)",
     Default = tostring(passConfig.LateWindow),
     TextDisappear = false,
@@ -1154,6 +1341,7 @@ AutomatedTab:AddTextbox({
         local number = tonumber(value)
         if number and number == number and number > -math.huge and number < math.huge then
             passConfig.LateWindow = math.clamp(number, 0.2, 2)
+            refreshMobileButtons()
         end
     end,
 })
@@ -1327,6 +1515,19 @@ orionLayoutToggle = UITab:AddToggle({
     Callback = setLayoutEditing,
 })
 UITab:AddLabel("Unlock layout, position the controls, then lock it to save.", 13)
+for _, item in ipairs({{key = "auto", name = "Auto Pass button size (44–160 px)"},
+    {key = "shift", name = "Shift Lock button size (44–160 px)"}}) do
+    local sizeBox
+    sizeBox = UITab:AddTextbox({
+        Name = item.name,
+        Default = tostring(buttonSizes[item.key]),
+        Callback = function(value)
+            setButtonSize(item.key, value)
+            sizeBox.Text = tostring(buttonSizes[item.key])
+        end,
+    })
+end
+UITab:AddLabel("Size changes apply immediately and save with your layout. Position locking stays unchanged.")
 
 -- Initialize the library
 OrionLib:Init()
@@ -1349,6 +1550,7 @@ local function setUIVisualStealth(enabled)
     local visible = not enabled
     if mobileGui then mobileGui.Enabled = visible end
     if ShiftLockScreenGui then ShiftLockScreenGui.Enabled = visible end
+    settingsGui.Enabled=visible
     local function update(container)
         for _, gui in ipairs(container:GetChildren()) do
             if gui:IsA("ScreenGui") and gui.Name:match("Orion") then gui.Enabled = visible end
@@ -1373,9 +1575,9 @@ local function createMobileToggle()
 
     local panel = Instance.new("Frame")
     panel.Name = "TouchPanel"
-    panel.Size = UDim2.fromOffset(208, 388)
-    panel.Position = UDim2.new(1, -230, 0.43, -194)
-    panel.BackgroundColor3 = Color3.fromRGB(20, 23, 30)
+    panel.Size = UDim2.fromOffset(280, 378)
+    panel.Position = UDim2.new(1, -304, 0.20, 0)
+    panel.BackgroundColor3 = Color3.fromRGB(20, 23, 34)
     panel.BackgroundTransparency = 0.08
     panel.BorderSizePixel = 0
     panel.Parent = safeArea
@@ -1385,8 +1587,8 @@ local function createMobileToggle()
 
     local handle = Instance.new("TextLabel")
     handle.Name = "DragHandle"
-    handle.Size = UDim2.new(1, 0, 0, 38)
-    handle.TextSize = 14
+    handle.Size = UDim2.new(1, 0, 0, 44)
+    handle.TextSize = 17
     handle.Font = Enum.Font.GothamBold
     handle.TextColor3 = Color3.fromRGB(204, 214, 230)
     handle.BackgroundTransparency = 1
@@ -1407,18 +1609,55 @@ local function createMobileToggle()
         rounding.Parent = item
         return item
     end
-    local autoButton = button("AutoPassMobileToggle", 40)
-    local modeButton = button("PassModeMobileToggle", 100)
-    local flickButton = button("PassFlickMobileToggle", 160)
-    local layoutButton = button("LayoutLockToggle", 220, 48)
+    uiNew("UIStroke", {Color=Color3.fromRGB(73,80,111),Transparency=.25}, panel)
+    local autoButton = button("AutoPassMobileToggle", 116)
+    local modeButton = button("PassModeMobileToggle", 116)
+    local flickButton = button("PassFlickMobileToggle", 176)
+    local layoutButton = button("LayoutLockToggle", 176)
+    autoButton.Size=UDim2.new(.5,-12,0,52)
+    flickButton.Size=autoButton.Size
+    modeButton.Size=autoButton.Size; modeButton.Position=UDim2.new(.5,4,0,116)
+    layoutButton.Size=autoButton.Size; layoutButton.Position=UDim2.new(.5,4,0,176)
+    modeButton.TextSize=14; modeButton.TextWrapped=true
+    layoutButton.TextSize=14
+    local settingsButton=button("Settings",236,44)
+    settingsButton.Text="Settings  ·  PC / iPad"
+    settingsButton.BackgroundColor3=Color3.fromRGB(47,54,76)
+    settingsButton.Activated:Connect(toggleSettings)
+    local triggerLabel=uiNew("TextLabel",{Text="Pass at ≤ seconds",TextSize=14,Font=Enum.Font.Gotham,
+        TextColor3=Color3.fromRGB(200,211,236),BackgroundTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,
+        Position=UDim2.fromOffset(12,288),Size=UDim2.new(1,-112,0,40)},panel)
+    local trigger=uiNew("TextBox",{Text=string.format("%.2f",passConfig.LateWindow),TextSize=18,
+        ClearTextOnFocus=false,Font=Enum.Font.GothamBold,TextColor3=Color3.fromRGB(231,235,255),
+        BackgroundColor3=Color3.fromRGB(47,54,76),BorderSizePixel=0,
+        Position=UDim2.new(1,-94,0,286),Size=UDim2.fromOffset(82,44)},panel)
+    uiRound(trigger,9)
+    trigger.FocusLost:Connect(function()
+        local number=tonumber(trigger.Text)
+        if finiteNumber(number) then passConfig.LateWindow=math.clamp(number,.2,2) end
+        trigger.Text=string.format("%.2f",passConfig.LateWindow)
+        timedThresholdSettings.Text=trigger.Text
+        refreshMobileButtons()
+    end)
+    local function fitPanel()
+        local size=safeArea.AbsoluteSize
+        if size.X<=0 or size.Y<=0 then return end
+        panel.Size=UDim2.fromOffset(math.min(280,size.X-16),378)
+        local position=panel.AbsolutePosition-safeArea.AbsolutePosition
+        panel.AnchorPoint=Vector2.zero
+        panel.Position=UDim2.fromOffset(math.clamp(position.X,8,math.max(8,size.X-panel.AbsoluteSize.X-8)),
+            math.clamp(position.Y,8,math.max(8,size.Y-panel.AbsoluteSize.Y-8)))
+    end
+    safeArea:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitPanel)
+    task.defer(fitPanel)
 
     local timer = Instance.new("TextLabel")
     timer.Name = "ActualBombTimer"
-    timer.Size = UDim2.new(1, -16, 0, 56)
-    timer.Position = UDim2.fromOffset(8, 276)
+    timer.Size = UDim2.new(1, -24, 0, 60)
+    timer.Position = UDim2.fromOffset(12, 46)
     timer.BackgroundTransparency = 1
     timer.TextWrapped = true
-    timer.TextSize = 15
+    timer.TextSize = 20
     timer.Font = Enum.Font.GothamBold
     timer.TextColor3 = Color3.fromRGB(215, 233, 250)
     timer.Text = "YOUR BOMB: --"
@@ -1428,10 +1667,10 @@ local function createMobileToggle()
     local status = Instance.new("TextLabel")
     status.Name = "PassStatus"
     status.Size = UDim2.new(1, -16, 0, 40)
-    status.Position = UDim2.fromOffset(8, 340)
+    status.Position = UDim2.fromOffset(8, 334)
     status.BackgroundTransparency = 1
     status.TextWrapped = true
-    status.TextSize = 12
+    status.TextSize = 14
     status.Font = Enum.Font.Gotham
     status.TextColor3 = Color3.fromRGB(190, 202, 220)
     status.Text = passCore.LastStatus ~= "" and passCore.LastStatus or "Auto pass off"
@@ -1440,16 +1679,18 @@ local function createMobileToggle()
 
     refreshMobileButtons = function()
         if not gui.Parent then return end
-        autoButton.Text = AutoPassEnabled and "AUTO: ON" or "AUTO: OFF"
+        autoButton.Text = AutoPassEnabled and "AUTO ON" or "AUTO OFF"
         autoButton.BackgroundColor3 = AutoPassEnabled
             and Color3.fromRGB(25, 128, 77) or Color3.fromRGB(115, 52, 64)
-        modeButton.Text = passConfig.Mode == "Late" and "MODE: LATE · 6" or "MODE: NORMAL"
+        modeButton.Text = passConfig.Mode == "Late" and "TIMED / 6 STUDS" or "NORMAL"
+        triggerLabel.Text=passConfig.Mode == "Late" and "Pass at ≤ seconds" or "Timed threshold (s)"
+        if not trigger:IsFocused() then trigger.Text=string.format("%.2f",passConfig.LateWindow) end
         modeButton.BackgroundColor3 = passConfig.Mode == "Late"
             and Color3.fromRGB(127, 73, 172) or Color3.fromRGB(51, 80, 122)
         flickButton.Text = passConfig.FlickEnabled and "FLICK: ON" or "FLICK: OFF"
         flickButton.BackgroundColor3 = passConfig.FlickEnabled
             and Color3.fromRGB(37, 103, 177) or Color3.fromRGB(63, 70, 84)
-        layoutButton.Text = layoutEditing and "LAYOUT: EDITING" or "LAYOUT: LOCKED"
+        layoutButton.Text = layoutEditing and "UNLOCKED" or "LOCKED"
         layoutButton.BackgroundColor3 = layoutEditing
             and Color3.fromRGB(20, 115, 130) or Color3.fromRGB(63, 70, 84)
         handle.Text = layoutEditing and "DRAG HEADER TO MOVE" or "BOMB PASS"
@@ -1504,7 +1745,8 @@ ShiftLockButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 ShiftLockButton.BackgroundTransparency = 1
 ShiftLockButton.AnchorPoint = Vector2.new(1, 0.5)
 ShiftLockButton.Position = UDim2.new(1, -120, 0.72, 0)
-ShiftLockButton.Size = UDim2.fromOffset(80, 80)
+ShiftLockButton.Size = UDim2.fromOffset(UserInputService.TouchEnabled and 72 or 52, UserInputService.TouchEnabled and 72 or 52)
+ShiftLockButton.Size = UDim2.fromOffset(buttonSizes.shift, buttonSizes.shift)
 ShiftLockButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
 ShiftLockButton.Image = "rbxasset://textures/ui/mouseLock_off@2x.png"
 local shiftLockUICorner = Instance.new("UICorner")
@@ -1524,8 +1766,10 @@ AutoPassButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 AutoPassButton.Font = Enum.Font.GothamBold
 AutoPassButton.TextSize = 18
 AutoPassButton.AnchorPoint = Vector2.new(1, 0.5)
-AutoPassButton.Position = UDim2.new(1, -120, 0.72, -94)
-AutoPassButton.Size = UDim2.fromOffset(80, 80)
+AutoPassButton.Position = UDim2.new(1, -120, 0.72, UserInputService.TouchEnabled and -86 or -66)
+AutoPassButton.Size = ShiftLockButton.Size
+AutoPassButton.Size = UDim2.fromOffset(buttonSizes.auto, buttonSizes.auto)
+AutoPassButton.TextSize = math.clamp(math.floor(buttonSizes.auto * 0.26), 12, 28)
 AutoPassButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
 local apCorner = Instance.new("UICorner")
 apCorner.CornerRadius = UDim.new(0.2, 0)
@@ -1647,5 +1891,5 @@ LocalPlayer.Chatted:Connect(
     end
 )
 setUIVisualStealth(not allUIVisible)
-print("Auto pass v4 ready: adaptive body flick, live fractional timer, and LOCKED button layout. Use LAYOUT to edit positions.")
+print("Bomb Pass v5 ready: PC + iPad controls. Choose TIMED, enable AUTO, and enter the countdown threshold. Timed range: 6 studs.")
 return {}
